@@ -19,5 +19,8 @@ description: Answer questions about the user's HEIG-VD class schedule (GAPS plan
    followed by at most one or two short lines worth pointing out (a day off, an every-other-week course, an all-day event).
    Chat replies cannot render ANSI colors, so always use `--color emoji` there.
 5. Specific questions (a date, a course, "am I free…"): answer concisely with day, time range, course and room, no table.
-6. If the command fails on login, report the error and suggest `npm --prefix <root> run schedule -- --refresh --debug`.
+6. If the command exits with "edu-ID two-step login code required" (exit code 2), ask the user for the current 6-digit code
+   of their authenticator app, then rerun the same command with `--mfa-code <code>` added; it resumes the pending login.
+   If the code is rejected, ask for a new one. The login session is saved, so codes are only needed every few weeks.
+7. If the command fails on login otherwise, report the error and suggest `npm --prefix <root> run schedule -- --refresh --debug`.
    If it reports missing credentials, ask the user to fill `<root>/.env` (see `<root>/.env.example`) and `npm install` there. Never print `.env`.
