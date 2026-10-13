@@ -1,0 +1,14 @@
+{
+  "name": "heig-dumper",
+  "description": "Claude Code skills for HEIG-VD students",
+  "owner": {
+    "name": "Cyprien-png"
+  },
+  "plugins": [
+    {
+      "name": "heig",
+      "source": "./",
+      "description": "Skills for HEIG-VD students: GAPS schedule (Cyberlearn planned)"
+    }
+  ]
+}
