@@ -47,8 +47,8 @@ export class GapsClient {
     }
 
     const lessons: Lesson[] = [];
-    // GAPS splits the academic year in terms: 1 = autumn semester, 2 = spring semester.
-    for (const term of [1, 2]) {
+    // GAPS terms: 1 = autumn semester, 3 = spring semester (0 is the summer term).
+    for (const term of [1, 3]) {
       const url = new URL(SCHEDULE_URL);
       url.search = new URLSearchParams({
         annee: String(academicYear),
@@ -56,6 +56,7 @@ export class GapsClient {
         type: "2",
         id: studentId,
         icalendarversion: "2",
+        individual: "1",
       }).toString();
 
       const page = await this.session.get(url.toString());
