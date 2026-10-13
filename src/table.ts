@@ -81,35 +81,31 @@ function timeBlocks(lessons: Lesson[]): Lesson[][] {
 const SPLIT = "\u0000split";
 
 /**
- * One table row for a block. A block with nested slots (e.g. 09:15–10:00 inside 08:30–10:00) is split into
- * sub-slots by dashed lines, one line per sub-slot: a 45-minute lesson takes half the height of a 90-minute
- * one, and a lesson covering several sub-slots stays merged across the dashed lines.
+ * One table row for a block, at least 3 lines high so every row has the same size. Nested slots
+ * (e.g. 09:15–10:00 inside 08:30–10:00) use one line per sub-slot: a lesson covering the whole block is
+ * centered, a shorter one sits on the line of its sub-slot, cut off from the rest of its cell by a dashed line.
  */
 function blockRow(block: Lesson[], days: Date[], style: Styler): string[][] {
   const bounds = [...new Set(block.flatMap((l) => [startOf(l), endOf(l)]))].sort();
-  const segments = bounds.length - 1;
+  // Sub-slot i is drawn on line 2i, with a possible separator on the odd line between two sub-slots.
+  const height = Math.max(3, 2 * (bounds.length - 1) - 1);
+  const middle = Math.floor((height - 1) / 2);
 
-  if (segments === 1) {
-    return [
-      [style.bold(`${bounds[0]}–${bounds[1]}`), ""],
-      ...days.map((day) => lessonsOn(block, day).map((l) => lessonLine(l, style))),
-    ];
-  }
-
-  // Sub-slot i is drawn on line 2i, the separator between sub-slots i and i+1 on line 2i+1.
-  const height = 2 * segments - 1;
-  const label = Array.from({ length: height }, (_, line) =>
-    line % 2 === 1 ? SPLIT : style.bold(`${bounds[line / 2]}–${bounds[line / 2 + 1]}`),
-  );
+  const label = Array<string>(height).fill("");
+  label[middle] = style.bold(`${bounds[0]}–${bounds.at(-1)}`);
 
   const cells = days.map((day) => {
-    const lines = Array.from({ length: height }, (_, line): string => (line % 2 === 1 ? SPLIT : ""));
+    const lines = Array<string>(height).fill("");
     for (const lesson of lessonsOn(block, day)) {
       const first = 2 * bounds.indexOf(startOf(lesson));
       const last = 2 * bounds.indexOf(endOf(lesson)) - 2;
-      for (let line = first; line <= last; line++) {
-        const text = line === first ? lessonLine(lesson, style) : "";
-        lines[line] = lines[line] && lines[line] !== SPLIT ? `${lines[line]} / ${text}` : text;
+      const whole = first === 0 && last === 2 * (bounds.length - 2);
+      const line = whole ? middle : Math.floor((first + last) / 2);
+      lines[line] = lines[line] ? `${lines[line]} / ${lessonLine(lesson, style)}` : lessonLine(lesson, style);
+      if (!whole) {
+        for (const separator of [first - 1, last + 1]) {
+          if (separator >= 0 && separator < height && !lines[separator]) lines[separator] = SPLIT;
+        }
       }
     }
     return lines;
