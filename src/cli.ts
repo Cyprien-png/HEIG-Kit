@@ -5,6 +5,7 @@ import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
+import { type ColorMode, renderWeekTable, startOfWeek } from "./table.js";
 
 const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -20,6 +21,8 @@ Options:
   --from <YYYY-MM-DD>  first day to show (default: today)
   --to <YYYY-MM-DD>    last day to show (default: 7 days after --from)
   --all                show the whole academic year
+  --table              show the week containing --from (default: this week, next week on weekends) as a timetable
+  --color <mode>       table colors: auto (default), ansi, emoji or none
   --json               print lessons as JSON
   --refresh            ignore the cache and log in to GAPS again
   --debug              save every visited page to .cache/debug/`;
@@ -32,6 +35,8 @@ async function main(): Promise<void> {
       to: { type: "string" },
       all: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
+      table: { type: "boolean", default: false },
+      color: { type: "string", default: "auto" },
       refresh: { type: "boolean", default: false },
       debug: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -50,11 +55,25 @@ async function main(): Promise<void> {
     ? cache.lessons
     : cache.lessons.filter((l) => new Date(l.end) > from && new Date(l.start) < to);
 
+  if (values.table) {
+    const now = startOfDay(isoDate(new Date()));
+    const weekend = !values.from && addDays(startOfWeek(now), 5) <= now;
+    const monday = weekend ? addDays(startOfWeek(now), 7) : startOfWeek(from);
+    console.log(renderWeekTable(cache.lessons, monday, cache.fetchedAt, colorMode(values.color)));
+    return;
+  }
+
   if (values.json) {
     console.log(JSON.stringify({ fetchedAt: cache.fetchedAt, lessons }, null, 2));
   } else {
     printLessons(lessons, cache.fetchedAt);
   }
+}
+
+function colorMode(option: string): ColorMode {
+  if (option === "ansi" || option === "emoji" || option === "none") return option;
+  if (option !== "auto") throw new Error(`Invalid --color "${option}", expected auto, ansi, emoji or none`);
+  return process.stdout.isTTY && !process.env.NO_COLOR ? "ansi" : "none";
 }
 
 async function loadSchedule(refresh: boolean, debug: boolean): Promise<ScheduleCache> {
