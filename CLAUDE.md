@@ -5,7 +5,7 @@ with the credentials in `.env`. edu-ID two-step login (authenticator app) is sup
 `.cache/session.json` so codes are rarely needed.
 The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each skill in `skills/<name>/SKILL.md`, invoked as `heig:<name>`.
 
-## Answering questions about the user's planning or deadlines
+## Answering questions about the user's planning, deadlines, courses or homework
 
 Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`) and
 `heig:courses` (`skills/courses/SKILL.md`) skills.

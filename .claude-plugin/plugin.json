@@ -1,6 +1,8 @@
 {
   "name": "heig",
-  "version": "0.1.0",
-  "description": "Skills for HEIG-VD students: GAPS schedule (Cyberlearn planned), logged in through SWITCH edu-ID",
-  "author": { "name": "Cyprien-png" }
+  "version": "0.2.0",
+  "description": "Skills for HEIG-VD students: timetable (GAPS), Cyberlearn deadlines, course contents and homework, through SWITCH edu-ID",
+  "author": {
+    "name": "Cyprien-png"
+  }
 }
