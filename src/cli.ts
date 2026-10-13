@@ -1,13 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { loadConfig } from "./config.js";
+import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
 
 const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const TIME_ZONE = "Europe/Zurich";
 
 interface ScheduleCache {
   fetchedAt: string;
@@ -107,24 +107,6 @@ function printLessons(lessons: Lesson[], fetchedAt: string): void {
         : `${time.format(start)}-${time.format(end)}`;
     console.log(`  ${when}  ${lesson.summary}${where}`);
   }
-}
-
-/** Midnight in Zurich of the given YYYY-MM-DD day. */
-function startOfDay(date: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Invalid date "${date}", expected YYYY-MM-DD`);
-  const utcMidnight = new Date(`${date}T00:00:00Z`);
-  const zurichHour = Number(
-    new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", hourCycle: "h23" }).format(utcMidnight),
-  );
-  return new Date(utcMidnight.getTime() - zurichHour * 60 * 60 * 1000);
-}
-
-function isoDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(date);
-}
-
-function addDays(date: Date, days: number): Date {
-  return startOfDay(isoDate(new Date(date.getTime() + (days * 24 + 12) * 60 * 60 * 1000)));
 }
 
 main().catch((error: unknown) => {
