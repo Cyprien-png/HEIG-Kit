@@ -1,0 +1,26 @@
+{
+  "name": "heig-dumper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Auto-login and scraping tool for HEIG-VD GAPS and HES-SO Cyberlearn",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "schedule": "tsx src/cli.ts schedule",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "dotenv": "^18.0.7",
+    "fetch-cookie": "^3.2.0",
+    "node-ical": "^0.27.3",
+    "tough-cookie": "^6.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
