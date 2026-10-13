@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import makeFetchCookie from "fetch-cookie";
 import { CookieJar } from "tough-cookie";
 
+const MAX_REDIRECTS = 20;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
@@ -78,15 +79,33 @@ export class Session {
     });
   }
 
+  /**
+   * Follows redirects itself so it can stop at a redirect to a non-web URL (e.g. `moodlemobile://token=…`,
+   * how Moodle hands its mobile app token over), returned as a page with that URL and an empty body.
+   */
   private async request(url: string, init: RequestInit): Promise<Page> {
-    const res = await this.fetch(url, {
-      ...init,
-      redirect: "follow",
-      headers: { "User-Agent": USER_AGENT, ...init.headers },
-    });
-    const page = { url: res.url, status: res.status, html: await decodeBody(res) };
-    await this.dump(page);
-    return page;
+    let current = url;
+    let currentInit = init;
+    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+      const res = await this.fetch(current, {
+        ...currentInit,
+        redirect: "manual",
+        headers: { "User-Agent": USER_AGENT, ...currentInit.headers },
+      });
+      const location = res.headers.get("location");
+      if (res.status >= 300 && res.status < 400 && location) {
+        await res.body?.cancel();
+        current = new URL(location, current).toString();
+        if (!/^https?:/.test(current)) return { url: current, status: res.status, html: "" };
+        // Like browsers, 307/308 replay the request; other redirects become a GET.
+        if (res.status !== 307 && res.status !== 308) currentInit = { method: "GET" };
+        continue;
+      }
+      const page = { url: current, status: res.status, html: await decodeBody(res) };
+      await this.dump(page);
+      return page;
+    }
+    throw new Error(`Too many redirects from ${url}`);
   }
 
   private async dump(page: Page): Promise<void> {
