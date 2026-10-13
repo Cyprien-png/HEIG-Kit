@@ -22,6 +22,9 @@ export class MfaRequiredError extends Error {
 }
 
 const IDP_HOST = /(^|\.)login\.eduid\.ch$/;
+const WAYF_HOST = "wayf.switch.ch";
+/** HES-SO identity provider, which delegates to SWITCH edu-ID. */
+export const HES_SO_IDP = "https://aai-logon.hes-so.ch/idp/shibboleth";
 const MAX_STEPS = 10;
 
 /**
@@ -40,6 +43,14 @@ export async function loginWithEduId(session: Session, start: Page, creds: Crede
     // Final step: auto-submitted form carrying the SAML assertion to the service provider.
     if ($("input[name=SAMLResponse]").length > 0) {
       return session.submit(parseForm(page, "form:has(input[name=SAMLResponse])")!);
+    }
+
+    // SWITCH "Where are you from?" page: pick HES-SO through the discovery protocol's return URL.
+    if (new URL(page.url).hostname === WAYF_HOST) {
+      const returnUrl = new URL(new URL(page.url).searchParams.get("return") ?? "");
+      returnUrl.searchParams.set("entityID", HES_SO_IDP);
+      page = await session.get(returnUrl.toString());
+      continue;
     }
 
     if (!IDP_HOST.test(new URL(page.url).hostname)) {

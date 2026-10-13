@@ -1,11 +1,10 @@
 import * as cheerio from "cheerio";
 import ical, { type ParameterValue, type VEvent } from "node-ical";
-import { type Credentials, loginWithEduId } from "../auth/eduid.js";
+import { type Credentials, HES_SO_IDP, loginWithEduId } from "../auth/eduid.js";
 import { type Page, Session } from "../http.js";
 
 const GAPS_URL = "https://gaps.heig-vd.ch";
 const SCHEDULE_URL = `${GAPS_URL}/consultation/horaires/`;
-const HES_SO_IDP = "https://aai-logon.hes-so.ch/idp/shibboleth";
 
 export interface Lesson {
   start: string;
