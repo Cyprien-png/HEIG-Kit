@@ -20,6 +20,33 @@ export interface Deadline {
   url: string;
 }
 
+export interface Course {
+  id: number;
+  shortName: string;
+  fullName: string;
+}
+
+/** A course section with its activities and resources, as returned by `core_course_get_contents`. */
+export interface Section {
+  name: string;
+  /** HTML. */
+  summary: string;
+  modules: Module[];
+}
+
+export interface Module {
+  id: number;
+  name: string;
+  /** Moodle module type: `label`, `page`, `resource`, `folder`, `url`, `assign`, `quiz`… */
+  modname: string;
+  url?: string;
+  /** HTML text of labels and module descriptions. */
+  description?: string;
+  /** Files of resources and folders, the HTML content of pages, the target of URLs. */
+  contents?: { type: string; filename: string; filepath?: string; fileurl: string; timemodified?: number }[];
+  dates?: { label: string; timestamp: number }[];
+}
+
 interface TimelineEvent {
   id: number;
   name: string;
@@ -59,6 +86,28 @@ export class CyberlearnClient {
 
   get apiToken(): string {
     return this.token;
+  }
+
+  /** Courses the user is enrolled in. */
+  async courses(): Promise<Course[]> {
+    const { userid } = await this.call<{ userid: number }>("core_webservice_get_site_info");
+    const courses = await this.call<{ id: number; shortname: string; fullname: string }[]>("core_enrol_get_users_courses", {
+      userid,
+    });
+    return courses.map((c) => ({ id: c.id, shortName: c.shortname, fullName: c.fullname }));
+  }
+
+  async courseContents(courseId: number): Promise<Section[]> {
+    return this.call<Section[]>("core_course_get_contents", { courseid: courseId });
+  }
+
+  /** Downloads a file listed in course contents (e.g. a page's `index.html`), authenticated with the token. */
+  async downloadFile(fileUrl: string): Promise<ArrayBuffer> {
+    const url = new URL(fileUrl);
+    url.searchParams.set("token", this.token);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Cyberlearn file download failed (${res.status}): ${fileUrl}`);
+    return res.arrayBuffer();
   }
 
   /** Activities still to do (assignments to submit, quizzes to attempt…) due from `from` on, sorted by due date. */
