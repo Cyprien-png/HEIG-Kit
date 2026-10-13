@@ -20,7 +20,7 @@ export function startOfWeek(day: Date): Date {
 }
 
 /**
- * Renders one week as a timetable: a column per day, a row per time slot.
+ * Renders one week as a timetable: a column per day, a row per time slot (overlapping slots nested in one row).
  * `allLessons` keeps course colors stable from one week to the next.
  */
 export function renderWeekTable(allLessons: Lesson[], monday: Date, fetchedAt: string, mode: ColorMode): string {
@@ -33,7 +33,6 @@ export function renderWeekTable(allLessons: Lesson[], monday: Date, fetchedAt: s
     (day, i) => i < 5 || timed.some((l) => isoDate(new Date(l.start)) === isoDate(day)),
   );
   const today = isoDate(new Date());
-  const slots = [...new Set(timed.map(slotOf))].sort();
 
   const header = [
     "",
@@ -42,14 +41,7 @@ export function renderWeekTable(allLessons: Lesson[], monday: Date, fetchedAt: s
       return isoDate(day) === today ? style.today(`${label} •`) : style.bold(label);
     }),
   ].map((cell) => [cell]);
-  const rows = slots.map((slot) => [
-    [style.bold(slot)],
-    ...days.map((day) =>
-      timed
-        .filter((l) => slotOf(l) === slot && isoDate(new Date(l.start)) === isoDate(day))
-        .flatMap((l) => lessonLines(l, style)),
-    ),
-  ]);
+  const rows = timeBlocks(timed).map((block) => blockRow(block, days, style));
 
   const lastDay = days.at(-1)!;
   const title = `Week of ${dayMonth.format(monday)} – ${dayMonth.format(lastDay)}.${isoDate(lastDay).slice(0, 4)}`;
@@ -68,8 +60,58 @@ export function isAllDay(lesson: Lesson): boolean {
   return time.format(new Date(lesson.start)) === "00:00" && time.format(new Date(lesson.end)) === "00:00";
 }
 
-function slotOf(lesson: Lesson): string {
-  return `${time.format(new Date(lesson.start))}–${time.format(new Date(lesson.end))}`;
+const startOf = (lesson: Lesson) => time.format(new Date(lesson.start));
+const endOf = (lesson: Lesson) => time.format(new Date(lesson.end));
+
+/** Groups lessons whose times of day overlap (e.g. 08:30–10:00 and 09:15–10:00) into one row of the table. */
+function timeBlocks(lessons: Lesson[]): Lesson[][] {
+  const blocks: Lesson[][] = [];
+  let blockEnd = "";
+  for (const lesson of [...lessons].sort((a, b) => startOf(a).localeCompare(startOf(b)) || endOf(b).localeCompare(endOf(a)))) {
+    if (blocks.length > 0 && startOf(lesson) < blockEnd) {
+      blocks.at(-1)!.push(lesson);
+    } else {
+      blocks.push([lesson]);
+    }
+    if (endOf(lesson) > blockEnd || blocks.at(-1)!.length === 1) blockEnd = endOf(lesson);
+  }
+  return blocks;
+}
+
+/**
+ * One table row for a block. A block with nested slots gets one line per sub-slot, so a 45-minute
+ * lesson takes half the height of a 90-minute one and sits at its position inside the block.
+ */
+function blockRow(block: Lesson[], days: Date[], style: Styler): string[][] {
+  const bounds = [...new Set(block.flatMap((l) => [startOf(l), endOf(l)]))].sort();
+  const segments = bounds.length - 1;
+  const height = Math.max(2, segments);
+  const first = bounds[0];
+  const last = bounds.at(-1)!;
+
+  const label = Array<string>(height).fill("");
+  label[0] = style.bold(`${first}–${last}`);
+  for (const lesson of block) {
+    const line = bounds.indexOf(startOf(lesson));
+    if (segments > 1 && (startOf(lesson) !== first || endOf(lesson) !== last) && line > 0) {
+      label[line] = style.dim(`└ ${startOf(lesson)}–${endOf(lesson)}`);
+    }
+  }
+
+  const cells = days.map((day) => {
+    const lines = Array<string>(height).fill("");
+    for (const lesson of block.filter((l) => isoDate(new Date(l.start)) === isoDate(day))) {
+      const from = bounds.indexOf(startOf(lesson));
+      const span = bounds.indexOf(endOf(lesson)) - from;
+      const content = segments > 1 && span === 1 ? [compactLine(lesson, style)] : lessonLines(lesson, style);
+      content.forEach((text, i) => {
+        const at = Math.min(from + i, height - 1);
+        lines[at] = lines[at] ? `${lines[at]} / ${text}` : text;
+      });
+    }
+    return lines;
+  });
+  return [label, ...cells];
 }
 
 /** GAPS codes look like `PRG-D-L1`: course, class, then lesson type and number. */
@@ -84,6 +126,13 @@ function lessonLines(lesson: Lesson, style: Styler): string[] {
   const { course, type } = parseCode(lesson.summary);
   const details = [type, lesson.location].filter(Boolean).join(" · ");
   return [`${style.marker(lesson)}${style.course(lesson, course)}`, style.dim(details)];
+}
+
+/** Single-line form for a lesson drawn at half height. */
+function compactLine(lesson: Lesson, style: Styler): string {
+  const { course } = parseCode(lesson.summary);
+  const room = lesson.location ? style.dim(` · ${lesson.location}`) : "";
+  return `${style.marker(lesson)}${style.course(lesson, course)}${room}`;
 }
 
 interface Styler {
