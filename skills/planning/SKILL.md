@@ -13,6 +13,11 @@ description: Answer questions about the user's HEIG-VD class schedule (GAPS plan
 2. Resolve relative dates ("tomorrow", "next week") from today's date in Europe/Zurich.
 3. Course codes follow `<COURSE>-<CLASS>-<TYPE><N>`: `C` = lecture (cours), `L` = lab (laboratoire), `A` = support session.
    A multi-day event shown as "all day" (e.g. "Travail personnel") means no regular classes during that period.
-4. Answer concisely: day, time range, course, room. Do not dump the whole schedule unless asked.
-5. If the command fails on login, report the error and suggest `npm --prefix <root> run schedule -- --refresh --debug`.
+4. Default view: when the user asks for their planning without a specific question (e.g. "my planning", "show my schedule",
+   "what's my week", or just invoking this skill), run `npm --prefix <root> run -s schedule -- --table --color emoji`
+   (add `--from YYYY-MM-DD` for another week, e.g. "next week") and reply with its output verbatim inside a ```text code block,
+   followed by at most one or two short lines worth pointing out (a day off, an every-other-week course, an all-day event).
+   Chat replies cannot render ANSI colors, so always use `--color emoji` there.
+5. Specific questions (a date, a course, "am I free…"): answer concisely with day, time range, course and room, no table.
+6. If the command fails on login, report the error and suggest `npm --prefix <root> run schedule -- --refresh --debug`.
    If it reports missing credentials, ask the user to fill `<root>/.env` (see `<root>/.env.example`) and `npm install` there. Never print `.env`.
