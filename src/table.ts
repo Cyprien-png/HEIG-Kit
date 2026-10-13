@@ -1,12 +1,8 @@
 import { TIME_ZONE, addDays, isoDate } from "./dates.js";
 import type { Lesson } from "./gaps/client.js";
-
-/** ansi: terminal colors; emoji: colored squares, for places without ANSI support (e.g. chat replies); none: plain text. */
-export type ColorMode = "ansi" | "emoji" | "none";
+import { type ColorMode, SPLIT, type Styler, createStyler, drawGrid } from "./render.js";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const ANSI_COLORS = [31, 32, 33, 34, 35, 36, 91, 92, 93, 94, 95, 96];
-const EMOJI_COLORS = ["🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫"];
 
 const time = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, timeStyle: "short" });
 const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: TIME_ZONE, weekday: "short" });
@@ -23,7 +19,7 @@ export function startOfWeek(day: Date): Date {
  * `allLessons` keeps course colors stable from one week to the next.
  */
 export function renderWeekTable(allLessons: Lesson[], monday: Date, fetchedAt: string, mode: ColorMode): string {
-  const style = styler(mode, allLessons);
+  const style = createStyler(mode, scheduleCourses(allLessons));
   const nextMonday = addDays(monday, 7);
   const lessons = allLessons.filter((l) => new Date(l.end) > monday && new Date(l.start) < nextMonday);
   const timed = lessons.filter((l) => !isAllDay(l));
@@ -50,7 +46,7 @@ export function renderWeekTable(allLessons: Lesson[], monday: Date, fetchedAt: s
   for (const event of lessons.filter(isAllDay)) {
     const last = new Date(new Date(event.end).getTime() - 1);
     const span = `${weekday.format(new Date(event.start))} ${dayMonth.format(new Date(event.start))} – ${weekday.format(last)} ${dayMonth.format(last)}`;
-    out.push(`${style.marker(event)}${style.bold(event.summary)} ${style.dim(`(${span}, all day)`)}`);
+    out.push(`${style.marker(parseCode(event.summary).course)}${style.bold(event.summary)} ${style.dim(`(${span}, all day)`)}`);
   }
   return out.join("\n");
 }
@@ -76,9 +72,6 @@ function timeBlocks(lessons: Lesson[]): Lesson[][] {
   }
   return blocks;
 }
-
-/** Cell line drawn as a dashed separator between two sub-slots of a block. */
-const SPLIT = "\u0000split";
 
 /**
  * One table row for a block, at least 3 lines high so every row has the same size. Nested slots
@@ -117,6 +110,11 @@ function lessonsOn(lessons: Lesson[], day: Date): Lesson[] {
   return lessons.filter((l) => isoDate(new Date(l.start)) === isoDate(day));
 }
 
+/** Course codes of the schedule (e.g. `PRG`), sorted: their order sets each course's color everywhere. */
+export function scheduleCourses(lessons: Lesson[]): string[] {
+  return [...new Set(lessons.map((l) => parseCode(l.summary).course))].sort();
+}
+
 /** GAPS codes look like `PRG-D-L1`: course, class, then lesson type (C lecture, L lab, A support) and number. */
 function parseCode(summary: string): { course: string; type: string } {
   const parts = summary.split("-");
@@ -130,62 +128,5 @@ function lessonLine(lesson: Lesson, style: Styler): string {
   const { course, type } = parseCode(lesson.summary);
   const name = type ? `${course}-${type}` : course;
   const room = lesson.location ? style.dim(` · ${lesson.location}`) : "";
-  return `${style.marker(lesson)}${style.course(lesson, name)}${room}`;
-}
-
-interface Styler {
-  bold(text: string): string;
-  dim(text: string): string;
-  today(text: string): string;
-  border(text: string): string;
-  course(lesson: Lesson, text: string): string;
-  marker(lesson: Lesson): string;
-}
-
-function styler(mode: ColorMode, allLessons: Lesson[]): Styler {
-  const courses = [...new Set(allLessons.map((l) => parseCode(l.summary).course))].sort();
-  const colorIndex = (lesson: Lesson) => courses.indexOf(parseCode(lesson.summary).course);
-  const ansi = (code: string) => (text: string) => (mode === "ansi" && text ? `\x1b[${code}m${text}\x1b[0m` : text);
-
-  return {
-    bold: ansi("1"),
-    dim: ansi("2"),
-    today: mode === "ansi" ? ansi("1;7") : (text) => text,
-    border: ansi("2"),
-    course: (lesson, text) => ansi(`1;${ANSI_COLORS[colorIndex(lesson) % ANSI_COLORS.length]}`)(text),
-    marker: (lesson) => (mode === "emoji" ? `${EMOJI_COLORS[colorIndex(lesson) % EMOJI_COLORS.length]} ` : ""),
-  };
-}
-
-/** Terminal columns taken by a string: ANSI codes take none, emoji take two. */
-function width(text: string): number {
-  const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
-  let columns = 0;
-  for (const char of plain) columns += /\p{Emoji_Presentation}/u.test(char) ? 2 : 1;
-  return columns;
-}
-
-function pad(text: string, columns: number): string {
-  return text + " ".repeat(columns - width(text));
-}
-
-/** Draws a box-drawing grid; each cell is a list of lines. */
-function drawGrid(rows: string[][][], style: Styler): string {
-  const cellWidth = (text: string) => (text === SPLIT ? 0 : width(text));
-  const widths = rows[0].map((_, col) => Math.max(...rows.map((row) => Math.max(0, ...row[col].map(cellWidth)))));
-  const line = (left: string, mid: string, right: string) =>
-    style.border(left + widths.map((w) => "─".repeat(w + 2)).join(mid) + right);
-
-  const out = [line("┌", "┬", "┐")];
-  rows.forEach((row, i) => {
-    const height = Math.max(1, ...row.map((cell) => cell.length));
-    for (let l = 0; l < height; l++) {
-      const cells = row.map((cell, col) =>
-        cell[l] === SPLIT ? style.border("╌".repeat(widths[col] + 2)) : ` ${pad(cell[l] ?? "", widths[col])} `,
-      );
-      out.push(style.border("│") + cells.join(style.border("│")) + style.border("│"));
-    }
-    out.push(i === rows.length - 1 ? line("└", "┴", "┘") : line("├", "┼", "┤"));
-  });
-  return out.join("\n");
+  return `${style.marker(course)}${style.course(course, name)}${room}`;
 }

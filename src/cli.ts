@@ -7,7 +7,8 @@ import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
-import { type ColorMode, renderWeekTable, startOfWeek } from "./table.js";
+import type { ColorMode } from "./render.js";
+import { renderWeekTable, startOfWeek } from "./table.js";
 
 const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
