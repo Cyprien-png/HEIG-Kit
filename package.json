@@ -2,7 +2,7 @@
   "name": "heig-kit",
   "version": "0.1.0",
   "private": true,
-  "description": "Auto-login and scraping tool for HEIG-VD GAPS and HES-SO Cyberlearn",
+  "description": "Toolkit and Claude Code plugin giving HEIG-VD students access to their own academic information through SWITCH edu-ID",
   "type": "module",
   "engines": {
     "node": ">=20"

@@ -103,6 +103,8 @@ inspection. These files may contain personal information and must not be shared 
   is refreshed at most every 12 hours unless an update is explicitly requested.
 - The login session is stored in `.cache/session.json`, readable by your user account only. Anyone obtaining this file
   could access your accounts until the session expires: never share it, and delete it to sign out.
+- While a login waits for a two-step login code, its state is kept in `.cache/mfa-pending.json`, readable by your user
+  account only, and deleted as soon as the login completes.
 - HEIG-Kit does not collect telemetry and does not transmit your data to any third party. When used through an AI
   assistant, the information you request is processed by that assistant according to its own terms and privacy policy.
 
