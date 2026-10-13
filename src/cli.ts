@@ -99,8 +99,13 @@ function printLessons(lessons: Lesson[], fetchedAt: string): void {
       currentDay = lessonDay;
       console.log(`\n${lessonDay}`);
     }
+    const end = new Date(lesson.end);
     const where = lesson.location ? ` @ ${lesson.location}` : "";
-    console.log(`  ${time.format(start)}-${time.format(new Date(lesson.end))}  ${lesson.summary}${where}`);
+    const when =
+      time.format(start) === "00:00" && time.format(end) === "00:00"
+        ? `all day until ${day.format(new Date(end.getTime() - 1))}`
+        : `${time.format(start)}-${time.format(end)}`;
+    console.log(`  ${when}  ${lesson.summary}${where}`);
   }
 }
 
