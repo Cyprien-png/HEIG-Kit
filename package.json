@@ -10,6 +10,8 @@
   "scripts": {
     "schedule": "tsx src/cli.ts schedule",
     "deadlines": "tsx src/cli.ts deadlines",
+    "courses": "tsx src/cli.ts courses",
+    "course": "tsx src/cli.ts course",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

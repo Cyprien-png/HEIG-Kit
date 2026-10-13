@@ -5,6 +5,7 @@ import { type Credentials, MfaRequiredError } from "./auth/eduid.js";
 import { loadConfig } from "./config.js";
 import { CyberlearnClient, InvalidTokenError } from "./cyberlearn/client.js";
 import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
+import { findCourse, renderCourse, renderCourseList } from "./courses.js";
 import { renderDeadlines } from "./deadlines.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { type Page, Session } from "./http.js";
@@ -30,6 +31,9 @@ interface ScheduleCache {
 const USAGE = `Usage:
   npm run schedule -- [options]    GAPS timetable
   npm run deadlines -- [options]   Cyberlearn activities still to do (assignments, quizzes…)
+  npm run courses                  Cyberlearn courses
+  npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
+                                   <course> is a timetable code (e.g. MAD), an id or part of the name
 
 Schedule options:
   --from <YYYY-MM-DD>  first day to show (default: today)
@@ -68,8 +72,14 @@ async function main(): Promise<void> {
   });
 
   const command = positionals[0];
-  if (values.help || (command !== "schedule" && command !== "deadlines")) {
+  if (values.help || !["schedule", "deadlines", "courses", "course"].includes(command)) {
     console.log(USAGE);
+    return;
+  }
+
+  if (command === "courses" || command === "course") {
+    if (command === "course" && !positionals[1]) throw new Error("Usage: npm run course -- <course>");
+    console.log(await loadCourses(positionals[1], values.debug, values["mfa-code"]));
     return;
   }
 
@@ -137,10 +147,38 @@ async function loadDeadlines(days: number | undefined, debug: boolean, mfaCode?:
   const from = new Date(Date.now() - OVERDUE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const to = days === undefined ? undefined : addDays(startOfDay(isoDate(new Date())), days + 1);
 
+  return withCyberlearn(debug, mfaCode, (client) => client.deadlines(from, to));
+}
+
+/** The user's Cyberlearn courses, or one course rendered as text with its pages' content when `query` is given. */
+async function loadCourses(query: string | undefined, debug: boolean, mfaCode?: string): Promise<string> {
+  const scheduleCodes = scheduleCourses((await readCache())?.lessons ?? []);
+  return withCyberlearn(debug, mfaCode, async (client) => {
+    const courses = await client.courses();
+    if (!query) return renderCourseList(courses, scheduleCodes);
+
+    const course = findCourse(courses, query, scheduleCodes);
+    if (!course) throw new Error(`No Cyberlearn course matches "${query}". Courses:\n${renderCourseList(courses, scheduleCodes)}`);
+    const sections = await client.courseContents(course.id);
+    const pages = new Map<number, string>();
+    for (const module of sections.flatMap((s) => s.modules).filter((m) => m.modname === "page")) {
+      const index = module.contents?.find((f) => f.filename === "index.html");
+      if (index) pages.set(module.id, new TextDecoder().decode(await client.downloadFile(index.fileurl)));
+    }
+    return renderCourse(course, sections, pages);
+  });
+}
+
+/** Runs `use` with a Cyberlearn client, reusing the saved app token and logging in again when it is missing or expired. */
+async function withCyberlearn<T>(
+  debug: boolean,
+  mfaCode: string | undefined,
+  use: (client: CyberlearnClient) => Promise<T>,
+): Promise<T> {
   const saved = mfaCode ? undefined : await readCyberlearnToken();
   if (saved) {
     try {
-      return await new CyberlearnClient(saved).deadlines(from, to);
+      return await use(new CyberlearnClient(saved));
     } catch (error) {
       if (!(error instanceof InvalidTokenError)) throw error;
     }
@@ -151,7 +189,7 @@ async function loadDeadlines(days: number | undefined, debug: boolean, mfaCode?:
   );
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(CYBERLEARN_TOKEN_FILE, JSON.stringify({ token: client.apiToken }), { mode: 0o600 });
-  return client.deadlines(from, to);
+  return use(client);
 }
 
 async function readCyberlearnToken(): Promise<string | undefined> {
