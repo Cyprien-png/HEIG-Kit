@@ -12,13 +12,15 @@ academic information from the command line or through an AI assistant, using the
 |---|---|---|
 | Personal timetable (weekly view, date ranges, JSON export) | GAPS | Available |
 | Natural-language timetable assistant (`heig:planning`) | GAPS | Available |
+| Pending activities and deadlines (assignments, quizzes, overdue work) | Cyberlearn | Available |
+| Natural-language deadline assistant (`heig:deadlines`) | Cyberlearn | Available |
 | Course material synchronisation | Cyberlearn | Planned |
 | Local knowledge base and study assistant (explanations, exercises, tailored course summaries) | Cyberlearn | Planned |
 
 ## Requirements
 
 - Node.js 20 or later
-- A SWITCH edu-ID account linked to HES-SO, with access to GAPS
+- A SWITCH edu-ID account linked to HES-SO, with access to GAPS and Cyberlearn
 - An authenticator app, if two-step login is enabled on that edu-ID account (see below)
 - [Claude Code](https://claude.com/claude-code), only for the assistant features
 
@@ -81,13 +83,27 @@ npm run schedule -- --all --json                    # full academic year in JSON
 npm run schedule -- --refresh                       # retrieve the latest data from GAPS
 ```
 
+```sh
+npm run deadlines                                   # Cyberlearn activities still to do, including overdue ones
+npm run deadlines -- --days 7                       # activities due within the next 7 days
+npm run deadlines -- --json                         # details in JSON format, including links
+```
+
 Run `npm run schedule -- --help` for the full list of options.
+
+Cyberlearn data is retrieved through the official Moodle web services, using the access token Moodle issues to its
+mobile application. Deadlines are always retrieved live and reflect the Cyberlearn timeline: submitted or completed
+activities are not listed.
 
 ### Claude Code assistant
 
-Once the plugin is installed, ask Claude Code about your timetable in natural language, for instance
-*"show my planning"*, *"when is my next PRG lab?"* or *"am I free on Friday afternoon?"*, or invoke the skill explicitly
-with `/heig:planning`. Ask for *"up-to-date"* information to bypass the local cache.
+Once the plugin is installed, ask Claude Code in natural language:
+
+- **Timetable** (`heig:planning`): *"show my planning"*, *"when is my next PRG lab?"*, *"am I free on Friday afternoon?"*.
+  Ask for *"up-to-date"* information to bypass the local cache.
+- **Deadlines** (`heig:deadlines`): *"what are my deadlines?"*, *"do I have homework for RXI?"*, *"what's due this week?"*.
+
+Skills can also be invoked explicitly, e.g. `/heig:planning` or `/heig:deadlines`.
 
 ### Troubleshooting
 
@@ -103,6 +119,8 @@ inspection. These files may contain personal information and must not be shared 
   is refreshed at most every 12 hours unless an update is explicitly requested.
 - The login session is stored in `.cache/session.json`, readable by your user account only. Anyone obtaining this file
   could access your accounts until the session expires: never share it, and delete it to sign out.
+- The Cyberlearn access token is stored in `.cache/cyberlearn-token.json`, readable by your user account only. It grants
+  access to your Cyberlearn account until it expires or is revoked: never share it, and delete it to revoke local access.
 - While a login waits for a two-step login code, its state is kept in `.cache/mfa-pending.json`, readable by your user
   account only, and deleted as soon as the login completes.
 - HEIG-Kit does not collect telemetry and does not transmit your data to any third party. When used through an AI
