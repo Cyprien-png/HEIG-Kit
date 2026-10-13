@@ -4,6 +4,21 @@ import { type Page, type Session, parseForm } from "../http.js";
 export interface Credentials {
   email: string;
   password: string;
+  /** Returns a code from the authenticator app when edu-ID asks for two-step login, or undefined if none is available. */
+  otp?: () => Promise<string | undefined>;
+}
+
+/**
+ * Thrown when edu-ID asks for a two-step login code that could not be provided. `page` is the code page:
+ * passing it back to `loginWithEduId` with a code resumes the login while the edu-ID flow is still valid.
+ */
+export class MfaRequiredError extends Error {
+  constructor(
+    readonly page: Page,
+    readonly invalidCode: boolean,
+  ) {
+    super(invalidCode ? "edu-ID rejected the two-step login code" : "edu-ID two-step login code required");
+  }
 }
 
 const IDP_HOST = /(^|\.)login\.eduid\.ch$/;
@@ -17,6 +32,7 @@ const MAX_STEPS = 10;
 export async function loginWithEduId(session: Session, start: Page, creds: Credentials): Promise<Page> {
   let page = start;
   let passwordSubmitted = false;
+  let otpSubmitted = false;
 
   for (let i = 0; i < MAX_STEPS; i++) {
     const $ = cheerio.load(page.html);
@@ -30,7 +46,17 @@ export async function loginWithEduId(session: Session, start: Page, creds: Crede
       return page;
     }
 
-    if ($("input[name=j_password]").length > 0) {
+    if ($("input[name=j_otp]").length > 0) {
+      const code = otpSubmitted ? undefined : (await creds.otp?.())?.replace(/\s/g, "");
+      if (!code) throw new MfaRequiredError(page, otpSubmitted);
+      otpSubmitted = true;
+      // "Don't ask again for some time": edu-ID then skips two-step login while the saved cookies are valid.
+      page = await session.submit(parseForm(page, "form:has(input[name=j_otp])")!, {
+        j_otp: code,
+        rememberBrowser: "true",
+        _eventId_submit: "",
+      });
+    } else if ($("input[name=j_password]").length > 0) {
       if (passwordSubmitted) {
         throw new Error("edu-ID rejected the credentials, check HEIG_EMAIL / HEIG_PASSWORD in .env");
       }
@@ -50,7 +76,7 @@ export async function loginWithEduId(session: Session, start: Page, creds: Crede
       page = await session.submit(parseForm(page)!, { shib_idp_ls_supported: "false", _eventId_proceed: "" });
     } else {
       throw new Error(
-        `Unexpected edu-ID step at ${page.url} (two-factor authentication or terms to accept?). ` +
+        `Unexpected edu-ID step at ${page.url} (terms to accept or an unsupported two-step login method?). ` +
           "Rerun with --debug and inspect .cache/debug/",
       );
     }
