@@ -1,4 +1,8 @@
-import "dotenv/config";
+import path from "node:path";
+import dotenv from "dotenv";
+import { ROOT } from "./paths.js";
+
+dotenv.config({ path: path.join(ROOT, ".env"), quiet: true });
 
 export interface Config {
   email: string;

@@ -3,8 +3,8 @@ import { parseArgs } from "node:util";
 import { loadConfig } from "./config.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { Session } from "./http.js";
+import { CACHE_DIR } from "./paths.js";
 
-const CACHE_DIR = ".cache";
 const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const TIME_ZONE = "Europe/Zurich";
@@ -22,7 +22,7 @@ Options:
   --all                show the whole academic year
   --json               print lessons as JSON
   --refresh            ignore the cache and log in to GAPS again
-  --debug              save every visited page to ${CACHE_DIR}/debug/`;
+  --debug              save every visited page to .cache/debug/`;
 
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
