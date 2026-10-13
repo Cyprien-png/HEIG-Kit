@@ -19,7 +19,7 @@ academic information from the command line or through an AI assistant, using the
 
 - Node.js 20 or later
 - A SWITCH edu-ID account linked to HES-SO, with access to GAPS
-- Multi-factor authentication **disabled** on that edu-ID account (see below)
+- An authenticator app, if two-step login is enabled on that edu-ID account (see below)
 - [Claude Code](https://claude.com/claude-code), only for the assistant features
 
 ## Installation
@@ -41,16 +41,21 @@ cp .env.example .env
 Fill in `HEIG_EMAIL` and `HEIG_PASSWORD` in `.env` with your SWITCH edu-ID credentials. This file is excluded from version
 control and must never be shared or committed.
 
-### 3. Multi-factor authentication
+### 3. Two-step login (multi-factor authentication)
 
-> [!IMPORTANT]
-> HEIG-Kit signs in to SWITCH edu-ID without user interaction and cannot complete a second authentication factor.
-> Multi-factor authentication must therefore be **disabled** in the security settings of your
-> [SWITCH edu-ID account](https://eduid.ch) for HEIG-Kit to connect.
+HEIG-Kit supports SWITCH edu-ID two-step login with an authenticator app (TOTP). Codes are requested only when needed:
 
-Disabling multi-factor authentication reduces the protection of your account. By doing so you accept this risk. We
-recommend using a strong, unique password and re-enabling multi-factor authentication when you no longer use HEIG-Kit.
-If your institution enforces multi-factor authentication on your account, HEIG-Kit cannot be used.
+- **In a terminal**, HEIG-Kit prompts for the current code of your authenticator app.
+- **Through an AI assistant or any non-interactive environment**, the command stops with exit code `2` and the message
+  *"edu-ID two-step login code required"*. Rerun it with `--mfa-code <code>` to complete the pending login. The
+  `heig:planning` skill handles this automatically by asking you for the code.
+
+After a successful login, the session is saved and edu-ID is instructed to remember the device, so that subsequent runs,
+including password re-authentication, do not require a code until edu-ID asks for one again (typically several weeks).
+
+> [!NOTE]
+> Passkeys and hardware security keys require a web browser and are not supported. Your authenticator secret is never
+> requested nor stored by HEIG-Kit: only the short-lived codes you enter are transmitted to SWITCH edu-ID.
 
 ### 4. Install the Claude Code plugin (optional)
 
@@ -86,7 +91,7 @@ with `/heig:planning`. Ask for *"up-to-date"* information to bypass the local ca
 
 ### Troubleshooting
 
-If authentication fails, verify your credentials and multi-factor authentication settings, then run
+If authentication fails, verify your credentials, delete `.cache/session.json` to start a new session, then run
 `npm run schedule -- --refresh --debug`: the pages visited during authentication are saved to `.cache/debug/` for
 inspection. These files may contain personal information and must not be shared publicly.
 
@@ -96,6 +101,8 @@ inspection. These files may contain personal information and must not be shared 
   authentication.
 - Retrieved data is stored locally in the `.cache/` directory, which is excluded from version control. Timetable data
   is refreshed at most every 12 hours unless an update is explicitly requested.
+- The login session is stored in `.cache/session.json`, readable by your user account only. Anyone obtaining this file
+  could access your accounts until the session expires: never share it, and delete it to sign out.
 - HEIG-Kit does not collect telemetry and does not transmit your data to any third party. When used through an AI
   assistant, the information you request is processed by that assistant according to its own terms and privacy policy.
 
