@@ -23,15 +23,27 @@ export class GapsClient {
     private readonly studentId?: string,
   ) {}
 
-  async login(creds: Credentials): Promise<void> {
+  /**
+   * Logs in to GAPS, reusing the session's cookies when they are still valid. `resumeFrom` is the edu-ID
+   * two-step login page of an interrupted login (see `MfaRequiredError`), to finish it instead of starting over.
+   */
+  async login(creds: Credentials, resumeFrom?: Page): Promise<void> {
+    if (!resumeFrom) {
+      const page = await this.session.get(SCHEDULE_URL);
+      if (isLoggedIn(page)) {
+        this.schedulePage = page;
+        return;
+      }
+    }
+
     const loginUrl = new URL(`${GAPS_URL}/Shibboleth.sso/Login`);
     loginUrl.searchParams.set("entityID", HES_SO_IDP);
     loginUrl.searchParams.set("target", SCHEDULE_URL);
 
-    await loginWithEduId(this.session, await this.session.get(loginUrl.toString()), creds);
+    await loginWithEduId(this.session, resumeFrom ?? (await this.session.get(loginUrl.toString())), creds);
 
     const page = await this.session.get(SCHEDULE_URL);
-    if (cheerio.load(page.html)("#localaccessform").length > 0) {
+    if (!isLoggedIn(page)) {
       throw new Error("GAPS still shows the login form after edu-ID login");
     }
     this.schedulePage = page;
@@ -68,6 +80,10 @@ export class GapsClient {
 
     return lessons.sort((a, b) => a.start.localeCompare(b.start));
   }
+}
+
+function isLoggedIn(page: Page): boolean {
+  return cheerio.load(page.html)("#localaccessform").length === 0;
 }
 
 /** The academic year starts in August: October 2026 belongs to 2026-2027. */
