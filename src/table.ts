@@ -78,40 +78,49 @@ function timeBlocks(lessons: Lesson[]): Lesson[][] {
   return blocks;
 }
 
+/** Cell line drawn as a dashed separator between two sub-slots of a block. */
+const SPLIT = "\u0000split";
+
 /**
- * One table row for a block. A block with nested slots gets one line per sub-slot, so a 45-minute
- * lesson takes half the height of a 90-minute one and sits at its position inside the block.
+ * One table row for a block. A block with nested slots (e.g. 09:15–10:00 inside 08:30–10:00) is split into
+ * sub-slots by dashed lines, one line per sub-slot: a 45-minute lesson takes half the height of a 90-minute
+ * one, and a lesson covering several sub-slots stays merged across the dashed lines.
  */
 function blockRow(block: Lesson[], days: Date[], style: Styler): string[][] {
   const bounds = [...new Set(block.flatMap((l) => [startOf(l), endOf(l)]))].sort();
   const segments = bounds.length - 1;
-  const height = Math.max(2, segments);
-  const first = bounds[0];
-  const last = bounds.at(-1)!;
 
-  const label = Array<string>(height).fill("");
-  label[0] = style.bold(`${first}–${last}`);
-  for (const lesson of block) {
-    const line = bounds.indexOf(startOf(lesson));
-    if (segments > 1 && (startOf(lesson) !== first || endOf(lesson) !== last) && line > 0) {
-      label[line] = style.dim(`└ ${startOf(lesson)}–${endOf(lesson)}`);
-    }
+  if (segments === 1) {
+    return [
+      [style.bold(`${bounds[0]}–${bounds[1]}`), ""],
+      ...days.map((day) => lessonsOn(block, day).flatMap((l) => lessonLines(l, style))),
+    ];
   }
 
+  // Sub-slot i is drawn on line 2i, the separator between sub-slots i and i+1 on line 2i+1.
+  const height = 2 * segments - 1;
+  const label = Array.from({ length: height }, (_, line) =>
+    line % 2 === 1 ? SPLIT : style.bold(`${bounds[line / 2]}–${bounds[line / 2 + 1]}`),
+  );
+
   const cells = days.map((day) => {
-    const lines = Array<string>(height).fill("");
-    for (const lesson of block.filter((l) => isoDate(new Date(l.start)) === isoDate(day))) {
-      const from = bounds.indexOf(startOf(lesson));
-      const span = bounds.indexOf(endOf(lesson)) - from;
-      const content = segments > 1 && span === 1 ? [compactLine(lesson, style)] : lessonLines(lesson, style);
-      content.forEach((text, i) => {
-        const at = Math.min(from + i, height - 1);
-        lines[at] = lines[at] ? `${lines[at]} / ${text}` : text;
-      });
+    const lines = Array.from({ length: height }, (_, line): string => (line % 2 === 1 ? SPLIT : ""));
+    for (const lesson of lessonsOn(block, day)) {
+      const first = 2 * bounds.indexOf(startOf(lesson));
+      const last = 2 * bounds.indexOf(endOf(lesson)) - 2;
+      const content = first === last ? [compactLine(lesson, style)] : lessonLines(lesson, style);
+      for (let line = first; line <= last; line++) {
+        const text = content[line - first] ?? "";
+        lines[line] = lines[line] && lines[line] !== SPLIT ? `${lines[line]} / ${text}` : text;
+      }
     }
     return lines;
   });
   return [label, ...cells];
+}
+
+function lessonsOn(lessons: Lesson[], day: Date): Lesson[] {
+  return lessons.filter((l) => isoDate(new Date(l.start)) === isoDate(day));
 }
 
 /** GAPS codes look like `PRG-D-L1`: course, class, then lesson type and number. */
@@ -173,7 +182,8 @@ function pad(text: string, columns: number): string {
 
 /** Draws a box-drawing grid; each cell is a list of lines. */
 function drawGrid(rows: string[][][], style: Styler): string {
-  const widths = rows[0].map((_, col) => Math.max(...rows.map((row) => Math.max(0, ...row[col].map(width)))));
+  const cellWidth = (text: string) => (text === SPLIT ? 0 : width(text));
+  const widths = rows[0].map((_, col) => Math.max(...rows.map((row) => Math.max(0, ...row[col].map(cellWidth)))));
   const line = (left: string, mid: string, right: string) =>
     style.border(left + widths.map((w) => "─".repeat(w + 2)).join(mid) + right);
 
@@ -181,7 +191,9 @@ function drawGrid(rows: string[][][], style: Styler): string {
   rows.forEach((row, i) => {
     const height = Math.max(1, ...row.map((cell) => cell.length));
     for (let l = 0; l < height; l++) {
-      const cells = row.map((cell, col) => ` ${pad(cell[l] ?? "", widths[col])} `);
+      const cells = row.map((cell, col) =>
+        cell[l] === SPLIT ? style.border("╌".repeat(widths[col] + 2)) : ` ${pad(cell[l] ?? "", widths[col])} `,
+      );
       out.push(style.border("│") + cells.join(style.border("│")) + style.border("│"));
     }
     out.push(i === rows.length - 1 ? line("└", "┴", "┘") : line("├", "┼", "┤"));
