@@ -5,7 +5,6 @@ import type { Lesson } from "./gaps/client.js";
 export type ColorMode = "ansi" | "emoji" | "none";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const LESSON_TYPES: Record<string, string> = { C: "Lecture", L: "Lab", A: "Support" };
 const ANSI_COLORS = [31, 32, 33, 34, 35, 36, 91, 92, 93, 94, 95, 96];
 const EMOJI_COLORS = ["🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫"];
 
@@ -93,7 +92,7 @@ function blockRow(block: Lesson[], days: Date[], style: Styler): string[][] {
   if (segments === 1) {
     return [
       [style.bold(`${bounds[0]}–${bounds[1]}`), ""],
-      ...days.map((day) => lessonsOn(block, day).flatMap((l) => lessonLines(l, style))),
+      ...days.map((day) => lessonsOn(block, day).map((l) => lessonLine(l, style))),
     ];
   }
 
@@ -108,9 +107,8 @@ function blockRow(block: Lesson[], days: Date[], style: Styler): string[][] {
     for (const lesson of lessonsOn(block, day)) {
       const first = 2 * bounds.indexOf(startOf(lesson));
       const last = 2 * bounds.indexOf(endOf(lesson)) - 2;
-      const content = first === last ? [compactLine(lesson, style)] : lessonLines(lesson, style);
       for (let line = first; line <= last; line++) {
-        const text = content[line - first] ?? "";
+        const text = line === first ? lessonLine(lesson, style) : "";
         lines[line] = lines[line] && lines[line] !== SPLIT ? `${lines[line]} / ${text}` : text;
       }
     }
@@ -123,25 +121,20 @@ function lessonsOn(lessons: Lesson[], day: Date): Lesson[] {
   return lessons.filter((l) => isoDate(new Date(l.start)) === isoDate(day));
 }
 
-/** GAPS codes look like `PRG-D-L1`: course, class, then lesson type and number. */
+/** GAPS codes look like `PRG-D-L1`: course, class, then lesson type (C lecture, L lab, A support) and number. */
 function parseCode(summary: string): { course: string; type: string } {
   const parts = summary.split("-");
   const kind = /^([A-Z])\d+$/.exec(parts.at(-1) ?? "");
   if (parts.length < 3 || !kind) return { course: summary, type: "" };
-  return { course: parts[0], type: LESSON_TYPES[kind[1]] ?? kind[1] };
+  return { course: parts[0], type: kind[1] };
 }
 
-function lessonLines(lesson: Lesson, style: Styler): string[] {
+/** One line per lesson, e.g. `PRG-L · C23`. */
+function lessonLine(lesson: Lesson, style: Styler): string {
   const { course, type } = parseCode(lesson.summary);
-  const details = [type, lesson.location].filter(Boolean).join(" · ");
-  return [`${style.marker(lesson)}${style.course(lesson, course)}`, style.dim(details)];
-}
-
-/** Single-line form for a lesson drawn at half height. */
-function compactLine(lesson: Lesson, style: Styler): string {
-  const { course } = parseCode(lesson.summary);
+  const name = type ? `${course}-${type}` : course;
   const room = lesson.location ? style.dim(` · ${lesson.location}`) : "";
-  return `${style.marker(lesson)}${style.course(lesson, course)}${room}`;
+  return `${style.marker(lesson)}${style.course(lesson, name)}${room}`;
 }
 
 interface Styler {
