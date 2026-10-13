@@ -1,14 +1,19 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
+import { MfaRequiredError } from "./auth/eduid.js";
 import { loadConfig } from "./config.js";
 import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
-import { Session } from "./http.js";
+import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
 import { type ColorMode, renderWeekTable, startOfWeek } from "./table.js";
 
 const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_FILE = `${CACHE_DIR}/session.json`;
+/** edu-ID two-step login page of a login waiting for a code, resumed by `--mfa-code`. */
+const PENDING_MFA_FILE = `${CACHE_DIR}/mfa-pending.json`;
 
 interface ScheduleCache {
   fetchedAt: string;
@@ -25,6 +30,7 @@ Options:
   --color <mode>       table colors: auto (default), ansi, emoji or none
   --json               print lessons as JSON
   --refresh            ignore the cache and log in to GAPS again
+  --mfa-code <code>    edu-ID two-step login code from your authenticator app (asked interactively in a terminal)
   --debug              save every visited page to .cache/debug/`;
 
 async function main(): Promise<void> {
@@ -38,6 +44,7 @@ async function main(): Promise<void> {
       table: { type: "boolean", default: false },
       color: { type: "string", default: "auto" },
       refresh: { type: "boolean", default: false },
+      "mfa-code": { type: "string" },
       debug: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -48,7 +55,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const cache = await loadSchedule(values.refresh, values.debug);
+  const cache = await loadSchedule(values.refresh, values.debug, values["mfa-code"]);
   const from = values.from ? startOfDay(values.from) : startOfDay(isoDate(new Date()));
   const to = values.to ? addDays(startOfDay(values.to), 1) : addDays(from, 7);
   const lessons = values.all
@@ -76,20 +83,60 @@ function colorMode(option: string): ColorMode {
   return process.stdout.isTTY && !process.env.NO_COLOR ? "ansi" : "none";
 }
 
-async function loadSchedule(refresh: boolean, debug: boolean): Promise<ScheduleCache> {
-  if (!refresh) {
+async function loadSchedule(refresh: boolean, debug: boolean, mfaCode?: string): Promise<ScheduleCache> {
+  if (!refresh && !mfaCode) {
     const cached = await readCache();
     if (cached && Date.now() - Date.parse(cached.fetchedAt) < CACHE_TTL_MS) return cached;
   }
 
   const config = loadConfig();
-  const gaps = new GapsClient(await Session.open({ debugDir: debug ? `${CACHE_DIR}/debug` : undefined }), config.gapsStudentId);
-  await gaps.login(config);
-  const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
+  const session = await Session.open({ cookieFile: SESSION_FILE, debugDir: debug ? `${CACHE_DIR}/debug` : undefined });
+  const gaps = new GapsClient(session, config.gapsStudentId);
+  const creds = { ...config, otp: async () => mfaCode ?? (await askMfaCode()) };
 
+  try {
+    const pending = mfaCode ? await readPendingMfa() : undefined;
+    try {
+      await gaps.login(creds, pending);
+    } catch (error) {
+      if (!pending || error instanceof MfaRequiredError) throw error;
+      // The interrupted edu-ID login expired: start over, the code is still valid for a few seconds.
+      await gaps.login(creds);
+    }
+    await rm(PENDING_MFA_FILE, { force: true });
+  } catch (error) {
+    if (error instanceof MfaRequiredError) {
+      await mkdir(CACHE_DIR, { recursive: true });
+      await writeFile(PENDING_MFA_FILE, JSON.stringify(error.page), { mode: 0o600 });
+    }
+    throw error;
+  } finally {
+    await session.save();
+  }
+
+  const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
   return cache;
+}
+
+/** Asks for the two-step login code when run in a terminal; elsewhere (e.g. by an agent) `--mfa-code` is needed. */
+async function askMfaCode(): Promise<string | undefined> {
+  if (!process.stdin.isTTY) return undefined;
+  const prompt = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return await prompt.question("edu-ID two-step login code: ");
+  } finally {
+    prompt.close();
+  }
+}
+
+async function readPendingMfa(): Promise<Page | undefined> {
+  try {
+    return JSON.parse(await readFile(PENDING_MFA_FILE, "utf-8")) as Page;
+  } catch {
+    return undefined;
+  }
 }
 
 async function readCache(): Promise<ScheduleCache | undefined> {
@@ -129,6 +176,13 @@ function printLessons(lessons: Lesson[], fetchedAt: string): void {
 }
 
 main().catch((error: unknown) => {
+  if (error instanceof MfaRequiredError) {
+    console.error(
+      `${error.message}. Rerun with --mfa-code <code> using the current code of your authenticator app ` +
+        "(edu-ID then remembers this device for some time).",
+    );
+    process.exit(2);
+  }
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
