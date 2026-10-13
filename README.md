@@ -14,6 +14,8 @@ academic information from the command line or through an AI assistant, using the
 | Natural-language timetable assistant (`heig:planning`) | GAPS | Available |
 | Pending activities and deadlines (assignments, quizzes, overdue work) | Cyberlearn | Available |
 | Natural-language deadline assistant (`heig:deadlines`) | Cyberlearn | Available |
+| Course contents as text (plannings, resources, activities) | Cyberlearn | Available |
+| Course and homework assistant (`heig:courses`), combining timetable, course plannings and deadlines | GAPS, Cyberlearn | Available |
 | Course material synchronisation | Cyberlearn | Planned |
 | Local knowledge base and study assistant (explanations, exercises, tailored course summaries) | Cyberlearn | Planned |
 
@@ -87,6 +89,8 @@ npm run schedule -- --refresh                       # retrieve the latest data f
 npm run deadlines                                   # Cyberlearn activities still to do, including overdue ones
 npm run deadlines -- --days 7                       # activities due within the next 7 days
 npm run deadlines -- --json                         # details in JSON format, including links
+npm run courses                                     # your Cyberlearn courses
+npm run course -- MAD                               # a course's content as text (timetable code, id or name)
 ```
 
 Run `npm run schedule -- --help` for the full list of options.
@@ -102,6 +106,10 @@ Once the plugin is installed, ask Claude Code in natural language:
 - **Timetable** (`heig:planning`): *"show my planning"*, *"when is my next PRG lab?"*, *"am I free on Friday afternoon?"*.
   Ask for *"up-to-date"* information to bypass the local cache.
 - **Deadlines** (`heig:deadlines`): *"what are my deadlines?"*, *"do I have homework for RXI?"*, *"what's due this week?"*.
+- **Courses and homework** (`heig:courses`): *"what homework do I have for Friday?"*, *"what MAD exercises did we do
+  yesterday?"*, *"when is the ANA1 written exam?"*. The assistant reads the lessons of the day, then the planning of each
+  course on Cyberlearn, and adapts to each teacher's convention ("to do for next time" or exercises listed on the day
+  they are started). Plannings published by teachers are indicative; the assistant states its sources.
 
 Skills can also be invoked explicitly, e.g. `/heig:planning` or `/heig:deadlines`.
 
