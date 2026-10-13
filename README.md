@@ -1,4 +1,4 @@
-# HEIG-dumper
+# HEIG-Kit
 
 Auto-login and scraping tool for the HEIG-VD / HES-SO student platforms:
 
@@ -28,11 +28,11 @@ The plugin reads `.env` and `node_modules` from this folder, so install it from 
 (edits to the folder are picked up with `/reload-plugins`, no reinstall needed):
 
 ```sh
-claude plugin marketplace add /path/to/HEIG-dumper
-claude plugin install heig@heig-dumper
+claude plugin marketplace add /path/to/HEIG-Kit
+claude plugin install heig@heig-kit
 ```
 
-To try it without installing: `claude --plugin-dir /path/to/HEIG-dumper`.
+To try it without installing: `claude --plugin-dir /path/to/HEIG-Kit`.
 
 ## CLI usage
 

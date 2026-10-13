@@ -1,4 +1,4 @@
-# HEIG-dumper
+# HEIG-Kit
 
 TypeScript scraper for GAPS (HEIG-VD) and Cyberlearn (HES-SO), logging in through SWITCH edu-ID with the credentials in `.env`.
 The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each skill in `skills/<name>/SKILL.md`, invoked as `heig:<name>`.
