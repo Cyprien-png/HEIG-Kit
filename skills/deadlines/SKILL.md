@@ -19,10 +19,12 @@ description: Answer questions about the user's HEIG-VD / HES-SO homework and dea
    then what is due soonest. Chat replies cannot render ANSI colors, so always use `--color emoji`.
 4. Specific questions (a course, a date, "is X due?"): answer concisely with the activity, course, due date and time,
    and the link from `--json` when useful. Resolve relative dates from today's date in Europe/Zurich.
-5. Course codes and colors match the `heig:planning` timetable (e.g. `RXI`, `SYL`), so both can be combined, e.g.
+5. This list only covers what must be submitted on Cyberlearn. For exercises to prepare for a lesson ("homework for
+   Friday"), use the `heig:courses` skill, which combines the timetable, course plannings and these deadlines.
+6. Course codes and colors match the `heig:planning` timetable (e.g. `RXI`, `SYL`), so both can be combined, e.g.
    "what do I need to prepare before Friday's RXI lab?".
-6. If the command exits with "edu-ID two-step login code required" (exit code 2), ask the user for the current 6-digit
+7. If the command exits with "edu-ID two-step login code required" (exit code 2), ask the user for the current 6-digit
    code of their authenticator app, then rerun the same command with `--mfa-code <code>` added.
-7. If the command fails on login otherwise, report the error and suggest `npm --prefix <root> run deadlines -- --debug`.
+8. If the command fails on login otherwise, report the error and suggest `npm --prefix <root> run deadlines -- --debug`.
    If it reports missing credentials, ask the user to fill `<root>/.env` (see `<root>/.env.example`). Never print `.env`
    nor the content of `<root>/.cache/`.
