@@ -7,7 +7,8 @@ The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each s
 
 ## Answering questions about the user's planning or deadlines
 
-Follow the `heig:planning` (`skills/planning/SKILL.md`) and `heig:deadlines` (`skills/deadlines/SKILL.md`) skills.
+Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`) and
+`heig:courses` (`skills/courses/SKILL.md`) skills.
 Never print or commit the content of `.env` or `.cache/`.
 
 ## Layout
@@ -16,8 +17,9 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/auth/eduid.ts`: edu-ID SAML login flow with two-step login codes, reusable for any HES-SO service provider
 - `src/gaps/client.ts`: GAPS login (reusing valid sessions, resuming a login waiting for a code) and iCalendar schedule export
 - `src/cyberlearn/client.ts`: Cyberlearn Moodle web services, authenticated with the mobile app token obtained via edu-ID
-- `src/cli.ts`: `schedule` and `deadlines` commands, schedule cache, saved session and token, `--mfa-code` handling
+- `src/cli.ts`: `schedule`, `deadlines`, `courses` and `course` commands, schedule cache, saved session and token, `--mfa-code` handling
 - `src/deadlines.ts`: deadlines table rendering
+- `src/courses.ts`: course list and course contents as text (HTML of labels and pages converted to text)
 - `src/render.ts`: shared box-drawing grid and course colors
 - `src/table.ts`: weekly timetable rendering
 - `src/dates.ts`: Europe/Zurich date helpers
