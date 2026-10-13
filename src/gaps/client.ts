@@ -91,13 +91,21 @@ function findStudentId(html: string): string | undefined {
 function parseLessons(ics: string): Lesson[] {
   return Object.values(ical.sync.parseICS(ics))
     .filter((item): item is VEvent => item?.type === "VEVENT")
-    .map((event) => ({
-      start: event.start.toISOString(),
-      end: (event.end ?? event.start).toISOString(),
+    .flatMap((event) => occurrences(event).map(({ start, end }) => ({
+      start: start.toISOString(),
+      end: end.toISOString(),
       summary: text(event.summary),
       location: text(event.location),
       description: text(event.description),
-    }));
+    })));
+}
+
+/** GAPS exports each course as a weekly RRULE with EXDATEs for holidays. */
+function occurrences(event: VEvent): { start: Date; end: Date }[] {
+  if (!event.rrule) return [{ start: event.start, end: event.end ?? event.start }];
+  const to = new Date(event.start);
+  to.setFullYear(to.getFullYear() + 1);
+  return ical.expandRecurringEvent(event, { from: event.start, to });
 }
 
 function text(value: ParameterValue | undefined): string {
