@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as cheerio from "cheerio";
 import makeFetchCookie from "fetch-cookie";
@@ -19,13 +19,45 @@ export interface Form {
   fields: Record<string, string>;
 }
 
+export interface SessionOptions {
+  /** File where cookies are kept between runs, so logins (and edu-ID two-step login) are not repeated. */
+  cookieFile?: string;
+  /** Directory where every visited page is saved, for troubleshooting. */
+  debugDir?: string;
+}
+
 /** HTTP client keeping cookies across requests, like a browser session. */
 export class Session {
   private readonly fetch: typeof fetch;
   private step = 0;
 
-  constructor(private readonly debugDir?: string) {
-    this.fetch = makeFetchCookie(fetch, new CookieJar());
+  private constructor(
+    private readonly jar: CookieJar,
+    private readonly options: SessionOptions,
+  ) {
+    this.fetch = makeFetchCookie(fetch, jar);
+  }
+
+  /** Opens a session, restoring the cookies saved in `cookieFile` if any. */
+  static async open(options: SessionOptions = {}): Promise<Session> {
+    let jar = new CookieJar();
+    if (options.cookieFile) {
+      try {
+        jar = CookieJar.fromJSON(await readFile(options.cookieFile, "utf-8"));
+      } catch {
+        // No saved session yet, or an unreadable one: start from scratch.
+      }
+    }
+    return new Session(jar, options);
+  }
+
+  /** Saves the cookies to `cookieFile`, readable by the current user only since they grant access to the account. */
+  async save(): Promise<void> {
+    const file = this.options.cookieFile;
+    if (!file) return;
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(this.jar.toJSON()), { mode: 0o600 });
+    await chmod(file, 0o600);
   }
 
   async get(url: string): Promise<Page> {
@@ -58,10 +90,11 @@ export class Session {
   }
 
   private async dump(page: Page): Promise<void> {
-    if (!this.debugDir) return;
-    await mkdir(this.debugDir, { recursive: true });
+    const debugDir = this.options.debugDir;
+    if (!debugDir) return;
+    await mkdir(debugDir, { recursive: true });
     const name = `${String(++this.step).padStart(2, "0")}-${new URL(page.url).hostname}.html`;
-    await writeFile(path.join(this.debugDir, name), `<!-- ${page.status} ${page.url} -->\n${page.html}`);
+    await writeFile(path.join(debugDir, name), `<!-- ${page.status} ${page.url} -->\n${page.html}`);
   }
 }
 

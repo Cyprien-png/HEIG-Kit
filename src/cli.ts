@@ -83,7 +83,7 @@ async function loadSchedule(refresh: boolean, debug: boolean): Promise<ScheduleC
   }
 
   const config = loadConfig();
-  const gaps = new GapsClient(new Session(debug ? `${CACHE_DIR}/debug` : undefined), config.gapsStudentId);
+  const gaps = new GapsClient(await Session.open({ debugDir: debug ? `${CACHE_DIR}/debug` : undefined }), config.gapsStudentId);
   await gaps.login(config);
   const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
 
