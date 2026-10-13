@@ -9,6 +9,7 @@
   },
   "scripts": {
     "schedule": "tsx src/cli.ts schedule",
+    "deadlines": "tsx src/cli.ts deadlines",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
