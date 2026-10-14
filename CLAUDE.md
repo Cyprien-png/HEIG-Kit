@@ -24,4 +24,5 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/table.ts`: weekly timetable rendering
 - `src/dates.ts`: Europe/Zurich date helpers
 - `src/paths.ts`: project root, so the CLI runs from any directory
+- `scripts/aliases.ts`: installs the `heig:*` terminal shortcuts (`heig-*` on Windows) in the user's shell configuration
 - `skills/`: plugin skills; run `claude plugin validate .` after changing them or `.claude-plugin/`
