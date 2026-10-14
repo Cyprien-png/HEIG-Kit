@@ -12,7 +12,8 @@
     "deadlines": "tsx src/cli.ts deadlines",
     "courses": "tsx src/cli.ts courses",
     "course": "tsx src/cli.ts course",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "aliases": "tsx scripts/aliases.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
