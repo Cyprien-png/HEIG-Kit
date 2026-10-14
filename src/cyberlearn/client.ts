@@ -4,6 +4,8 @@ import type { Page, Session } from "../http.js";
 
 const CYBERLEARN_URL = "https://cyberlearn.hes-so.ch";
 const MAX_EVENTS_PER_CALL = 50;
+/** Waits before retrying a request that failed at the network level (e.g. Wi-Fi reconnecting after sleep). */
+const RETRY_DELAYS_MS = [2_000, 10_000, 30_000];
 
 /** A deadline from the Moodle timeline: an activity the user still has to act on (submit, attempt…). */
 export interface Deadline {
@@ -114,7 +116,7 @@ export class CyberlearnClient {
   async downloadFile(fileUrl: string): Promise<ArrayBuffer> {
     const url = new URL(fileUrl);
     url.searchParams.set("token", this.token);
-    const res = await fetch(url);
+    const res = await fetchWithRetry(url);
     if (!res.ok) throw new Error(`Cyberlearn file download failed (${res.status}): ${fileUrl}`);
     return res.arrayBuffer();
   }
@@ -140,7 +142,7 @@ export class CyberlearnClient {
   async call<T>(wsfunction: string, params: Record<string, unknown> = {}): Promise<T> {
     const body = new URLSearchParams({ wstoken: this.token, wsfunction, moodlewsrestformat: "json" });
     flatten(params, "", body);
-    const res = await fetch(`${CYBERLEARN_URL}/webservice/rest/server.php`, { method: "POST", body });
+    const res = await fetchWithRetry(`${CYBERLEARN_URL}/webservice/rest/server.php`, { method: "POST", body });
     const data = (await res.json()) as T & { exception?: string; errorcode?: string; message?: string };
     if (data && typeof data === "object" && "exception" in data) {
       if (data.errorcode === "invalidtoken") throw new InvalidTokenError();
@@ -148,6 +150,19 @@ export class CyberlearnClient {
     }
     return data;
   }
+}
+
+/** fetch, retried when the request fails at the network level; HTTP error statuses are returned as is. */
+async function fetchWithRetry(url: string | URL, init?: RequestInit): Promise<Response> {
+  for (const delay of [...RETRY_DELAYS_MS, undefined]) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      if (delay === undefined) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error("unreachable");
 }
 
 export class InvalidTokenError extends Error {
