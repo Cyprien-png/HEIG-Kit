@@ -22,8 +22,12 @@ export interface IngestStats {
 }
 
 export interface IngestOptions {
-  /** The listing covers the whole source: documents missing from it were removed from the source. */
-  complete: boolean;
+  /**
+   * Documents of these courses missing from the listing were removed from the source and are removed from the
+   * index; `"all"` applies this to the whole source. Documents of other courses (e.g. courses of past semesters,
+   * no longer selected) are kept.
+   */
+  removalScope: string[] | "all";
   dryRun?: boolean;
   log?: (line: string) => void;
 }
@@ -109,12 +113,14 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
     }
   }
 
-  if (options.complete && !options.dryRun) {
+  if (!options.dryRun) {
     const listed = documents.map((d) => d.externalId);
+    const courses = options.removalScope === "all" ? null : options.removalScope;
     const removed = await db.query(
       `UPDATE documents SET removed_at = now(), content_hash = NULL, version = ''
-       WHERE source = $1 AND removed_at IS NULL AND NOT (external_id = ANY($2::text[]))`,
-      [source, listed],
+       WHERE source = $1 AND removed_at IS NULL AND NOT (external_id = ANY($2::text[]))
+         AND ($3::text[] IS NULL OR course_code = ANY($3::text[]))`,
+      [source, listed, courses],
     );
     stats.removed = removed.rowCount ?? 0;
   }

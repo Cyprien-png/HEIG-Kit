@@ -13,31 +13,68 @@ const MIN_TEXT_CHARS = 40;
  * Cyberlearn courses: files of resources and folders, and the text written on course pages (section
  * descriptions, labels, pages, activity instructions), where teachers publish plannings and homework.
  */
+export interface CourseSelection {
+  /** Only these courses (timetable codes, ids or parts of names), whatever the other settings. */
+  only?: string[];
+  /** Every Cyberlearn course instead of the timetable's courses only. */
+  all?: boolean;
+  /** Courses added to the timetable's ones (e.g. a course without lessons in GAPS). */
+  extra?: string[];
+  /** Courses never indexed. */
+  exclude?: string[];
+}
+
+/**
+ * Cyberlearn courses: files of resources and folders, and the text written on course pages (section
+ * descriptions, labels, pages, activity instructions), where teachers publish plannings and homework.
+ *
+ * By default only the courses of the student's curriculum are listed: those whose code appears in the GAPS
+ * timetable. Courses of a new semester are therefore picked up as soon as they appear in the timetable.
+ */
 export class CyberlearnSource implements Source {
   readonly name = "cyberlearn";
+  /** Codes of the courses selected by the last `list()`. */
+  selectedCourses: string[] = [];
 
   constructor(
     private readonly client: CyberlearnClient,
     /** Timetable course codes, so documents use the same codes as the timetable (e.g. MAD). */
     private readonly scheduleCodes: string[],
-    /** Only index these courses (timetable codes or ids); all courses when empty. */
-    private readonly only: string[] = [],
+    private readonly selection: CourseSelection = {},
   ) {}
 
   async list(): Promise<SourceDocument[]> {
     const documents: SourceDocument[] = [];
+    this.selectedCourses = [];
     for (const course of await this.client.courses()) {
       // Courses outside the timetable (e.g. self-study courses) keep their Cyberlearn short name.
       const label = courseLabel(course.shortName, this.scheduleCodes);
-      const code = this.scheduleCodes.length === 0 || this.scheduleCodes.includes(label) ? label : course.shortName;
-      if (this.only.length > 0 && !this.only.some((o) => o.toLowerCase() === code.toLowerCase() || o === String(course.id))) {
-        continue;
-      }
+      const inTimetable = this.scheduleCodes.includes(label);
+      const code = this.scheduleCodes.length === 0 || inTimetable ? label : course.shortName;
+      if (!this.isSelected(course, code, inTimetable)) continue;
+
+      this.selectedCourses.push(code);
       for (const section of await this.client.courseContents(course.id)) {
         documents.push(...(await this.sectionDocuments(course, code, section)));
       }
     }
     return documents;
+  }
+
+  private isSelected(course: Course, code: string, inTimetable: boolean): boolean {
+    const matches = (queries: string[] = []) =>
+      queries.some((q) => {
+        const query = q.trim().toLowerCase();
+        return (
+          query === code.toLowerCase() ||
+          query === String(course.id) ||
+          course.shortName.toLowerCase().includes(query) ||
+          course.fullName.toLowerCase().includes(query)
+        );
+      });
+    if (this.selection.only?.length) return matches(this.selection.only);
+    if (matches(this.selection.exclude)) return false;
+    return Boolean(this.selection.all) || inTimetable || matches(this.selection.extra);
   }
 
   private async sectionDocuments(course: Course, code: string, section: Section): Promise<SourceDocument[]> {

@@ -61,6 +61,7 @@ Deadlines options:
 Ingest options:
   --source <name>      only this source: cyberlearn or local (default: both; local needs RAG_LOCAL_DIRS in .env)
   --course <code>      only this Cyberlearn course (repeatable), e.g. --course MAD
+  --all-courses        every Cyberlearn course, not only those of the GAPS timetable (curriculum)
   --dry-run            only show what is new or changed
 
 Common options:
@@ -82,6 +83,7 @@ async function main(): Promise<void> {
       source: { type: "string" },
       course: { type: "string", multiple: true },
       "dry-run": { type: "boolean", default: false },
+      "all-courses": { type: "boolean", default: false },
       "mfa-code": { type: "string" },
       debug: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -95,7 +97,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "ingest") {
-    await runIngest(values.source, values.course ?? [], values["dry-run"], values.debug, values["mfa-code"]);
+    await runIngest(values.source, values.course ?? [], values["all-courses"], values["dry-run"], values.debug, values["mfa-code"]);
     return;
   }
 
@@ -192,7 +194,14 @@ async function loadCourses(query: string | undefined, debug: boolean, mfaCode?: 
 }
 
 /** Indexes Cyberlearn and local documents into the RAG database, starting the extraction service if needed. */
-async function runIngest(only: string | undefined, courses: string[], dryRun: boolean, debug: boolean, mfaCode?: string) {
+async function runIngest(
+  only: string | undefined,
+  courses: string[],
+  allCourses: boolean,
+  dryRun: boolean,
+  debug: boolean,
+  mfaCode?: string,
+) {
   if (only && only !== "cyberlearn" && only !== "local") throw new Error(`Invalid --source "${only}", expected cyberlearn or local`);
   const localDirs = (process.env.RAG_LOCAL_DIRS ?? "").split(path.delimiter).filter(Boolean);
   if (only === "local" && localDirs.length === 0) throw new Error("Set RAG_LOCAL_DIRS in .env to index local folders");
@@ -207,16 +216,26 @@ async function runIngest(only: string | undefined, courses: string[], dryRun: bo
       const log = (line: string) => console.log(line);
       const summaries: string[] = [];
       if (only !== "local") {
-        const scheduleCodes = scheduleCourses((await readCache())?.lessons ?? []);
-        const documents = await withCyberlearn(debug, mfaCode, (client) => new CyberlearnSource(client, scheduleCodes, courses).list());
-        console.log(`Cyberlearn: ${documents.length} documents`);
-        const stats = await ingestSource(db, "cyberlearn", documents, { complete: courses.length === 0, dryRun, log });
+        // The timetable defines the curriculum: refreshed like for `schedule`, so new courses are picked up.
+        const scheduleCodes = scheduleCourses((await loadSchedule(false, debug, mfaCode)).lessons);
+        const selection = {
+          only: courses,
+          all: allCourses,
+          extra: listSetting("RAG_EXTRA_COURSES"),
+          exclude: listSetting("RAG_EXCLUDE_COURSES"),
+        };
+        const { documents, selected } = await withCyberlearn(debug, mfaCode, async (client) => {
+          const source = new CyberlearnSource(client, scheduleCodes, selection);
+          return { documents: await source.list(), selected: source.selectedCourses };
+        });
+        console.log(`Cyberlearn: ${documents.length} documents in ${selected.length} courses (${selected.join(", ")})`);
+        const stats = await ingestSource(db, "cyberlearn", documents, { removalScope: selected, dryRun, log });
         summaries.push(summary("Cyberlearn", stats));
       }
       if (only !== "cyberlearn" && localDirs.length > 0) {
         const documents = await new LocalSource(localDirs).list();
         console.log(`Local folders: ${documents.length} documents`);
-        summaries.push(summary("Local folders", await ingestSource(db, "local", documents, { complete: true, dryRun, log })));
+        summaries.push(summary("Local folders", await ingestSource(db, "local", documents, { removalScope: "all", dryRun, log })));
       }
       console.log(`\n${summaries.join("\n")}`);
     } finally {
@@ -236,6 +255,11 @@ async function startServices(): Promise<boolean> {
   for (let i = 0; i < 60 && !(await isDoclingAvailable()); i++) await new Promise((r) => setTimeout(r, 5000));
   if (!(await isDoclingAvailable())) throw new Error("The document extraction service did not start (docker compose -f rag/compose.yml logs docling)");
   return true;
+}
+
+/** Comma-separated list from .env, e.g. RAG_EXCLUDE_COURSES=PHY,49168. */
+function listSetting(name: string): string[] {
+  return (process.env[name] ?? "").split(",").map((v) => v.trim()).filter(Boolean);
 }
 
 function compose(...args: string[]): void {
