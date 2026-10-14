@@ -7,8 +7,8 @@ The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each s
 
 ## Answering questions about the user's planning, deadlines, courses or homework
 
-Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`) and
-`heig:courses` (`skills/courses/SKILL.md`) skills.
+Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`),
+`heig:courses` (`skills/courses/SKILL.md`) and `heig:teacher` (`skills/teacher/SKILL.md`, course knowledge base) skills.
 Never print or commit the content of `.env` or `.cache/`.
 
 ## Layout
@@ -26,11 +26,12 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/paths.ts`: project root, so the CLI runs from any directory
 - `src/rag/`: knowledge base: `db.ts` (pgvector, migrations in `rag/migrations/`), `extract.ts` (docling), `chunk.ts`
   (structure-aware chunking, one chunk per exercise), `embed.ts` (Ollama bge-m3), `sources/` (Cyberlearn, local folders),
-  `ingest.ts` (incremental, deduplicated by content hash), `search.ts` (hybrid vector + French full-text + exercise numbers)
+  `ingest.ts` (incremental, deduplicated by content hash, curriculum courses = GAPS timetable codes, one run at a time), `search.ts` (hybrid vector + French full-text + exercise numbers)
 - `src/mcp/server.ts`: MCP server (Streamable HTTP, token in `data/mcp-token`) over the knowledge base
 - `rag/compose.yml`: Docker services (db, embedder, docling for ingestion only, mcp); kept out of the root so Compose
   does not read the root `.env`
 - `data/`: downloaded documents, extracted text and MCP token; never commit it
+- `scripts/update.ts` (`npm run rag:update`) and `scripts/autoupdate.ts` (daily task: launchd, systemd/cron, schtasks)
 - `scripts/mcp-token.ts`: creates the MCP token and prints the `claude mcp add` command
 - `scripts/aliases.ts`: installs the `heig:*` terminal shortcuts (`heig-*` on Windows) in the user's shell configuration
 - `skills/`: plugin skills; run `claude plugin validate .` after changing them or `.claude-plugin/`
