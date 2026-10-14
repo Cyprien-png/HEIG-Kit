@@ -24,6 +24,8 @@ export interface Course {
   id: number;
   shortName: string;
   fullName: string;
+  /** Teachers shown as course contacts on Cyberlearn. */
+  teachers: string[];
 }
 
 /** A course section with its activities and resources, as returned by `core_course_get_contents`. */
@@ -88,13 +90,19 @@ export class CyberlearnClient {
     return this.token;
   }
 
-  /** Courses the user is enrolled in. */
+  /** Courses the user is enrolled in, with their teachers. */
   async courses(): Promise<Course[]> {
     const { userid } = await this.call<{ userid: number }>("core_webservice_get_site_info");
     const courses = await this.call<{ id: number; shortname: string; fullname: string }[]>("core_enrol_get_users_courses", {
       userid,
     });
-    return courses.map((c) => ({ id: c.id, shortName: c.shortname, fullName: c.fullname }));
+    if (courses.length === 0) return [];
+    const details = await this.call<{ courses: { id: number; contacts?: { fullname: string }[] }[] }>(
+      "core_course_get_courses_by_field",
+      { field: "ids", value: courses.map((c) => c.id).join(",") },
+    );
+    const teachers = new Map(details.courses.map((c) => [c.id, (c.contacts ?? []).map((t) => t.fullname)]));
+    return courses.map((c) => ({ id: c.id, shortName: c.shortname, fullName: c.fullname, teachers: teachers.get(c.id) ?? [] }));
   }
 
   async courseContents(courseId: number): Promise<Section[]> {
