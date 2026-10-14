@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { type Credentials, MfaRequiredError } from "./auth/eduid.js";
@@ -9,7 +11,13 @@ import { findCourse, renderCourse, renderCourseList } from "./courses.js";
 import { renderDeadlines } from "./deadlines.js";
 import { GapsClient, type Lesson } from "./gaps/client.js";
 import { type Page, Session } from "./http.js";
-import { CACHE_DIR } from "./paths.js";
+import { CACHE_DIR, ROOT } from "./paths.js";
+import { migrate, openDb } from "./rag/db.js";
+import { ensureEmbeddingModel } from "./rag/embed.js";
+import { isDoclingAvailable } from "./rag/extract.js";
+import { type IngestStats, ingestSource } from "./rag/ingest.js";
+import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
+import { LocalSource } from "./rag/sources/local.js";
 import type { ColorMode } from "./render.js";
 import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
@@ -34,6 +42,7 @@ const USAGE = `Usage:
   npm run courses                  Cyberlearn courses
   npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
                                    <course> is a timetable code (e.g. MAD), an id or part of the name
+  npm run ingest -- [options]      index course documents in the local RAG database (npm run rag:start first)
 
 Schedule options:
   --from <YYYY-MM-DD>  first day to show (default: today)
@@ -48,6 +57,11 @@ Deadlines options:
   --days <n>           only show activities due within n days (overdue ones are always shown)
   --color <mode>       table colors: auto (default), ansi, emoji or none
   --json               print deadlines as JSON
+
+Ingest options:
+  --source <name>      only this source: cyberlearn or local (default: both; local needs RAG_LOCAL_DIRS in .env)
+  --course <code>      only this Cyberlearn course (repeatable), e.g. --course MAD
+  --dry-run            only show what is new or changed
 
 Common options:
   --mfa-code <code>    edu-ID two-step login code from your authenticator app (asked interactively in a terminal)
@@ -65,6 +79,9 @@ async function main(): Promise<void> {
       color: { type: "string", default: "auto" },
       refresh: { type: "boolean", default: false },
       days: { type: "string" },
+      source: { type: "string" },
+      course: { type: "string", multiple: true },
+      "dry-run": { type: "boolean", default: false },
       "mfa-code": { type: "string" },
       debug: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -72,8 +89,13 @@ async function main(): Promise<void> {
   });
 
   const command = positionals[0];
-  if (values.help || !["schedule", "deadlines", "courses", "course"].includes(command)) {
+  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest"].includes(command)) {
     console.log(USAGE);
+    return;
+  }
+
+  if (command === "ingest") {
+    await runIngest(values.source, values.course ?? [], values["dry-run"], values.debug, values["mfa-code"]);
     return;
   }
 
@@ -167,6 +189,61 @@ async function loadCourses(query: string | undefined, debug: boolean, mfaCode?: 
     }
     return renderCourse(course, sections, pages);
   });
+}
+
+/** Indexes Cyberlearn and local documents into the RAG database, starting the extraction service if needed. */
+async function runIngest(only: string | undefined, courses: string[], dryRun: boolean, debug: boolean, mfaCode?: string) {
+  if (only && only !== "cyberlearn" && only !== "local") throw new Error(`Invalid --source "${only}", expected cyberlearn or local`);
+  const localDirs = (process.env.RAG_LOCAL_DIRS ?? "").split(path.delimiter).filter(Boolean);
+  if (only === "local" && localDirs.length === 0) throw new Error("Set RAG_LOCAL_DIRS in .env to index local folders");
+
+  const db = openDb();
+  try {
+    await migrate(db).catch((error: unknown) => {
+      throw new Error(`RAG database unreachable, run \`npm run rag:start\` first (${error instanceof Error ? error.message : error})`);
+    });
+    const startedDocling = dryRun ? false : await startServices();
+    try {
+      const log = (line: string) => console.log(line);
+      const summaries: string[] = [];
+      if (only !== "local") {
+        const scheduleCodes = scheduleCourses((await readCache())?.lessons ?? []);
+        const documents = await withCyberlearn(debug, mfaCode, (client) => new CyberlearnSource(client, scheduleCodes, courses).list());
+        console.log(`Cyberlearn: ${documents.length} documents`);
+        const stats = await ingestSource(db, "cyberlearn", documents, { complete: courses.length === 0, dryRun, log });
+        summaries.push(summary("Cyberlearn", stats));
+      }
+      if (only !== "cyberlearn" && localDirs.length > 0) {
+        const documents = await new LocalSource(localDirs).list();
+        console.log(`Local folders: ${documents.length} documents`);
+        summaries.push(summary("Local folders", await ingestSource(db, "local", documents, { complete: true, dryRun, log })));
+      }
+      console.log(`\n${summaries.join("\n")}`);
+    } finally {
+      if (startedDocling) compose("stop", "docling");
+    }
+  } finally {
+    await db.end();
+  }
+}
+
+/** Makes sure the embedding model is available and docling runs; returns whether docling had to be started. */
+async function startServices(): Promise<boolean> {
+  await ensureEmbeddingModel();
+  if (await isDoclingAvailable()) return false;
+  console.log("Starting the document extraction service (first start downloads its image, ~2 GB)…");
+  compose("--profile", "ingest", "up", "-d", "docling");
+  for (let i = 0; i < 60 && !(await isDoclingAvailable()); i++) await new Promise((r) => setTimeout(r, 5000));
+  if (!(await isDoclingAvailable())) throw new Error("The document extraction service did not start (docker compose -f rag/compose.yml logs docling)");
+  return true;
+}
+
+function compose(...args: string[]): void {
+  execFileSync("docker", ["compose", "-f", path.join(ROOT, "rag", "compose.yml"), ...args], { stdio: "inherit" });
+}
+
+function summary(name: string, s: IngestStats): string {
+  return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed`;
 }
 
 /** Runs `use` with a Cyberlearn client, reusing the saved app token and logging in again when it is missing or expired. */

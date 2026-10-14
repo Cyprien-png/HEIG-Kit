@@ -12,6 +12,7 @@
     "deadlines": "tsx src/cli.ts deadlines",
     "courses": "tsx src/cli.ts courses",
     "course": "tsx src/cli.ts course",
+    "ingest": "tsx src/cli.ts ingest",
     "typecheck": "tsc --noEmit",
     "aliases": "tsx scripts/aliases.ts",
     "rag:start": "docker compose -f rag/compose.yml up -d --wait",
