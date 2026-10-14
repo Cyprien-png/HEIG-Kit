@@ -16,6 +16,7 @@ import { migrate, openDb } from "./rag/db.js";
 import { ensureEmbeddingModel } from "./rag/embed.js";
 import { isDoclingAvailable } from "./rag/extract.js";
 import { type IngestStats, ingestSource } from "./rag/ingest.js";
+import { documentText, findExercise, formatResults, listCourses, listDocuments, search } from "./rag/search.js";
 import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
 import { LocalSource } from "./rag/sources/local.js";
 import type { ColorMode } from "./render.js";
@@ -43,6 +44,10 @@ const USAGE = `Usage:
   npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
                                    <course> is a timetable code (e.g. MAD), an id or part of the name
   npm run ingest -- [options]      index course documents in the local RAG database (npm run rag:start first)
+  npm run kb -- search <query>     search the indexed course material (--course MAD, --type exam, --limit 8)
+  npm run kb -- exercise <number>  statement and solution of an exercise, e.g. 2.22 (--course MAD)
+  npm run kb -- document <id>      extracted text of a document (--pages 41-42)
+  npm run kb -- courses            indexed courses; kb -- documents <course> lists a course's documents (--type)
 
 Schedule options:
   --from <YYYY-MM-DD>  first day to show (default: today)
@@ -84,6 +89,9 @@ async function main(): Promise<void> {
       course: { type: "string", multiple: true },
       "dry-run": { type: "boolean", default: false },
       "all-courses": { type: "boolean", default: false },
+      type: { type: "string" },
+      limit: { type: "string" },
+      pages: { type: "string" },
       "mfa-code": { type: "string" },
       debug: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -91,8 +99,13 @@ async function main(): Promise<void> {
   });
 
   const command = positionals[0];
-  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest"].includes(command)) {
+  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest", "kb"].includes(command)) {
     console.log(USAGE);
+    return;
+  }
+
+  if (command === "kb") {
+    console.log(await knowledgeBase(positionals.slice(1), values.course?.[0], values.type, values.limit, values.pages));
     return;
   }
 
@@ -248,6 +261,42 @@ async function runIngest(
       if (startedDocling) compose("stop", "docling");
       lock.release();
     }
+  } finally {
+    await db.end();
+  }
+}
+
+/** Read-only access to the knowledge base, the same as the MCP server's tools (for skills and terminal use). */
+async function knowledgeBase(args: string[], course?: string, docType?: string, limit?: string, pages?: string): Promise<string> {
+  const [action, ...rest] = args;
+  const db = openDb();
+  try {
+    switch (action) {
+      case "search":
+        if (rest.length === 0) throw new Error("Usage: npm run kb -- search <query>");
+        return formatResults(await search(db, rest.join(" "), { course, docType, limit: limit ? Number(limit) : undefined })) || "No matching material.";
+      case "exercise":
+        if (!rest[0]) throw new Error("Usage: npm run kb -- exercise <number>");
+        return formatResults(await findExercise(db, course, rest[0])) || `Exercise ${rest[0]} not found.`;
+      case "document": {
+        const [from, to] = (pages ?? "").split("-").map((p) => (p ? Number(p) : undefined));
+        const doc = await documentText(db, Number(rest[0]), from, to ?? from);
+        if (!doc) return `Document ${rest[0]} not found.`;
+        return `# ${doc.title}\n${[doc.course, doc.chapter, doc.docType].filter(Boolean).join(" · ")} · ${doc.pageCount} pages · ${doc.url ?? ""}\n\n${doc.text}`;
+      }
+      case "courses":
+        return JSON.stringify(await listCourses(db), null, 2);
+      case "documents":
+        if (!rest[0]) throw new Error("Usage: npm run kb -- documents <course>");
+        return JSON.stringify(await listDocuments(db, rest[0], docType), null, 2);
+      default:
+        throw new Error("Usage: npm run kb -- search|exercise|document|courses|documents …");
+    }
+  } catch (error) {
+    if (error instanceof Error && /ECONNREFUSED/.test(error.message)) {
+      throw new Error("Knowledge base unreachable: run `npm run rag:start` (and `npm run ingest` if it is empty)");
+    }
+    throw error;
   } finally {
     await db.end();
   }
