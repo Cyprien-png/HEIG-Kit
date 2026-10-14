@@ -6,6 +6,8 @@ import { ROOT } from "../paths.js";
 const DOCLING_URL = process.env.RAG_DOCLING_URL ?? "http://127.0.0.1:5001";
 const EXTRACTED_DIR = path.join(ROOT, "data", "extracted");
 const POLL_SECONDS = 10;
+/** docling may answer a poll before `wait` elapses: never poll more often than this. */
+const MIN_POLL_INTERVAL_MS = 2000;
 
 /** Placed between pages in the extracted markdown, so chunks can keep page numbers. */
 export const PAGE_BREAK = "<!-- page break -->";
@@ -56,6 +58,7 @@ async function convert(bytes: Buffer, filename: string): Promise<string> {
   const { task_id } = (await submitted.json()) as { task_id: string };
 
   for (;;) {
+    const polled = Date.now();
     const status = (await (await fetch(`${DOCLING_URL}/v1/status/poll/${task_id}?wait=${POLL_SECONDS}`)).json()) as {
       task_status: string;
       error_message?: string;
@@ -64,6 +67,7 @@ async function convert(bytes: Buffer, filename: string): Promise<string> {
     if (status.task_status === "failure" || status.task_status === "skipped") {
       throw new Error(`docling could not convert ${filename}: ${status.error_message ?? status.task_status}`);
     }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, MIN_POLL_INTERVAL_MS - (Date.now() - polled))));
   }
 
   const result = (await (await fetch(`${DOCLING_URL}/v1/result/${task_id}`)).json()) as {
