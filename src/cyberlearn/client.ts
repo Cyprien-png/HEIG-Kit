@@ -30,6 +30,7 @@ export interface Course {
 
 /** A course section with its activities and resources, as returned by `core_course_get_contents`. */
 export interface Section {
+  id: number;
   name: string;
   /** HTML. */
   summary: string;
@@ -45,7 +46,7 @@ export interface Module {
   /** HTML text of labels and module descriptions. */
   description?: string;
   /** Files of resources and folders, the HTML content of pages, the target of URLs. */
-  contents?: { type: string; filename: string; filepath?: string; fileurl: string; timemodified?: number }[];
+  contents?: { type: string; filename: string; filepath?: string; fileurl: string; filesize?: number; timemodified?: number }[];
   dates?: { label: string; timestamp: number }[];
 }
 
