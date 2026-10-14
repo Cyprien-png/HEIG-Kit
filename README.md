@@ -17,7 +17,9 @@ academic information from the command line or through an AI assistant, using the
 | Course contents as text (plannings, resources, activities) | Cyberlearn | Available |
 | Course and homework assistant (`heig:courses`), combining timetable, course plannings and deadlines | GAPS, Cyberlearn | Available |
 | Local course knowledge base (RAG): incremental indexing of course documents with course, teacher and chapter | Cyberlearn, local folders | Available |
-| MCP server giving AI assistants search access to the knowledge base (explanations, exercises, exam preparation) | Knowledge base | Available |
+| MCP server giving AI assistants search access to the knowledge base | Knowledge base | Available |
+| Teacher assistant (`heig:teacher`): sourced explanations with concrete examples, exercises with solutions, practice exams | Knowledge base | Available |
+| Daily automatic update of the knowledge base, including the courses of a new semester | Cyberlearn, GAPS | Available |
 | GitHub repositories as a source, scanned documents (OCR), teacher prompt templates | | Planned |
 
 ## Requirements
@@ -134,6 +136,10 @@ Once the plugin is installed, ask Claude Code in natural language:
 - **Timetable** (`heig:planning`): *"show my planning"*, *"when is my next PRG lab?"*, *"am I free on Friday afternoon?"*.
   Ask for *"up-to-date"* information to bypass the local cache.
 - **Deadlines** (`heig:deadlines`): *"what are my deadlines?"*, *"do I have homework for RXI?"*, *"what's due this week?"*.
+- **Teacher** (`heig:teacher`, requires the knowledge base): *"explique-moi les diagrammes de Hasse"*, *"génère-moi 5
+  exercices sur les relations d'équivalence avec les corrigés"*, *"prépare-moi un TE blanc de MAD"*, *"corrige ma
+  réponse à l'exercice 2.22"*. Answers are complete, illustrated with concrete examples and cite the course documents
+  (document, pages, link); practice exams follow the format of the course's past exams.
 - **Courses and homework** (`heig:courses`): *"what homework do I have for Friday?"*, *"what MAD exercises did we do
   yesterday?"*, *"when is the ANA1 written exam?"*. The assistant reads the lessons of the day, then the planning of each
   course on Cyberlearn, and adapts to each teacher's convention ("to do for next time" or exercises listed on the day
@@ -168,9 +174,20 @@ npm run rag:stop       # stops every service; indexed data is kept
 ### 2. Index your documents
 
 ```sh
-npm run ingest                          # every Cyberlearn course (and local folders, see below)
+npm run ingest                          # the courses of your curriculum (and local folders, see below)
 npm run ingest -- --course MAD          # a single course
+npm run ingest -- --all-courses         # every Cyberlearn course you are enrolled in
 npm run ingest -- --dry-run             # only lists what is new or changed
+```
+
+**Only the courses of your curriculum are indexed:** the Cyberlearn courses whose code appears in your GAPS timetable.
+The timetable is refreshed at each indexing, so the courses of a new semester are added as soon as GAPS publishes them.
+Courses you no longer follow keep their documents, for revisions. To adjust the selection, list course codes, ids or
+parts of names in `.env`:
+
+```sh
+RAG_EXTRA_COURSES=PHY          # also index these courses
+RAG_EXCLUDE_COURSES=49168      # never index these ones
 ```
 
 The first run downloads the embedding model (about 1.2 GB) and the document extraction service (about 2 GB), which is
@@ -192,7 +209,20 @@ exam, lab, planning), pages and, for exercise sheets, the exercise number.
 RAG_LOCAL_DIRS=/Users/me/Documents/HEIG
 ```
 
-### 3. Connect an assistant
+### 3. Keep it up to date automatically
+
+```sh
+npm run autoupdate                      # daily update at 08:00 (or: npm run autoupdate -- --time 12:30)
+npm run autoupdate -- --uninstall       # removes the daily update
+npm run rag:update                      # runs an update now: starts Docker and the services, then indexes
+```
+
+The daily update is a LaunchAgent on macOS, a systemd user timer (or a cron job) on Linux and a scheduled task on
+Windows; on macOS and Linux, an update missed while the computer was asleep runs when it wakes up. Docker Desktop is
+started if needed on macOS. Progress is logged in `data/logs/update.log`, and on macOS a notification reports failures,
+for instance when edu-ID asks for a two-step login code: run `npm run rag:update` in a terminal to enter it.
+
+### 4. Connect an assistant
 
 ```sh
 npm run mcp:token      # prints the command registering the server in Claude Code
@@ -207,6 +237,16 @@ as a `Bearer` authorization header. Other MCP clients (Claude Desktop, n8n…) c
 | `get_exercise` | Statement and solution of a numbered exercise, e.g. `2.22` in `MAD` |
 | `get_document` | Extracted text of a document or of a page range |
 | `list_courses`, `list_documents` | What is indexed |
+
+The same queries are available from the terminal, and are used by the Claude Code skills when the MCP server is not
+registered:
+
+```sh
+npm run kb -- search "diagramme de Hasse" --course MAD
+npm run kb -- exercise 2.22 --course MAD
+npm run kb -- document 3 --pages 41-42
+npm run kb -- documents MAD --type exam
+```
 
 ### Limitations
 
