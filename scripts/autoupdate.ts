@@ -21,7 +21,8 @@ if (!uninstall && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error(`Inva
 const [hour, minute] = time.split(":").map(Number);
 
 function run(command: string, args: string[], allowFailure = false): void {
-  const result = spawnSync(command, args, { stdio: "inherit" });
+  // Removing a task that does not exist yet fails harmlessly: keep its output quiet.
+  const result = spawnSync(command, args, { stdio: allowFailure ? "ignore" : "inherit" });
   if (result.status !== 0 && !allowFailure) throw new Error(`${command} ${args.join(" ")} failed`);
 }
 
