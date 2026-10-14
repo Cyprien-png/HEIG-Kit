@@ -15,7 +15,8 @@ const LABEL = "ch.heig-kit.update";
 const NAME = "heig-kit-update";
 
 const uninstall = process.argv.includes("--uninstall");
-const time = process.argv[process.argv.indexOf("--time") + 1] ?? "08:00";
+const timeIndex = process.argv.indexOf("--time");
+const time = timeIndex >= 0 ? (process.argv[timeIndex + 1] ?? "") : "08:00";
 if (!uninstall && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error(`Invalid --time "${time}", expected HH:MM`);
 const [hour, minute] = time.split(":").map(Number);
 
