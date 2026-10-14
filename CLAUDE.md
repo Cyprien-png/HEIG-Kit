@@ -24,5 +24,15 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/table.ts`: weekly timetable rendering
 - `src/dates.ts`: Europe/Zurich date helpers
 - `src/paths.ts`: project root, so the CLI runs from any directory
+- `src/rag/`: knowledge base: `db.ts` (pgvector, migrations in `rag/migrations/`), `extract.ts` (docling), `chunk.ts`
+  (structure-aware chunking, one chunk per exercise), `embed.ts` (Ollama bge-m3), `sources/` (Cyberlearn, local folders),
+  `ingest.ts` (incremental, deduplicated by content hash), `search.ts` (hybrid vector + French full-text + exercise numbers)
+- `src/mcp/server.ts`: MCP server (Streamable HTTP, token in `data/mcp-token`) over the knowledge base
+- `rag/compose.yml`: Docker services (db, embedder, docling for ingestion only, mcp); kept out of the root so Compose
+  does not read the root `.env`
+- `data/`: downloaded documents, extracted text and MCP token; never commit it
+- `scripts/mcp-token.ts`: creates the MCP token and prints the `claude mcp add` command
 - `scripts/aliases.ts`: installs the `heig:*` terminal shortcuts (`heig-*` on Windows) in the user's shell configuration
 - `skills/`: plugin skills; run `claude plugin validate .` after changing them or `.claude-plugin/`
+
+Run `npm test` (node:test) and `npx tsc --noEmit` after changes.
