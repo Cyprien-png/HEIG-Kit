@@ -15,9 +15,10 @@
     "ingest": "tsx src/cli.ts ingest",
     "typecheck": "tsc --noEmit",
     "aliases": "tsx scripts/aliases.ts",
-    "rag:start": "docker compose -f rag/compose.yml up -d --wait",
+    "rag:start": "tsx scripts/mcp-token.ts && docker compose -f rag/compose.yml up -d --build --wait",
     "rag:stop": "docker compose -f rag/compose.yml --profile ingest down",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "mcp:token": "tsx scripts/mcp-token.ts --print"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

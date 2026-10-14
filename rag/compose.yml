@@ -1,7 +1,7 @@
 # HEIG-Kit RAG services. Every port is bound to 127.0.0.1: nothing is reachable from the network.
 # Kept out of the repository root on purpose: Compose would otherwise read the root `.env` and interpolate
 # the `$` that edu-ID passwords may contain.
-#   npm run rag:start     database and embedding model
+#   npm run rag:start     database, embedding model and MCP server
 #   npm run rag:stop      stops every service (data is kept in Docker volumes)
 # `npm run ingest` also starts the document extraction service (profile "ingest") while it runs.
 
@@ -40,6 +40,27 @@ services:
     profiles: ["ingest"]
     ports:
       - "127.0.0.1:5001:5001"
+
+  # MCP server for AI assistants (Claude Code, Claude Desktop, n8n…), protected by the token in data/mcp-token.
+  mcp:
+    build:
+      context: ..
+      dockerfile: rag/mcp.Dockerfile
+    environment:
+      RAG_DATABASE_URL: postgres://heigkit:heigkit@db:5432/heigkit
+      RAG_OLLAMA_URL: http://embedder:11434
+    volumes:
+      - ../data:/app/data:ro
+    ports:
+      - "127.0.0.1:8765:8765"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      retries: 12
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   db:
