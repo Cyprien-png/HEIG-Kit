@@ -18,7 +18,9 @@
     "rag:start": "tsx scripts/mcp-token.ts && docker compose -f rag/compose.yml up -d --build --wait",
     "rag:stop": "docker compose -f rag/compose.yml --profile ingest down",
     "test": "node --import tsx --test test/*.test.ts",
-    "mcp:token": "tsx scripts/mcp-token.ts --print"
+    "mcp:token": "tsx scripts/mcp-token.ts --print",
+    "rag:update": "tsx scripts/update.ts",
+    "autoupdate": "tsx scripts/autoupdate.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
