@@ -182,6 +182,19 @@ export async function listDocuments(db: Db, course: string, docType?: string) {
   return rows.map((r) => ({ id: Number(r.id), title: r.title, docType: r.doc_type, chapter: r.chapter, uploadedAt: r.uploaded_at, url: r.url }));
 }
 
+/** Search results as text: where each passage comes from (course, chapter, document, pages, exercise), then the passage. */
+export function formatResults(results: SearchResult[]): string {
+  return results
+    .map((r, i) => {
+      const where = [r.course, r.chapter, `${r.title} (${r.docType})`, r.pages && `p. ${r.pages}`, r.exercise && `ex. ${r.exercise}`]
+        .filter(Boolean)
+        .join(" · ");
+      const heading = r.headingPath ? `\n${r.headingPath}` : "";
+      return `[${i + 1}] ${where}${heading}\n${r.text}\n(document ${r.documentId}${r.url ? `, ${r.url}` : ""})`;
+    })
+    .join("\n\n---\n\n");
+}
+
 function pageRange(from: number | null, to: number | null): string {
   if (!from) return "";
   return to && to !== from ? `${from}-${to}` : String(from);

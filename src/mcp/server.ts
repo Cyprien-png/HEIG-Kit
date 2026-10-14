@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { ROOT } from "../paths.js";
 import { openDb } from "../rag/db.js";
-import { type SearchResult, documentText, findExercise, listCourses, listDocuments, search } from "../rag/search.js";
+import { documentText, findExercise, formatResults, listCourses, listDocuments, search } from "../rag/search.js";
 
 const PORT = Number(process.env.MCP_PORT ?? 8765);
 /** Created by `npm run rag:start`; the server refuses to start without it. */
@@ -114,18 +114,6 @@ function buildServer(): McpServer {
 
 function text(value: string) {
   return { content: [{ type: "text" as const, text: value }] };
-}
-
-function formatResults(results: SearchResult[]): string {
-  return results
-    .map((r, i) => {
-      const where = [r.course, r.chapter, `${r.title} (${r.docType})`, r.pages && `p. ${r.pages}`, r.exercise && `ex. ${r.exercise}`]
-        .filter(Boolean)
-        .join(" · ");
-      const heading = r.headingPath ? `\n${r.headingPath}` : "";
-      return `[${i + 1}] ${where}${heading}\n${r.text}\n(document ${r.documentId}${r.url ? `, ${r.url}` : ""})`;
-    })
-    .join("\n\n---\n\n");
 }
 
 function authorized(req: IncomingMessage): boolean {
