@@ -211,6 +211,12 @@ async function runIngest(
     await migrate(db).catch((error: unknown) => {
       throw new Error(`RAG database unreachable, run \`npm run rag:start\` first (${error instanceof Error ? error.message : error})`);
     });
+    // One ingestion at a time (e.g. the daily update and a manual run): released when the connection closes.
+    const lock = await db.connect();
+    if (!dryRun && !(await lock.query("SELECT pg_try_advisory_lock(7310) AS ok")).rows[0].ok) {
+      lock.release();
+      throw new Error("Another ingestion is already running");
+    }
     const startedDocling = dryRun ? false : await startServices();
     try {
       const log = (line: string) => console.log(line);
@@ -240,6 +246,7 @@ async function runIngest(
       console.log(`\n${summaries.join("\n")}`);
     } finally {
       if (startedDocling) compose("stop", "docling");
+      lock.release();
     }
   } finally {
     await db.end();
