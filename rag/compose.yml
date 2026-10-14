@@ -1,0 +1,46 @@
+# HEIG-Kit RAG services. Every port is bound to 127.0.0.1: nothing is reachable from the network.
+# Kept out of the repository root on purpose: Compose would otherwise read the root `.env` and interpolate
+# the `$` that edu-ID passwords may contain.
+#   npm run rag:start     database and embedding model
+#   npm run rag:stop      stops every service (data is kept in Docker volumes)
+# `npm run ingest` also starts the document extraction service (profile "ingest") while it runs.
+
+name: heig-kit
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: heigkit
+      # Local-only database (bound to 127.0.0.1), hence a fixed password.
+      POSTGRES_PASSWORD: heigkit
+      POSTGRES_DB: heigkit
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heigkit -d heigkit"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Embedding model (bge-m3, multilingual), pulled automatically on first use.
+  embedder:
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - models:/root/.ollama
+    restart: unless-stopped
+
+  # PDF/DOCX/PPTX to markdown. Heavy (~3 GB RAM): only started for ingestion.
+  docling:
+    image: quay.io/docling-project/docling-serve-cpu:latest
+    profiles: ["ingest"]
+    ports:
+      - "127.0.0.1:5001:5001"
+
+volumes:
+  db:
+  models:

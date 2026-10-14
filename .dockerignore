@@ -1,0 +1,6 @@
+# Private data and secrets must never end up in an image.
+.env
+.cache/
+data/
+node_modules/
+.git/

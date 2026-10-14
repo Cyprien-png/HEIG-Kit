@@ -1,3 +1,5 @@
 node_modules/
 .env
 .cache/
+# Downloaded course documents and extracted text: personal and copyrighted, never published.
+data/

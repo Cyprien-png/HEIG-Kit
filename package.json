@@ -13,7 +13,9 @@
     "courses": "tsx src/cli.ts courses",
     "course": "tsx src/cli.ts course",
     "typecheck": "tsc --noEmit",
-    "aliases": "tsx scripts/aliases.ts"
+    "aliases": "tsx scripts/aliases.ts",
+    "rag:start": "docker compose -f rag/compose.yml up -d --wait",
+    "rag:stop": "docker compose -f rag/compose.yml --profile ingest down"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
