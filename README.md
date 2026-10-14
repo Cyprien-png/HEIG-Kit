@@ -72,6 +72,31 @@ claude plugin install heig@heig-kit
 
 To evaluate the plugin without installing it, start Claude Code with `claude --plugin-dir /path/to/HEIG-Kit`.
 
+### 5. Install the terminal shortcuts (optional)
+
+```sh
+npm run aliases
+```
+
+This adds shortcuts to your shell configuration, so the main commands can be used from any directory:
+
+| macOS / Linux (zsh, bash) | Windows (PowerShell) | Equivalent to |
+|---|---|---|
+| `heig:planning` | `heig-planning` | `npm run schedule -- --table` |
+| `heig:deadlines` | `heig-deadlines` | `npm run deadlines` |
+| `heig:courses` | `heig-courses` | `npm run courses` |
+| `heig:course MAD` | `heig-course MAD` | `npm run course -- MAD` |
+
+Options are added directly after the shortcut, without `--`, e.g. `heig:planning --from 2026-10-26`. Open a new terminal
+after the installation for the shortcuts to be available.
+
+- On macOS and Linux, the shortcuts are written to `~/.zshrc` and/or `~/.bashrc` (`~/.bash_profile` on macOS).
+- On Windows, PowerShell does not allow `:` in command names, hence the `heig-` prefix. The shortcuts are written to
+  the PowerShell profile; if PowerShell reports that running scripts is disabled, allow local scripts once with
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- The shortcuts point to the current location of your HEIG-Kit copy: run `npm run aliases` again after moving it.
+  Run `npm run aliases -- --uninstall` to remove them (on Windows: `npm.cmd run aliases -- --uninstall`).
+
 ## Usage
 
 ### Command line
