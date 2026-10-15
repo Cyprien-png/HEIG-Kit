@@ -1,7 +1,7 @@
 {
   "name": "heig",
-  "version": "0.3.0",
-  "description": "Skills for HEIG-VD students: timetable, deadlines, homework, a teacher grounded in your courses, PDF documents and manim animations",
+  "version": "0.4.0",
+  "description": "Skills for HEIG-VD students: timetable, grades, course sheets, homework, a teacher grounded in your courses, PDF documents and manim animations",
   "author": {
     "name": "Cyprien-png"
   }

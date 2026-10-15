@@ -1,6 +1,6 @@
 {
   "name": "heig-kit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Toolkit and Claude Code plugin giving HEIG-VD students access to their own academic information through SWITCH edu-ID",
   "type": "module",

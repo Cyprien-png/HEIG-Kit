@@ -19,7 +19,7 @@ const token = readFileSync(TOKEN_FILE, "utf-8").trim();
 const db = openDb();
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "heig-kit", version: "0.3.0" });
+  const server = new McpServer({ name: "heig-kit", version: "0.4.0" });
 
   server.registerTool(
     "search_course_material",
