@@ -3,3 +3,5 @@ node_modules/
 .cache/
 # Downloaded course documents and extracted text: personal and copyrighted, never published.
 data/
+# Programs installed by `npm run setup` (manim, TinyTeX…)
+vendor/
