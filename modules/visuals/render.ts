@@ -8,7 +8,7 @@
  * (HEIG_OUTPUT_DIR in .env). LaTeX formulas (Tex, TexText) use the TinyTeX installed by the setup.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { manimBin, outputDir, tinytexBinDir } from "../../src/vendor.js";
@@ -52,6 +52,8 @@ const env = {
   PATH: [tex, process.env.PATH].filter(Boolean).join(path.delimiter),
   // manim 1.7 imports pkg_resources, whose deprecation warning is noise here.
   PYTHONWARNINGS: "ignore",
+  // No __pycache__ folder next to the scenes in the videos folder.
+  PYTHONDONTWRITEBYTECODE: "1",
 };
 const args = [source, ...(scene ? [scene] : ["-a"]), "-w", QUALITY[values.quality], "--video_dir", folder];
 // ManimGL renders with OpenGL: on a Linux machine without display, through a virtual one.
@@ -60,7 +62,13 @@ const started = Date.now();
 const result = headless
   ? spawnSync("xvfb-run", ["-a", manimgl, ...args], { env, stdio: "inherit", cwd: path.dirname(source) })
   : spawnSync(manimgl, args, { env, stdio: "inherit", cwd: path.dirname(source) });
-if (result.status !== 0) fail(`manim failed (exit code ${result.status})`);
+if (result.status !== 0) {
+  // A failed render leaves a partial "<Scene>_temp.mp4" behind.
+  for (const f of readdirSync(folder).filter((f) => f.includes("_temp."))) {
+    if (statSync(path.join(folder, f)).mtimeMs >= started) rmSync(path.join(folder, f), { force: true });
+  }
+  fail(`manim failed (exit code ${result.status})`);
+}
 
 const videos = readdirSync(folder)
   .filter((f) => /\.(mp4|mov|gif)$/i.test(f) && !f.includes("_temp"))
