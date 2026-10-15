@@ -1,7 +1,8 @@
 # HEIG-Kit
 
-Your HEIG-VD timetable, homework and courses, in the terminal and in [Claude Code](https://claude.com/claude-code):
-an AI teacher that knows your course material, exports clean PDFs and animates mathematical concepts.
+Your HEIG-VD school life in the terminal and in [Claude Code](https://claude.com/claude-code): timetable, grades, course
+sheets, homework, and an AI teacher that knows your course material, exports clean PDFs and animates mathematical
+concepts.
 
 > HEIG-Kit is an independent student project, not affiliated with HEIG-VD, HES-SO or SWITCH. See [Disclaimer](#disclaimer).
 
@@ -11,40 +12,76 @@ Install only what you need. Each module installs its own dependencies automatica
 
 | Module | What you get | Installed for you |
 |---|---|---|
-| [`campus`](docs/campus.md) | Timetable (GAPS), deadlines and course contents (Cyberlearn), homework for a given day | — (asks for your edu-ID login) |
-| [`knowledge`](docs/knowledge.md) | A local search engine over your course documents, and a teacher that explains, cites the course and writes exercises and practice exams | Docker, the services, the embedding model |
-| [`documents`](docs/documents.md) | PDF, Word and HTML from Markdown, with LaTeX math, Mermaid diagrams and videos | Renderer, headless Chromium, pandoc |
-| [`visuals`](docs/visuals.md) | Mathematical animations with [3b1b/manim](https://github.com/3b1b/manim), embeddable in documents | manim, Python, FFmpeg, LaTeX (TinyTeX) |
+| [`campus`](docs/campus.md) | **GAPS**: your timetable and anyone's (student, teacher, room, class), grades, absences, study plan, unit and module sheets. **Cyberlearn**: deadlines, course contents, homework for a given day | — |
+| [`knowledge`](docs/knowledge.md) | The **teacher**: explains, cites the course, writes exercises and practice exams from your course documents | Docker, the database, the embedding model |
+| [`documents`](docs/documents.md) | PDF, Word and HTML from Markdown, with LaTeX math, Mermaid diagrams and videos | Renderer, Chromium, pandoc |
+| [`visuals`](docs/visuals.md) | Mathematical animations with [3b1b/manim](https://github.com/3b1b/manim), embeddable in documents | manim, Python, FFmpeg, LaTeX |
 | [`shortcuts`](docs/shortcuts.md) | `heig:planning`, `heig:deadlines`… from any terminal | — |
-| `claude` | The `heig:*` skills in Claude Code (and the knowledge base server) | — (needs Claude Code) |
+| `claude` | The `heig:*` skills in Claude Code, and the knowledge base server | — |
+
+**The teacher is a RAG** (retrieval-augmented generation): HEIG-Kit downloads the documents of your Cyberlearn courses
+through Cyberlearn's official Moodle API (lectures, exercise sheets, solutions, past exams, plannings), converts them to
+text, and indexes them in a local search engine that keeps their course, teacher, chapter, pages and exercise numbers.
+The AI assistant searches it to answer from your actual courses and cite them. You can add other sources, such as your
+own folders of PDFs, Word files or notes ([details](docs/knowledge.md)).
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) 20 or later and [git](https://git-scm.com);
+- a package manager for the automatic installation of the other dependencies: [Homebrew](https://brew.sh) on macOS,
+  winget on Windows 10 and 11 (built in), apt, dnf or pacman on Linux;
+- a SWITCH edu-ID account with access to GAPS and Cyberlearn (`campus`, and `knowledge` to index Cyberlearn);
+- [Docker](https://www.docker.com/products/docker-desktop/) with 8 GB of memory for `knowledge` (installed by the setup on
+  macOS and Windows);
+- [Claude Code](https://claude.com/claude-code) for the AI assistant (`claude` module).
 
 ## Installation
-
-You need [Node.js](https://nodejs.org) 20 or later and [git](https://git-scm.com). On macOS, the setup uses
-[Homebrew](https://brew.sh); on Windows, winget (built into Windows 10 and 11); on Linux, apt, dnf or pacman.
 
 ```sh
 git clone https://github.com/Cyprien-png/HEIG-Kit.git
 cd HEIG-Kit
 npm install
-npm run setup -- campus knowledge documents claude   # the modules you want
+npm run setup -- campus knowledge documents visuals claude   # the modules you want, or: --all
 ```
 
-- `npm run setup -- --all` installs every module.
-- `npm run setup -- knowledge --ingest` also indexes your Cyberlearn courses now, then every day (a few hours the first
-  time; only the courses of your GAPS timetable).
+The setup installs every dependency **locally**, on your computer: programs go to your system's package manager or to the
+`vendor/` folder, services run in Docker on your machine, and the indexed courses stay in `data/`. Internet is needed
+for the installation, and afterwards only to update what HEIG-Kit retrieves from GAPS and Cyberlearn and for the AI
+assistant itself; the knowledge base, document rendering and animations work offline.
+
+- `npm run setup -- knowledge --ingest` also indexes your Cyberlearn courses now and then every day (a couple of hours
+  the first time; only the courses of your GAPS timetable).
 - `npm run setup -- --status` shows what is installed and working; `--dry-run` shows what would be installed.
 
 ## Usage
 
-In Claude Code (after installing the `claude` module), just ask:
+**1. Credentials.** The `campus` setup asks for your SWITCH edu-ID email and password and writes them to `.env`. You can
+also fill it yourself from the template:
 
-- *"show my planning"*, *"what homework do I have for Friday?"*, *"what are my deadlines?"*
-- *"explique-moi les relations d'équivalence"*, *"génère-moi 5 exercices avec les corrigés"*, *"prépare-moi un TE blanc de
-  MAD en PDF"*, *"montre-moi visuellement pourquoi…"*
+```sh
+cp .env.example .env    # then set HEIG_EMAIL and HEIG_PASSWORD
+```
 
-Generated documents and videos go to `~/Documents/HEIG-Kit` and open automatically. Terminal commands are described in
-each module's page.
+**2. In Claude Code** (after `npm run setup -- claude`, then `/reload-plugins` or a new session), just ask:
+
+| You ask | Skill |
+|---|---|
+| *"montre mon planning"*, *"quand ai-je labo de PRG ?"*, *"l'horaire de la salle C23"* | `heig:planning` |
+| *"quelles sont mes notes ?"*, *"combien d'absences en PRG ?"* | `heig:grades` |
+| *"montre-moi la fiche de MAD"*, *"quelles unités font partie de MAI1 ?"* | `heig:studies` |
+| *"quels devoirs pour vendredi ?"*, *"mes deadlines"* | `heig:courses`, `heig:deadlines` |
+| *"explique-moi les relations d'équivalence"*, *"prépare-moi un TE blanc de MAD"* | `heig:teacher` |
+| *"exporte en PDF"*, *"montre-moi visuellement pourquoi…"* | `heig:documents`, `heig:visuals` |
+
+Generated documents and videos go to `~/Documents/HEIG-Kit` and open automatically; the assistant reuses what it already
+generated before creating anything new.
+
+**3. In the terminal**, every feature has a command, e.g. `npm run schedule -- --table`, `npm run gaps -- grades`,
+`npm run deadlines`: see each module's page.
+
+**Other AI assistants.** The knowledge base is also an [MCP](https://modelcontextprotocol.io) server
+(`http://127.0.0.1:8765/mcp`, token in `data/mcp-token`), usable by any MCP client, for instance Claude Desktop, n8n or
+Open WebUI. The skills themselves are Claude Code instructions.
 
 ## How your credentials are used
 
@@ -64,8 +101,9 @@ SWITCH edu-ID, as you would in a browser:
 - Everything runs on your computer. Course documents, extracted text and the knowledge base stay in `data/`,
   `vendor/`, `.cache/` and local Docker volumes, all excluded from version control and Docker images. Services listen on
   `127.0.0.1` only, and the knowledge base server requires an access token.
-- HEIG-Kit collects no telemetry and sends your data to no third party. When used through an AI assistant, what you ask
-  is processed by that assistant according to its own terms and privacy policy.
+- HEIG-Kit collects no telemetry and sends your data to no third party. When used through an AI assistant, what you ask,
+  and the data the assistant reads to answer you (grades, course excerpts…), is processed by that assistant according to
+  its own terms and privacy policy; with a local model, nothing leaves your computer.
 
 ## Acceptable use
 
@@ -73,6 +111,7 @@ By using HEIG-Kit, you agree to:
 
 - use it only with your own account and for personal, non-commercial study purposes;
 - comply with the IT usage policies of HEIG-VD and HES-SO and with the terms of use of the platforms accessed;
+- consult other people's schedules only for legitimate purposes, as GAPS itself allows;
 - refrain from redistributing course materials or any content retrieved with HEIG-Kit (including `data/` and the
   knowledge base), which remain the property of their authors and institutions;
 - refrain from any use that could impair the availability or security of the platforms accessed.
