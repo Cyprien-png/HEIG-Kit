@@ -2,6 +2,7 @@
  * HEIG-Kit visuals module: renders a ManimGL (3b1b/manim) scene to a video.
  *
  *   npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--out <folder>]
+ *   npm run video -- --where    default folder for generated videos
  *
  * Without a scene name, every scene of the file is rendered. Videos go to ~/Documents/HEIG-Kit/videos by default
  * (HEIG_OUTPUT_DIR in .env). LaTeX formulas (Tex, TexText) use the TinyTeX installed by the setup.
@@ -20,8 +21,15 @@ const { values, positionals } = parseArgs({
     quality: { type: "string", default: "medium" },
     open: { type: "boolean", default: false },
     out: { type: "string" },
+    where: { type: "boolean", default: false },
   },
 });
+
+if (values.where) {
+  // Default folder for generated videos and their scene files (HEIG_OUTPUT_DIR in .env).
+  console.log(outputDir("videos"));
+  process.exit(0);
+}
 
 function fail(message: string): never {
   console.error(message);

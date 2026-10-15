@@ -2,6 +2,7 @@
  * HEIG-Kit documents module: renders a Markdown file (with LaTeX math and Mermaid diagrams) to PDF, HTML and/or DOCX.
  *
  *   npm run doc -- <file.md> [--pdf] [--html] [--docx] [--open] [--out <folder>]
+ *   npm run doc -- --where      default folder for generated documents
  *
  * PDF is the default. Math ($…$, $$…$$) is rendered with KaTeX, ```mermaid blocks with Mermaid, code with highlight.js,
  * and the PDF is printed by a headless Chromium. DOCX goes through pandoc: math becomes native Word equations and
@@ -20,6 +21,7 @@ import katex from "katex";
 import MarkdownIt from "markdown-it";
 import texmath from "markdown-it-texmath";
 import puppeteer, { type Browser } from "puppeteer";
+import { outputDir } from "../../src/vendor.js";
 
 const require = createRequire(import.meta.url);
 const asset = (id: string) => pathToFileURL(require.resolve(id)).href;
@@ -225,8 +227,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       docx: { type: "boolean", default: false },
       open: { type: "boolean", default: false },
       out: { type: "string" },
+      where: { type: "boolean", default: false },
     },
   });
+  if (values.where) {
+    // Default folder for generated documents (HEIG_OUTPUT_DIR in .env).
+    console.log(outputDir("documents"));
+    process.exit(0);
+  }
   if (!positionals[0]) {
     console.log("Usage: npm run doc -- <file.md> [--pdf] [--html] [--docx] [--open] [--out <folder>]");
     process.exit(1);
