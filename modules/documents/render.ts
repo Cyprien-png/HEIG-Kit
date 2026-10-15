@@ -6,7 +6,7 @@
  * PDF is the default. Math ($…$, $$…$$) is rendered with KaTeX, ```mermaid blocks with Mermaid, code with highlight.js,
  * and the PDF is printed by a headless Chromium. DOCX goes through pandoc: math becomes native Word equations and
  * Mermaid diagrams are inserted as images. Videos (![caption](clip.mp4)) are played in HTML and appear in PDF/DOCX as
- * their first frame linking to the video file.
+ * their last frame linking to the video file.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -46,11 +46,11 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** First frame (after 1 s) of a video, next to it, when ffmpeg is available (visuals module). */
+/** Last frame of a video (the finished animation), next to it, when ffmpeg is available (visuals module). */
 function videoPoster(video: string): string | undefined {
   const poster = `${video}.poster.png`;
   if (existsSync(poster)) return poster;
-  const result = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", "1", "-i", video, "-frames:v", "1", poster], { stdio: "ignore" });
+  const result = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-sseof", "-0.1", "-i", video, "-frames:v", "1", poster], { stdio: "ignore" });
   return result.status === 0 && existsSync(poster) ? poster : undefined;
 }
 
