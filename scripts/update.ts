@@ -3,10 +3,11 @@
  * documents of the curriculum (`npm run ingest`). Output is appended to data/logs/update.log. Used by the daily task
  * installed with `npm run autoupdate`, and runnable by hand: npm run rag:update
  */
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../src/paths.js";
+import { ensureDockerRunning } from "../src/setup/system.js";
 
 const LOG = path.join(ROOT, "data", "logs", "update.log");
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -15,18 +16,6 @@ function log(line: string): void {
   const stamped = `[${new Date().toISOString()}] ${line}`;
   console.log(stamped);
   appendFileSync(LOG, `${stamped}\n`);
-}
-
-function dockerRunning(): boolean {
-  return spawnSync("docker", ["info"], { stdio: "ignore", shell: process.platform === "win32" }).status === 0;
-}
-
-/** Starts Docker Desktop if needed (macOS) and waits up to 3 minutes for it. */
-async function ensureDocker(): Promise<void> {
-  if (dockerRunning()) return;
-  if (process.platform === "darwin") execFileSync("open", ["-ga", "Docker"]);
-  for (let i = 0; i < 36 && !dockerRunning(); i++) await new Promise((r) => setTimeout(r, 5000));
-  if (!dockerRunning()) throw new Error("Docker is not running: start Docker Desktop and run `npm run rag:update` again");
 }
 
 /** Runs an npm script, appending its output to the log. */
@@ -51,7 +40,7 @@ async function main(): Promise<void> {
   mkdirSync(path.dirname(LOG), { recursive: true });
   log("Update started");
   try {
-    await ensureDocker();
+    await ensureDockerRunning();
     npm("rag:start");
     npm("ingest");
     log("Update finished");
