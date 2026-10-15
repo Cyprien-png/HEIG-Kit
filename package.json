@@ -16,6 +16,7 @@
     "ingest": "tsx src/cli.ts ingest",
     "kb": "tsx src/cli.ts kb",
     "doc": "tsx modules/documents/render.ts",
+    "video": "tsx modules/visuals/render.ts",
     "typecheck": "tsc --noEmit",
     "aliases": "tsx scripts/aliases.ts",
     "rag:start": "tsx scripts/mcp-token.ts && docker compose -f rag/compose.yml up -d --build --wait",
