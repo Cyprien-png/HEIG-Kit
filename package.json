@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "setup": "tsx scripts/setup.ts",
     "schedule": "tsx src/cli.ts schedule",
     "deadlines": "tsx src/cli.ts deadlines",
     "courses": "tsx src/cli.ts courses",
