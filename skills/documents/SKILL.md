@@ -9,6 +9,16 @@ description: Creates documents for the user as PDF (and DOCX or HTML on request)
 skill needs the `documents` module: if a command reports that it is missing, tell the user to run
 `npm --prefix <root> run setup -- documents` (one time, installs everything automatically).
 
+## Always start from what already exists
+
+Before creating anything, look for what was already generated on the topic:
+`npm --prefix <root> run -s generated -- <one or two keywords>` (e.g. `hasse`, `antisymetrie`, `MAD`).
+
+- If something matches the request, reuse it: open it with `npm --prefix <root> run -s generated -- --open <file>` and
+  say it already existed; offer to complete, update or redo it rather than regenerating it silently.
+- Adapt an existing Markdown file or scene (edit it, then render again) when the request is a variation of it.
+- Only create a new file when nothing relevant exists.
+
 ## Steps
 
 1. Get the output folder: `npm --prefix <root> run -s doc -- --where` (e.g. `~/Documents/HEIG-Kit/documents`).

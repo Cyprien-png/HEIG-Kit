@@ -9,10 +9,21 @@ description: Creates mathematical and scientific animations (videos) with 3b1b/m
 skill needs the `visuals` module: if a command reports that manim is not installed, tell the user to run
 `npm --prefix <root> run setup -- visuals` (one time, installs manim, Python, FFmpeg and LaTeX automatically).
 
+## Always start from what already exists
+
+Before creating anything, look for what was already generated on the topic:
+`npm --prefix <root> run -s generated -- <one or two keywords>` (e.g. `hasse`, `antisymetrie`, `MAD`).
+
+- If something matches the request, reuse it: open it with `npm --prefix <root> run -s generated -- --open <file>` and
+  say it already existed; offer to complete, update or redo it rather than regenerating it silently.
+- Adapt an existing Markdown file or scene (edit it, then render again) when the request is a variation of it.
+- Only create a new file when nothing relevant exists.
+
 ## Steps
 
 1. Get the output folder: `npm --prefix <root> run -s video -- --where` (e.g. `~/Documents/HEIG-Kit/videos`).
-2. Write the scene in that folder as `<descriptive-name>.py` (no spaces), one `Scene` subclass per animation.
+2. Write the scene in that folder as `<descriptive-name>.py` (no spaces), one `Scene` subclass per animation, each with
+   a one-line docstring saying what it shows (used to find it again later).
 3. Render a quick preview, then the final version, and open it:
    `npm --prefix <root> run -s video -- <file.py> <SceneName> --quality low` to check it renders, then
    `npm --prefix <root> run -s video -- <file.py> <SceneName> --quality medium --open`.

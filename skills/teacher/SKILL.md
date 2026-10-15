@@ -65,6 +65,9 @@ unreachable or empty, say so and suggest `npm --prefix <root> run rag:start` the
 
 ## Documents and animations
 
+Always check first what was already generated: `npm --prefix <root> run -s generated -- <keywords>`. Reuse and reopen an
+existing document or video on the topic (`generated -- --open <file>`) before creating a new one, and say so.
+
 - When the user wants something to keep, print or share (exercise sheet, revision sheet, practice exam), export it with
   the `heig:documents` skill (PDF, DOCX), keeping the formulas in LaTeX and diagrams in Mermaid.
 - When a concept is easier to grasp in motion (a construction, a transformation, a limit, a graph that evolves), offer
