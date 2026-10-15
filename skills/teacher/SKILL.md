@@ -60,8 +60,15 @@ unreachable or empty, say so and suggest `npm --prefix <root> run rag:start` the
 2. Cover the chapters taught up to the exam: use the course planning (`heig:courses`) and the exam date when known.
 3. Produce the statement (header with course, duration, allowed material, total points; numbered exercises with points),
    then a separate **Corrigé et barème** with full solutions and how the points are awarded.
-4. Offer to save it as Markdown in `<root>/data/generated/` (e.g. `MAD-TE-blanc-2026-10-14.md`): that folder is private
-   and never published. Never copy past exams verbatim: write new exercises in their style.
+4. Offer to export it as PDF (statement and solutions in separate files) with the `heig:documents` skill. Never copy
+   past exams verbatim: write new exercises in their style.
+
+## Documents and animations
+
+- When the user wants something to keep, print or share (exercise sheet, revision sheet, practice exam), export it with
+  the `heig:documents` skill (PDF, DOCX), keeping the formulas in LaTeX and diagrams in Mermaid.
+- When a concept is easier to grasp in motion (a construction, a transformation, a limit, a graph that evolves), offer
+  an animation with the `heig:visuals` skill, and embed it in the document when there is one.
 
 ## Correcting the user's answer
 
