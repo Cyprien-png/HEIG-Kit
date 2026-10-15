@@ -2,9 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { MfaRequiredError } from "./auth/eduid.js";
-import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { renderDeadlines } from "./deadlines.js";
-import { type Lesson } from "./gaps/client.js";
 import { ROOT } from "./paths.js";
 import { migrate, openDb } from "./rag/db.js";
 import { ensureEmbeddingModel } from "./rag/embed.js";
@@ -14,8 +12,8 @@ import { search } from "./rag/search.js";
 import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
 import { LocalSource } from "./rag/sources/local.js";
 import type { ColorMode } from "./render.js";
-import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
-import { ScheduleCache, loadSchedule, loadOtherSchedule, gapsInfo, loadDeadlines, loadCourses, knowledgeBase, withCyberlearn, readCache } from "./services.js";
+import { scheduleCourses } from "./table.js";
+import { gapsInfo, knowledgeBase, loadCourses, loadDeadlines, loadSchedule, readCache, scheduleView, withCyberlearn } from "./services.js";
 
 const USAGE = `Usage:
   npm run schedule -- [options]    GAPS timetable
@@ -126,33 +124,21 @@ async function main(): Promise<void> {
     return;
   }
 
-  let cache: ScheduleCache;
-  if (values.who) {
-    const other = await loadOtherSchedule(values.who, values.type, values.debug, values["mfa-code"]);
-    console.log(`Horaire : ${other.entity.name} (${other.entity.type})\n`);
-    cache = other.cache;
-  } else {
-    cache = await loadSchedule(values.refresh, values.debug, values["mfa-code"]);
-  }
-  const from = values.from ? startOfDay(values.from) : startOfDay(isoDate(new Date()));
-  const to = values.to ? addDays(startOfDay(values.to), 1) : addDays(from, 7);
-  const lessons = values.all
-    ? cache.lessons
-    : cache.lessons.filter((l) => new Date(l.end) > from && new Date(l.start) < to);
-
-  if (values.table) {
-    const now = startOfDay(isoDate(new Date()));
-    const weekend = !values.from && addDays(startOfWeek(now), 5) <= now;
-    const monday = weekend ? addDays(startOfWeek(now), 7) : startOfWeek(from);
-    console.log(renderWeekTable(cache.lessons, monday, cache.fetchedAt, colorMode(values.color)));
-    return;
-  }
-
-  if (values.json) {
-    console.log(JSON.stringify({ fetchedAt: cache.fetchedAt, lessons }, null, 2));
-  } else {
-    printLessons(lessons, cache.fetchedAt);
-  }
+  console.log(
+    await scheduleView({
+      from: values.from,
+      to: values.to,
+      all: values.all,
+      table: values.table,
+      json: values.json,
+      who: values.who,
+      type: values.type,
+      refresh: values.refresh,
+      color: colorMode(values.color),
+      debug: values.debug,
+      mfaCode: values["mfa-code"],
+    }),
+  );
 }
 
 function colorMode(option: string): ColorMode {
@@ -243,34 +229,6 @@ function compose(...args: string[]): void {
 
 function summary(name: string, s: IngestStats): string {
   return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed`;
-}
-
-function printLessons(lessons: Lesson[], fetchedAt: string): void {
-  const day = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, dateStyle: "full" });
-  const time = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, timeStyle: "short" });
-
-  console.log(`Schedule fetched at ${new Date(fetchedAt).toLocaleString("fr-CH", { timeZone: TIME_ZONE })}`);
-  if (lessons.length === 0) {
-    console.log("No lessons in this period.");
-    return;
-  }
-
-  let currentDay = "";
-  for (const lesson of lessons) {
-    const start = new Date(lesson.start);
-    const lessonDay = day.format(start);
-    if (lessonDay !== currentDay) {
-      currentDay = lessonDay;
-      console.log(`\n${lessonDay}`);
-    }
-    const end = new Date(lesson.end);
-    const where = lesson.location ? ` @ ${lesson.location}` : "";
-    const when =
-      time.format(start) === "00:00" && time.format(end) === "00:00"
-        ? `all day until ${day.format(new Date(end.getTime() - 1))}`
-        : `${time.format(start)}-${time.format(end)}`;
-    console.log(`  ${when}  ${lesson.summary}${where}`);
-  }
 }
 
 main().catch((error: unknown) => {

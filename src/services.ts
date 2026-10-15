@@ -7,7 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { type Credentials, MfaRequiredError } from "./auth/eduid.js";
 import { loadConfig } from "./config.js";
 import { CyberlearnClient, InvalidTokenError } from "./cyberlearn/client.js";
-import { addDays, isoDate, startOfDay } from "./dates.js";
+import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { findCourse, renderCourse, renderCourseList } from "./courses.js";
 import { type EntityType, ENTITY_TYPES, GapsClient, type Lesson } from "./gaps/client.js";
 import { listEntities, searchEntities } from "./gaps/entities.js";
@@ -19,7 +19,8 @@ import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
 import { openDb } from "./rag/db.js";
 import { documentText, findExercise, formatResults, listCourses, listDocuments, search } from "./rag/search.js";
-import { scheduleCourses } from "./table.js";
+import type { ColorMode } from "./render.js";
+import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
 export const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
 
@@ -271,3 +272,75 @@ export async function readCache(): Promise<ScheduleCache | undefined> {
     return undefined;
   }
 }
+
+export interface ScheduleViewOptions {
+  from?: string;
+  to?: string;
+  all?: boolean;
+  table?: boolean;
+  json?: boolean;
+  /** Someone else's schedule: a student, a teacher acronym, a room, a class or a course group. */
+  who?: string;
+  type?: string;
+  refresh?: boolean;
+  color?: ColorMode;
+  debug?: boolean;
+  mfaCode?: string;
+}
+
+/** A timetable as text: the week as a table, a list of days (default: next 7 days) or JSON. */
+export async function scheduleView(options: ScheduleViewOptions): Promise<string> {
+  let cache: ScheduleCache;
+  let heading = "";
+  if (options.who) {
+    const other = await loadOtherSchedule(options.who, options.type, Boolean(options.debug), options.mfaCode);
+    heading = `Horaire : ${other.entity.name} (${other.entity.type})\n\n`;
+    cache = other.cache;
+  } else {
+    cache = await loadSchedule(Boolean(options.refresh), Boolean(options.debug), options.mfaCode);
+  }
+  const from = options.from ? startOfDay(options.from) : startOfDay(isoDate(new Date()));
+  const to = options.to ? addDays(startOfDay(options.to), 1) : addDays(from, 7);
+  const lessons = options.all ? cache.lessons : cache.lessons.filter((l) => new Date(l.end) > from && new Date(l.start) < to);
+
+  if (options.table) {
+    const now = startOfDay(isoDate(new Date()));
+    const weekend = !options.from && addDays(startOfWeek(now), 5) <= now;
+    const monday = weekend ? addDays(startOfWeek(now), 7) : startOfWeek(from);
+    return heading + renderWeekTable(cache.lessons, monday, cache.fetchedAt, options.color ?? "none");
+  }
+  if (options.json) return heading + JSON.stringify({ fetchedAt: cache.fetchedAt, lessons }, null, 2);
+  return heading + formatLessons(lessons, cache.fetchedAt);
+}
+
+/** Lessons as a list grouped by day (Europe/Zurich). */
+export function formatLessons(lessons: Lesson[], fetchedAt: string): string {
+  const out: string[] = [];
+  const day = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, dateStyle: "full" });
+  const time = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, timeStyle: "short" });
+
+  out.push(`Schedule fetched at ${new Date(fetchedAt).toLocaleString("fr-CH", { timeZone: TIME_ZONE })}`);
+  if (lessons.length === 0) {
+    out.push("No lessons in this period.");
+    return out.join("\n");
+  }
+
+  let currentDay = "";
+  for (const lesson of lessons) {
+    const start = new Date(lesson.start);
+    const lessonDay = day.format(start);
+    if (lessonDay !== currentDay) {
+      currentDay = lessonDay;
+      out.push(`\n${lessonDay}`);
+    }
+    const end = new Date(lesson.end);
+    const where = lesson.location ? ` @ ${lesson.location}` : "";
+    const when =
+      time.format(start) === "00:00" && time.format(end) === "00:00"
+        ? `all day until ${day.format(new Date(end.getTime() - 1))}`
+        : `${time.format(start)}-${time.format(end)}`;
+    out.push(`  ${when}  ${lesson.summary}${where}`);
+  }
+  return out.join("\n");
+}
+
