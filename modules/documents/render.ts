@@ -10,7 +10,7 @@
  * their last frame linking to the video file.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -51,7 +51,8 @@ function escapeHtml(text: string): string {
 /** Last frame of a video (the finished animation), next to it, when ffmpeg is available (visuals module). */
 function videoPoster(video: string): string | undefined {
   const poster = `${video}.poster.png`;
-  if (existsSync(poster)) return poster;
+  // Reused unless the video was rendered again since.
+  if (existsSync(poster) && existsSync(video) && statSync(poster).mtimeMs >= statSync(video).mtimeMs) return poster;
   const result = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-sseof", "-0.1", "-i", video, "-frames:v", "1", poster], { stdio: "ignore" });
   return result.status === 0 && existsSync(poster) ? poster : undefined;
 }
