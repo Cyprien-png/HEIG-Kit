@@ -18,7 +18,8 @@ export const claude: Module = {
       // Not registered yet.
     }
     const tsx = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
-    run("claude", ["mcp", "add", "--scope", "user", "heig-kit", "--", process.execPath, tsx, path.join(ROOT, "src", "mcp", "host.ts")], { quiet: true });
+    // "node" from the PATH rather than this Node.js's own path, which changes with each Node.js update.
+    run("claude", ["mcp", "add", "--scope", "user", "heig-kit", "--", "node", tsx, path.join(ROOT, "src", "mcp", "host.ts")], { quiet: true });
     console.log("  HEIG-Kit MCP server registered (heig-kit)");
   },
   async check() {
