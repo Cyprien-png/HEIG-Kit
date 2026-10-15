@@ -4,6 +4,7 @@ import { claude } from "./modules/claude.js";
 import { documents } from "./modules/documents.js";
 import { knowledge } from "./modules/knowledge.js";
 import { shortcuts } from "./modules/shortcuts.js";
+import { visuals } from "./modules/visuals.js";
 
 /** Every module, in installation order (the Claude Code plugin last, so it can register the MCP server). */
-export const MODULES: Module[] = [campus, knowledge, documents, shortcuts, claude];
+export const MODULES: Module[] = [campus, knowledge, documents, visuals, shortcuts, claude];
