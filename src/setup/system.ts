@@ -15,6 +15,12 @@ const PACKAGES: Record<string, Partial<Record<PackageManager, string[]>>> = {
     pacman: ["python"],
   },
   docker: { brew: ["--cask", "docker"], winget: ["Docker.DockerDesktop"] },
+  // Libraries the headless Chromium of the documents module needs on Linux.
+  "chrome-libs": {
+    apt: ["libnss3", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2", "libdrm2", "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxrandr2", "libgbm1", "libpango-1.0-0", "libcairo2", "libasound2t64"],
+    dnf: ["nss", "atk", "at-spi2-atk", "cups-libs", "libdrm", "libxkbcommon", "libXcomposite", "libXdamage", "libXrandr", "mesa-libgbm", "pango", "alsa-lib"],
+    pacman: ["nss", "atk", "at-spi2-atk", "libcups", "libdrm", "libxkbcommon", "libxcomposite", "libxdamage", "libxrandr", "mesa", "pango", "alsa-lib"],
+  },
   // Libraries ManimGL builds against on Linux (OpenGL, Cairo, Pango).
   "manim-libs": {
     apt: ["libcairo2-dev", "libpango1.0-dev", "pkg-config", "libgl1-mesa-dev", "xvfb"],
@@ -25,6 +31,8 @@ const PACKAGES: Record<string, Partial<Record<PackageManager, string[]>>> = {
 };
 
 export const isWindows = process.platform === "win32";
+/** npm executable: the npm.ps1 shim of Windows PowerShell can swallow arguments, npm.cmd does not. */
+export const NPM = isWindows ? "npm.cmd" : "npm";
 
 export function commandExists(command: string): boolean {
   const probe = isWindows ? spawnSync("where", [command], { stdio: "ignore" }) : spawnSync("sh", ["-c", `command -v "${command}"`], { stdio: "ignore" });
