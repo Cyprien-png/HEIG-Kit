@@ -9,6 +9,14 @@ embedded with the multilingual [bge-m3](https://huggingface.co/BAAI/bge-m3) mode
 and stored in PostgreSQL with [pgvector](https://github.com/pgvector/pgvector). No local language model is needed: the
 reasoning is done by the assistant you connect (e.g. Claude).
 
+## How it works
+
+HEIG-Kit retrieves your course documents from Cyberlearn through its official Moodle web services (with the access token
+Moodle gives its mobile app), and optionally from your own folders. Each document is converted to text (Docling), split
+along its structure (one passage per exercise for exercise sheets), embedded with a multilingual model (bge-m3, on your
+CPU) and stored in PostgreSQL with pgvector. Searches combine meaning, keywords and exact exercise numbers. No local
+language model is needed: the AI assistant you connect does the reasoning, and cites the passages it used.
+
 ## 1. Start the services
 
 `npm run setup -- knowledge` installs Docker if needed and starts everything. Afterwards:
