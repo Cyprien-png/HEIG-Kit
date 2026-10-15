@@ -13,6 +13,7 @@
     "deadlines": "tsx src/cli.ts deadlines",
     "courses": "tsx src/cli.ts courses",
     "course": "tsx src/cli.ts course",
+    "gaps": "tsx src/cli.ts gaps",
     "ingest": "tsx src/cli.ts ingest",
     "kb": "tsx src/cli.ts kb",
     "doc": "tsx modules/documents/render.ts",

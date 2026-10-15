@@ -9,7 +9,12 @@ import { CyberlearnClient, InvalidTokenError } from "./cyberlearn/client.js";
 import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { findCourse, renderCourse, renderCourseList } from "./courses.js";
 import { renderDeadlines } from "./deadlines.js";
-import { GapsClient, type Lesson } from "./gaps/client.js";
+import { type EntityType, ENTITY_TYPES, GapsClient, type Lesson } from "./gaps/client.js";
+import { listEntities, searchEntities } from "./gaps/entities.js";
+import { fetchContinuousGrades, fetchTranscript } from "./gaps/grades.js";
+import { renderAbsences, renderEntities, renderGrades, renderPlan } from "./gaps/render.js";
+import { fetchSheet } from "./gaps/sheets.js";
+import { fetchStudentRecord } from "./gaps/student.js";
 import { type Page, Session } from "./http.js";
 import { CACHE_DIR, ROOT } from "./paths.js";
 import { migrate, openDb } from "./rag/db.js";
@@ -44,6 +49,11 @@ const USAGE = `Usage:
   npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
                                    <course> is a timetable code (e.g. MAD), an id or part of the name
   npm run ingest -- [options]      index course documents in the local RAG database (npm run rag:start first)
+  npm run gaps -- plan [--all]     study plan: modules, units, credits and status (current year, or all years)
+  npm run gaps -- unit <CODE>      unit sheet (e.g. MAD); gaps -- module <CODE> for a module sheet (e.g. MAI1)
+  npm run gaps -- grades           continuous assessment grades and transcript
+  npm run gaps -- absences         absences per unit
+  npm run gaps -- find <name>      search students, teachers, rooms, classes and course groups (--type)
   npm run kb -- search <query>     search the indexed course material (--course MAD, --type exam, --limit 8)
   npm run kb -- exercise <number>  statement and solution of an exercise, e.g. 2.22 (--course MAD)
   npm run kb -- document <id>      extracted text of a document (--pages 41-42)
@@ -53,6 +63,8 @@ Schedule options:
   --from <YYYY-MM-DD>  first day to show (default: today)
   --to <YYYY-MM-DD>    last day to show (default: 7 days after --from)
   --all                show the whole academic year
+  --who <name>         schedule of another student, a teacher (acronym), a room, a class or a course group
+  --type <kind>        with --who: student, teacher, room, class or course
   --table              show the week containing --from (default: this week, next week on weekends) as a timetable
   --color <mode>       table colors: auto (default), ansi, emoji or none
   --json               print lessons as JSON
@@ -80,6 +92,7 @@ async function main(): Promise<void> {
       from: { type: "string" },
       to: { type: "string" },
       all: { type: "boolean", default: false },
+      who: { type: "string" },
       json: { type: "boolean", default: false },
       table: { type: "boolean", default: false },
       color: { type: "string", default: "auto" },
@@ -99,8 +112,13 @@ async function main(): Promise<void> {
   });
 
   const command = positionals[0];
-  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest", "kb"].includes(command)) {
+  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest", "kb", "gaps"].includes(command)) {
     console.log(USAGE);
+    return;
+  }
+
+  if (command === "gaps") {
+    console.log(await gapsInfo(positionals.slice(1), { all: values.all, type: values.type, debug: values.debug, mfaCode: values["mfa-code"] }));
     return;
   }
 
@@ -133,7 +151,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  const cache = await loadSchedule(values.refresh, values.debug, values["mfa-code"]);
+  let cache: ScheduleCache;
+  if (values.who) {
+    const other = await loadOtherSchedule(values.who, values.type, values.debug, values["mfa-code"]);
+    console.log(`Horaire : ${other.entity.name} (${other.entity.type})\n`);
+    cache = other.cache;
+  } else {
+    cache = await loadSchedule(values.refresh, values.debug, values["mfa-code"]);
+  }
   const from = values.from ? startOfDay(values.from) : startOfDay(isoDate(new Date()));
   const to = values.to ? addDays(startOfDay(values.to), 1) : addDays(from, 7);
   const lessons = values.all
@@ -167,16 +192,73 @@ async function loadSchedule(refresh: boolean, debug: boolean, mfaCode?: string):
     if (cached && Date.now() - Date.parse(cached.fetchedAt) < CACHE_TTL_MS) return cached;
   }
 
-  const gaps = await withLogin(debug, mfaCode, async (session, creds, resumeFrom) => {
-    const client = new GapsClient(session, loadConfig().gapsStudentId);
-    await client.login(creds, resumeFrom);
-    return client;
-  });
-
+  const gaps = await loginGaps(debug, mfaCode);
   const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
   return cache;
+}
+
+function loginGaps(debug: boolean, mfaCode?: string): Promise<GapsClient> {
+  return withLogin(debug, mfaCode, async (session, creds, resumeFrom) => {
+    const client = new GapsClient(session, loadConfig().gapsStudentId);
+    await client.login(creds, resumeFrom);
+    return client;
+  });
+}
+
+/** Schedule of another student, a teacher (acronym), a room, a class or a course group, found by name. */
+async function loadOtherSchedule(query: string, type: string | undefined, debug: boolean, mfaCode?: string) {
+  if (type && !(type in ENTITY_TYPES)) throw new Error(`Invalid --type "${type}", expected ${Object.keys(ENTITY_TYPES).join(", ")}`);
+  const gaps = await loginGaps(debug, mfaCode);
+  const matches = searchEntities(await listEntities(gaps), query, type as EntityType | undefined);
+  if (matches.length === 0) throw new Error(`Nothing in GAPS matches "${query}". Teachers are listed by acronym (e.g. JHH).`);
+  const exact = matches.filter((m) => m.name.toLowerCase() === query.toLowerCase());
+  if (matches.length > 1 && exact.length !== 1) {
+    throw new Error(`"${query}" matches several schedules, be more precise (or use --type):\n${renderEntities(matches.slice(0, 20))}`);
+  }
+  const entity = exact[0] ?? matches[0];
+  const lessons = await gaps.fetchEntitySchedule(ENTITY_TYPES[entity.type], entity.id);
+  return { entity, cache: { fetchedAt: new Date().toISOString(), lessons } };
+}
+
+/** GAPS information beyond the timetable: study plan, unit and module sheets, grades, absences, entity search. */
+async function gapsInfo(args: string[], options: { all: boolean; type?: string; debug: boolean; mfaCode?: string }): Promise<string> {
+  const [action, ...rest] = args;
+  const usage = "Usage: npm run gaps -- plan [--all] | unit <CODE> | module <CODE> | grades | absences | find <name> [--type …]";
+  if (!action) throw new Error(usage);
+  const gaps = await loginGaps(options.debug, options.mfaCode);
+  switch (action) {
+    case "plan": {
+      const { plan } = await fetchStudentRecord(gaps);
+      const current = `${new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1}`;
+      const years = options.all ? undefined : [...new Set(plan.map((u) => u.year))].filter((y) => y.startsWith(current));
+      return renderPlan(plan, years);
+    }
+    case "unit":
+    case "module": {
+      const code = rest[0];
+      if (!code) throw new Error(usage);
+      const { plan } = await fetchStudentRecord(gaps);
+      const kind = action === "unit" ? "unit" : "module";
+      const entry = plan.find((u) => u[kind].code.toLowerCase() === code.toLowerCase());
+      if (!entry) {
+        const codes = [...new Set(plan.map((u) => u[kind].code))].sort().join(", ");
+        throw new Error(`No ${kind} "${code}" in your study plan. Known ${kind}s: ${codes}`);
+      }
+      return fetchSheet(gaps, entry[kind].sheet, `${entry[kind].name} (${entry[kind].code})`);
+    }
+    case "grades":
+      return renderGrades(await fetchContinuousGrades(gaps), await fetchTranscript(gaps));
+    case "absences":
+      return renderAbsences((await fetchStudentRecord(gaps)).absences);
+    case "find": {
+      if (!rest[0]) throw new Error(usage);
+      return renderEntities(searchEntities(await listEntities(gaps), rest.join(" "), options.type as EntityType | undefined));
+    }
+    default:
+      throw new Error(usage);
+  }
 }
 
 /** Pending Cyberlearn activities: overdue ones, then those due in the next `days` days (all if undefined). */
