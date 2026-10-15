@@ -79,9 +79,8 @@ generated before creating anything new.
 **3. In the terminal**, every feature has a command, e.g. `npm run schedule -- --table`, `npm run gaps -- grades`,
 `npm run deadlines`: see each module's page.
 
-**Other AI assistants.** The knowledge base is also an [MCP](https://modelcontextprotocol.io) server
-(`http://127.0.0.1:8765/mcp`, token in `data/mcp-token`), usable by any MCP client, for instance Claude Desktop, n8n or
-Open WebUI. The skills themselves are Claude Code instructions.
+**Other AI assistants.** Every feature is also exposed by an [MCP](https://modelcontextprotocol.io) server running on
+your computer (`npm run -s mcp`), usable by Claude Desktop, Open WebUI, n8n or any MCP client: see [docs/mcp.md](docs/mcp.md).
 
 ## How your credentials are used
 

@@ -43,7 +43,9 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/rag/`: knowledge base: `db.ts` (pgvector, migrations in `rag/migrations/`), `extract.ts` (docling), `chunk.ts`
   (structure-aware chunking, one chunk per exercise), `embed.ts` (Ollama bge-m3), `sources/` (Cyberlearn, local folders),
   `ingest.ts` (incremental, deduplicated by content hash, curriculum courses = GAPS timetable codes, one run at a time), `search.ts` (hybrid vector + French full-text + exercise numbers)
-- `src/mcp/server.ts`: MCP server (Streamable HTTP, token in `data/mcp-token`) over the knowledge base
+- `src/services.ts`: logic shared by the CLI and the MCP server; `src/mcp/host.ts`: complete MCP server on the host
+  (stdio or `--http` 8766), tools in `src/mcp/tools/`; `src/mcp/server.ts`: knowledge-only MCP server in Docker (8765).
+  Add every new feature both as a CLI command and as an MCP tool
 - `rag/compose.yml`: Docker services (db, embedder, docling for ingestion only, mcp); kept out of the root so Compose
   does not read the root `.env`
 - `data/`: downloaded documents, extracted text and MCP token; `vendor/`: installed programs; never commit them, nor any
