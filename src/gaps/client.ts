@@ -3,7 +3,7 @@ import ical, { type ParameterValue, type VEvent } from "node-ical";
 import { type Credentials, HES_SO_IDP, loginWithEduId } from "../auth/eduid.js";
 import { type Page, Session } from "../http.js";
 
-const GAPS_URL = "https://gaps.heig-vd.ch";
+export const GAPS_URL = "https://gaps.heig-vd.ch";
 const SCHEDULE_URL = `${GAPS_URL}/consultation/horaires/`;
 
 export interface Lesson {
@@ -13,6 +13,10 @@ export interface Lesson {
   location: string;
   description: string;
 }
+
+/** Kinds of GAPS schedules (the `type` parameter of the schedule pages). */
+export const ENTITY_TYPES = { teacher: 1, student: 2, course: 3, room: 4, class: 9 } as const;
+export type EntityType = keyof typeof ENTITY_TYPES;
 
 export class GapsClient {
   private schedulePage?: Page;
@@ -48,15 +52,21 @@ export class GapsClient {
     this.schedulePage = page;
   }
 
-  /** Fetches every lesson of the given academic year (e.g. 2026 for 2026-2027). */
+  /** GAPS id of the logged-in student (or GAPS_STUDENT_ID). */
+  get student(): string {
+    if (!this.schedulePage) throw new Error("Call login() first");
+    const id = this.studentId ?? findStudentId(this.schedulePage.html);
+    if (!id) throw new Error("Could not detect the GAPS student id, set GAPS_STUDENT_ID in .env");
+    return id;
+  }
+
+  /** Fetches every lesson of the given academic year (e.g. 2026 for 2026-2027) of the logged-in student. */
   async fetchSchedule(academicYear = currentAcademicYear()): Promise<Lesson[]> {
-    if (!this.schedulePage) throw new Error("Call login() before fetching the schedule");
+    return this.fetchEntitySchedule(ENTITY_TYPES.student, this.student, academicYear);
+  }
 
-    const studentId = this.studentId ?? findStudentId(this.schedulePage.html);
-    if (!studentId) {
-      throw new Error("Could not detect the GAPS student id, set GAPS_STUDENT_ID in .env");
-    }
-
+  /** Lessons of any GAPS entity (student, teacher, room, class, course group) over the given academic year. */
+  async fetchEntitySchedule(type: number, id: string, academicYear = currentAcademicYear()): Promise<Lesson[]> {
     const lessons: Lesson[] = [];
     // GAPS terms: 1 = autumn semester, 3 = spring semester (0 is the summer term).
     for (const term of [1, 3]) {
@@ -64,8 +74,8 @@ export class GapsClient {
       url.search = new URLSearchParams({
         annee: String(academicYear),
         trimestre: String(term),
-        type: "2",
-        id: studentId,
+        type: String(type),
+        id,
         icalendarversion: "2",
         individual: "1",
       }).toString();
@@ -78,6 +88,26 @@ export class GapsClient {
     }
 
     return lessons.sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  /** A GAPS page (path such as /consultation/notes/bulletin.php?id=…) with the logged-in session. */
+  async page(path: string): Promise<Page> {
+    return this.session.get(new URL(path, GAPS_URL).toString());
+  }
+
+  /**
+   * Calls a server function of a GAPS page the way its JavaScript does (SAJAX): POST rs=<function> and
+   * rsargs=<JSON arguments> to the page; the answer is "+:" followed by JSON ("-:" and a message on errors).
+   */
+  async sajax<T = unknown>(path: string, fn: string, args: unknown[]): Promise<T> {
+    const page = await this.session.submit({
+      action: new URL(path, GAPS_URL).toString(),
+      method: "post",
+      fields: { rs: fn, rsargs: JSON.stringify(args) },
+    });
+    const text = page.html.trim();
+    if (!text.startsWith("+:")) throw new Error(`GAPS ${fn} failed: ${text.slice(2, 200) || "empty answer"}`);
+    return JSON.parse(text.slice(2)) as T;
   }
 }
 
