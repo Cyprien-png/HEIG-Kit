@@ -146,11 +146,15 @@ async function prepareForPandoc(markdown: string, baseDir: string, tmp: string):
       for (const [i, match] of diagrams.entries()) {
         const tab = await browser.newPage();
         await tab.setViewport({ width: 1200, height: 800, deviceScaleFactor: 2 });
-        await tab.setContent(
-          `<pre class="mermaid">${escapeHtml(match[1])}</pre><script src="${asset("mermaid/dist/mermaid.min.js")}"></script>
+        // A file rather than setContent: about:blank pages may not load local (file://) scripts.
+        const page = path.join(tmp, `diagram-${i + 1}.html`);
+        writeFileSync(
+          page,
+          `<!doctype html><meta charset="utf-8"><pre class="mermaid">${escapeHtml(match[1])}</pre>
+           <script src="${asset("mermaid/dist/mermaid.min.js")}"></script>
            <script>mermaid.initialize({ startOnLoad: false }); mermaid.run().finally(() => { window.__rendered = true; });</script>`,
-          { waitUntil: "load" },
         );
+        await tab.goto(pathToFileURL(page).href, { waitUntil: "load" });
         await tab.waitForFunction("window.__rendered === true", { timeout: 60_000 });
         const file = path.join(tmp, `diagram-${i + 1}.png`);
         const svg = await tab.$("pre.mermaid svg");
