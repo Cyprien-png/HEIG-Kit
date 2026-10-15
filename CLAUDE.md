@@ -8,7 +8,16 @@ The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each s
 ## Answering questions about the user's planning, deadlines, courses or homework
 
 Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`),
-`heig:courses` (`skills/courses/SKILL.md`) and `heig:teacher` (`skills/teacher/SKILL.md`, course knowledge base) skills.
+`heig:courses` (`skills/courses/SKILL.md`), `heig:teacher` (`skills/teacher/SKILL.md`, course knowledge base),
+`heig:documents` (`skills/documents/SKILL.md`, PDF/DOCX/HTML) and `heig:visuals` (`skills/visuals/SKILL.md`, manim) skills.
+
+## Modules
+
+HEIG-Kit is a template made of optional modules (campus, knowledge, documents, visuals, shortcuts, claude), installed with
+`npm run setup -- <module…>` (`--status` to check them). Each module is defined in `src/setup/modules/<id>.ts` (install and
+check functions) and registered in `src/setup/registry.ts`; system packages go through `src/setup/system.ts` (Homebrew,
+winget, apt, dnf, pacman) so that every module installs on macOS, Linux and Windows. User documentation is in `docs/`;
+keep `README.md` short.
 Never print or commit the content of `.env` or `.cache/`.
 
 ## Layout
@@ -30,7 +39,11 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/mcp/server.ts`: MCP server (Streamable HTTP, token in `data/mcp-token`) over the knowledge base
 - `rag/compose.yml`: Docker services (db, embedder, docling for ingestion only, mcp); kept out of the root so Compose
   does not read the root `.env`
-- `data/`: downloaded documents, extracted text and MCP token; never commit it
+- `data/`: downloaded documents, extracted text and MCP token; `vendor/`: installed programs; never commit them
+- `modules/documents/`: Markdown → PDF/HTML/DOCX renderer (own package.json: markdown-it, KaTeX, Mermaid, puppeteer;
+  pandoc for DOCX), `npm run doc`
+- `modules/visuals/render.ts`: ManimGL wrapper (`npm run video`); manim and TinyTeX live in `vendor/` (see `src/vendor.ts`)
+- `scripts/setup.ts`: module installer (`npm run setup`)
 - `scripts/update.ts` (`npm run rag:update`) and `scripts/autoupdate.ts` (daily task: launchd, systemd/cron, schtasks)
 - `scripts/mcp-token.ts`: creates the MCP token and prints the `claude mcp add` command
 - `scripts/aliases.ts`: installs the `heig:*` terminal shortcuts (`heig-*` on Windows) in the user's shell configuration
