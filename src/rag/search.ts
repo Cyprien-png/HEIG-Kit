@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { ROOT } from "../paths.js";
 import { type Db, toVector } from "./db.js";
 import { embed } from "./embed.js";
-import { PAGE_BREAK, extractedMarkdownPath } from "./extract.js";
+import { PAGE_BREAK, extractedMarkdownPath, figurePath } from "./extract.js";
 
 export interface SearchFilters {
   /** Timetable course code, e.g. MAD. */
@@ -165,6 +165,20 @@ export async function documentText(db: Db, id: number, pageFrom?: number, pageTo
       .map((page, i) => `--- page ${from + i} ---\n${page.replace(/<!-- image -->\n*/g, "").trim()}`)
       .join("\n\n"),
   };
+}
+
+/** Image file of figure `number` of a document (`[figure <number> …]` in its text), if there is one. */
+export async function figureFile(db: Db, id: number, number: number): Promise<string | undefined> {
+  const { rows } = await db.query<{ content_hash: string }>(
+    "SELECT content_hash FROM documents WHERE id = $1 AND removed_at IS NULL AND content_hash IS NOT NULL",
+    [id],
+  );
+  if (!rows[0] || !(number >= 1)) return undefined;
+  const file = figurePath(rows[0].content_hash, number);
+  return access(file).then(
+    () => file,
+    () => undefined,
+  );
 }
 
 export async function listCourses(db: Db) {

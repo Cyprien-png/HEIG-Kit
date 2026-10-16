@@ -17,6 +17,8 @@ two levels above this skill's base directory (the folder holding `package.json`)
 - `npm --prefix <root> run -s kb -- search "<query>" [--course MAD] [--type lecture|exercises|solutions|exam|lab|planning] [--limit 8]`
 - `npm --prefix <root> run -s kb -- exercise 2.22 [--course MAD]`: statement and, if available, solution
 - `npm --prefix <root> run -s kb -- document <id> [--pages 41-43]`: full text of a document or of pages
+- `npm --prefix <root> run -s kb -- figure <id> <n>`: path of the image of `[figure n …]` of a document; read it
+  (MCP: `get_figure`)
 - `npm --prefix <root> run -s kb -- courses` and `kb -- documents <COURSE> [--type exam]`
 
 Course material is mostly in French: search in French, with the course's vocabulary. Search several times with
@@ -38,7 +40,10 @@ unreachable or empty, say so and suggest `npm --prefix <root> run rag:start` the
    values, then the formal statement. Draw when it helps: ASCII diagrams, tables, step-by-step transformations.
    Example: an order relation as "being an ancestor of" in a family tree, a Hasse diagram as the family tree without
    the shortcuts.
-5. **Formulas.** Extracted text may show `[formule]` or miss a formula: reconstruct it only when certain, otherwise
+5. **Formulas and figures.** `[formule : …]` is the raw text of a formula in the PDF (square matrices row by row,
+   `[1 0; 0 1]`); `[figure n : <labels>]` is a diagram, graph or drawing whose text only has its labels: always look
+   at the figure (`figure`, `get_figure`) before relying on it, e.g. the edges of a Hasse diagram in a solution.
+   Extracted text may still show `[formule]` or miss a formula: reconstruct it only when certain, otherwise
    point to the page of the original document (link) instead of guessing.
 6. **Answer in the user's language** (French by default for these courses) and use LaTeX-free plain notation that reads
    well in a terminal (∀, ∈, ⊆, →, x², √x…).

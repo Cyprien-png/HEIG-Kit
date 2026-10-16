@@ -18,7 +18,7 @@ import { fetchStudentRecord } from "./gaps/student.js";
 import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
 import { openDb } from "./rag/db.js";
-import { documentText, findExercise, formatResults, listCourses, listDocuments, search } from "./rag/search.js";
+import { documentText, figureFile, findExercise, formatResults, listCourses, listDocuments, search } from "./rag/search.js";
 import type { ColorMode } from "./render.js";
 import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
@@ -162,13 +162,17 @@ export async function knowledgeBase(args: string[], course?: string, docType?: s
         if (!doc) return `Document ${rest[0]} not found.`;
         return `# ${doc.title}\n${[doc.course, doc.chapter, doc.docType].filter(Boolean).join(" · ")} · ${doc.pageCount} pages · ${doc.url ?? ""}\n\n${doc.text}`;
       }
+      case "figure": {
+        if (!rest[0] || !rest[1]) throw new Error("Usage: npm run kb -- figure <document-id> <number>");
+        return (await figureFile(db, Number(rest[0]), Number(rest[1]))) ?? `Figure ${rest[1]} of document ${rest[0]} not found.`;
+      }
       case "courses":
         return JSON.stringify(await listCourses(db), null, 2);
       case "documents":
         if (!rest[0]) throw new Error("Usage: npm run kb -- documents <course>");
         return JSON.stringify(await listDocuments(db, rest[0], docType), null, 2);
       default:
-        throw new Error("Usage: npm run kb -- search|exercise|document|courses|documents …");
+        throw new Error("Usage: npm run kb -- search|exercise|document|figure|courses|documents …");
     }
   } catch (error) {
     if (error instanceof Error && /ECONNREFUSED/.test(error.message)) {

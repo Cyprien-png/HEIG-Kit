@@ -1,7 +1,8 @@
+import { readFile } from "node:fs/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Db } from "../../rag/db.js";
-import { documentText, findExercise, formatResults, listCourses, listDocuments, search } from "../../rag/search.js";
+import { documentText, figureFile, findExercise, formatResults, listCourses, listDocuments, search } from "../../rag/search.js";
 
 const MAX_DOCUMENT_CHARS = 60_000;
 const DOC_TYPES = ["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"] as const;
@@ -52,8 +53,9 @@ export function registerKnowledgeTools(server: McpServer, db: Db): void {
       title: "Read a document",
       description:
         "Extracted text of an indexed document (id from search results or list_documents), optionally limited to pages. " +
-        "Use it to read a whole chapter before writing exercises or an exam. Formulas that could not be extracted " +
-        "appear as [formule] or are missing: the original is at the document's link.",
+        "Use it to read a whole chapter before writing exercises or an exam. Formulas appear as [formule : …], their " +
+        "raw text (square matrices row by row: [1 0; 0 1]), or as [formule] when even that is missing: the original " +
+        "is at the document's link. Figures appear as [figure <n> : <labels>]: see them with get_figure.",
       inputSchema: {
         document_id: z.number().int(),
         page_from: z.number().int().min(1).optional(),
@@ -73,6 +75,32 @@ export function registerKnowledgeTools(server: McpServer, db: Db): void {
           truncated ? `\n[truncated: request a narrower page range]` : "",
         ].join("\n\n"),
       );
+    },
+  );
+
+  server.registerTool(
+    "get_figure",
+    {
+      title: "See a figure",
+      description:
+        "Image of a figure of an indexed document: diagrams, graphs, drawings and plots are only labels in the text, " +
+        "[figure <n> : <labels>] in search results and documents. Look at it before explaining or correcting anything " +
+        "that depends on the figure (edges of a graph or of a Hasse diagram, curves, schemas).",
+      inputSchema: {
+        document_id: z.number().int().describe("Document id, from search results or list_documents"),
+        number: z.number().int().min(1).describe("Figure number n of [figure n …]"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ document_id, number }) => {
+      const file = await figureFile(db, document_id, number);
+      if (!file) return text(`Figure ${number} of document ${document_id} not found.`);
+      return {
+        content: [
+          { type: "image" as const, data: (await readFile(file)).toString("base64"), mimeType: "image/png" },
+          { type: "text" as const, text: `Figure ${number} of document ${document_id}` },
+        ],
+      };
     },
   );
 

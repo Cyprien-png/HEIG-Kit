@@ -93,6 +93,7 @@ as a `Bearer` authorization header. Other MCP clients (Claude Desktop, n8n…) c
 | `search_course_material` | Searches by meaning and keywords, optionally filtered by course and document type |
 | `get_exercise` | Statement and solution of a numbered exercise, e.g. `2.22` in `MAD` |
 | `get_document` | Extracted text of a document or of a page range |
+| `get_figure` | Image of a figure of a document (diagram, graph, drawing), `[figure n]` in the text |
 | `list_courses`, `list_documents` | What is indexed |
 
 The same queries are available from the terminal, and are used by the Claude Code skills when the MCP server is not
@@ -102,12 +103,17 @@ registered:
 npm run kb -- search "diagramme de Hasse" --course MAD
 npm run kb -- exercise 2.22 --course MAD
 npm run kb -- document 3 --pages 41-42
+npm run kb -- figure 3 2              # image file of [figure 2] of document 3
 npm run kb -- documents MAD --type exam
 ```
 
 ## Limitations
 
-- Mathematical formulas that cannot be extracted appear as `[formule]`; the original document is linked in every result.
+- Formulas are indexed as the raw text of the PDF, `[formule : …]`, with square matrices written row by row
+  (`[1 0; 0 1]`); complex notation may come out approximately, and a formula with no text at all stays `[formule]`.
+  The original document is linked in every result.
+- Figures (diagrams, graphs, plots) are saved as images in `data/extracted/<hash>/` and appear in the text as
+  `[figure n : <labels>]`: only their labels are searchable, the assistant looks at the image with `get_figure`.
 - Scanned documents (images without text) are not supported yet.
 - Videos, archives and other non-document files are not indexed.
 
