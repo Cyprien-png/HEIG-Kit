@@ -6,7 +6,7 @@ import { ROOT } from "../paths.js";
 import { type Chunk, chunkMarkdown } from "./chunk.js";
 import { type Db, toVector, transaction } from "./db.js";
 import { embed } from "./embed.js";
-import { extractMarkdown } from "./extract.js";
+import { EXTRACTOR_VERSION, extractMarkdown } from "./extract.js";
 import type { SourceDocument } from "./sources/source.js";
 
 export interface IngestStats {
@@ -36,6 +36,7 @@ interface Existing {
   external_id: string;
   version: string;
   content_hash: string | null;
+  extractor_version: number | null;
 }
 
 /**
@@ -47,20 +48,24 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
   const stats: IngestStats = { listed: documents.length, unchanged: 0, indexed: 0, linked: 0, removed: 0, failed: 0, chunks: 0 };
   const existing = new Map(
     (
-      await db.query<Existing>("SELECT external_id, version, content_hash FROM documents WHERE source = $1 AND removed_at IS NULL", [source])
+      await db.query<Existing>(
+        `SELECT d.external_id, d.version, d.content_hash, c.extractor_version
+         FROM documents d LEFT JOIN contents c USING (content_hash) WHERE d.source = $1 AND d.removed_at IS NULL`,
+        [source],
+      )
     ).rows.map((row) => [row.external_id, row]),
   );
 
   for (const [i, doc] of documents.entries()) {
     const label = `[${i + 1}/${documents.length}] ${[doc.courseCode, doc.title].filter(Boolean).join(" · ")}`;
     const known = existing.get(doc.externalId);
-    if (known?.content_hash && known.version === doc.version) {
+    if (known?.content_hash && known.version === doc.version && (known.extractor_version ?? 0) >= EXTRACTOR_VERSION) {
       stats.unchanged++;
       if (!options.dryRun) await upsertDocument(db, doc, known.content_hash);
       continue;
     }
     if (options.dryRun) {
-      log(`${label}: ${known ? "changed" : "new"}`);
+      log(`${label}: ${!known ? "new" : known.version === doc.version ? "to extract again" : "changed"}`);
       continue;
     }
 
@@ -72,7 +77,8 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
         await writeFile(file, bytes);
       }
       const hash = createHash("sha256").update(bytes).digest("hex");
-      const indexed = (await db.query("SELECT 1 FROM contents WHERE content_hash = $1", [hash])).rowCount === 1;
+      const indexed =
+        (await db.query("SELECT 1 FROM contents WHERE content_hash = $1 AND extractor_version >= $2", [hash, EXTRACTOR_VERSION])).rowCount === 1;
       if (indexed) {
         await upsertDocument(db, doc, hash);
         stats.linked++;
@@ -84,7 +90,13 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
       const chunks = chunkMarkdown(markdown, { exercises: ["exercises", "solutions", "exam"].includes(doc.docType) });
       const vectors = await embed(chunks.map((chunk) => contextualize(doc, chunk)));
       await transaction(db, async (client) => {
-        await client.query("INSERT INTO contents (content_hash) VALUES ($1)", [hash]);
+        // Content extracted by an older version: its chunks are replaced.
+        await client.query(
+          `INSERT INTO contents (content_hash, extractor_version) VALUES ($1, $2)
+           ON CONFLICT (content_hash) DO UPDATE SET extractor_version = EXCLUDED.extractor_version`,
+          [hash, EXTRACTOR_VERSION],
+        );
+        await client.query("DELETE FROM chunks WHERE content_hash = $1", [hash]);
         if (chunks.length > 0) {
           await client.query(
             `INSERT INTO chunks (content_hash, ordinal, page_from, page_to, heading_path, exercise, text, embedding)

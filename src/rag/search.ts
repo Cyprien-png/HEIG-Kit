@@ -3,7 +3,7 @@ import path from "node:path";
 import { ROOT } from "../paths.js";
 import { type Db, toVector } from "./db.js";
 import { embed } from "./embed.js";
-import { PAGE_BREAK } from "./extract.js";
+import { PAGE_BREAK, extractedMarkdownPath } from "./extract.js";
 
 export interface SearchFilters {
   /** Timetable course code, e.g. MAD. */
@@ -145,7 +145,11 @@ export async function documentText(db: Db, id: number, pageFrom?: number, pageTo
   );
   const doc = rows[0];
   if (!doc) return undefined;
-  const pages = (await readFile(path.join(ROOT, "data", "extracted", `${doc.content_hash}.md`), "utf-8")).split(PAGE_BREAK);
+  // Documents not extracted again since version 1 of the extraction keep their former file until the next ingestion.
+  const markdown = await readFile(extractedMarkdownPath(doc.content_hash), "utf-8").catch(() =>
+    readFile(path.join(ROOT, "data", "extracted", `${doc.content_hash}.md`), "utf-8"),
+  );
+  const pages = markdown.split(PAGE_BREAK);
   const from = Math.max(1, pageFrom ?? 1);
   const to = Math.min(pages.length, pageTo ?? pages.length);
   return {

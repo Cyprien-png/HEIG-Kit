@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ROOT } from "../paths.js";
 
@@ -8,6 +8,14 @@ const EXTRACTED_DIR = path.join(ROOT, "data", "extracted");
 const POLL_SECONDS = 10;
 /** docling may answer a poll before `wait` elapses: never poll more often than this. */
 const MIN_POLL_INTERVAL_MS = 2000;
+/** Longest list of figure labels kept in the text (node names, axis labels…). */
+const MAX_FIGURE_LABELS_CHARS = 300;
+
+/**
+ * Version of the extraction. Raising it makes the next ingestion convert and index every document again.
+ * 2: formulas as their raw text (matrices row by row) and figures saved as images with their labels.
+ */
+export const EXTRACTOR_VERSION = 2;
 
 /** Placed between pages in the extracted markdown, so chunks can keep page numbers. */
 export const PAGE_BREAK = "<!-- page break -->";
@@ -15,21 +23,40 @@ export const PAGE_BREAK = "<!-- page break -->";
 /** File types docling converts; other files (archives, videos, captures…) are not indexed. */
 export const EXTRACTABLE = /\.(pdf|docx|pptx|xlsx|html?|md|txt)$/i;
 
+export function extractedMarkdownPath(contentHash: string): string {
+  return path.join(EXTRACTED_DIR, `${contentHash}.v${EXTRACTOR_VERSION}.md`);
+}
+
+/** Figure `number` (1-based, in reading order) of a document, as referenced by `[figure <number> …]` in its text. */
+export function figurePath(contentHash: string, number: number): string {
+  return path.join(EXTRACTED_DIR, contentHash, `figure-${number}.png`);
+}
+
 /**
  * Converts a document to markdown with docling, pages separated by `PAGE_BREAK`. Results are cached in
  * data/extracted by content hash: a document is only converted once, even across ingestion runs.
  */
 export async function extractMarkdown(bytes: Buffer, filename: string, contentHash: string): Promise<string> {
-  const cached = path.join(EXTRACTED_DIR, `${contentHash}.md`);
+  const cached = extractedMarkdownPath(contentHash);
   try {
     return await readFile(cached, "utf-8");
   } catch {
     // Not converted yet.
   }
 
-  const markdown = /\.(md|txt)$/i.test(filename) ? bytes.toString("utf-8") : await convert(bytes, filename);
+  let markdown: string;
+  if (/\.(md|txt)$/i.test(filename)) {
+    markdown = bytes.toString("utf-8");
+  } else {
+    const converted = enrichMarkdown(...(await convert(bytes, filename)));
+    markdown = converted.markdown;
+    await rm(path.join(EXTRACTED_DIR, contentHash), { recursive: true, force: true });
+    if (converted.figures.length > 0) await mkdir(path.join(EXTRACTED_DIR, contentHash), { recursive: true });
+    for (const [i, png] of converted.figures.entries()) await writeFile(figurePath(contentHash, i + 1), png);
+  }
   await mkdir(EXTRACTED_DIR, { recursive: true });
   await writeFile(cached, markdown);
+  await rm(path.join(EXTRACTED_DIR, `${contentHash}.md`), { force: true }); // extraction of version 1
   return markdown;
 }
 
@@ -41,15 +68,126 @@ export async function isDoclingAvailable(): Promise<boolean> {
   }
 }
 
+/** The parts of docling's JSON document used here. */
+interface DoclingNode {
+  label?: string;
+  text?: string;
+  orig?: string;
+  children?: { $ref: string }[];
+  prov?: { page_no: number }[];
+  image?: { uri?: string } | null;
+}
+export interface DoclingDocument {
+  body: DoclingNode;
+  texts: DoclingNode[];
+  pictures: DoclingNode[];
+  groups?: DoclingNode[];
+  tables?: DoclingNode[];
+}
+
+const FORMULA_PLACEHOLDER = "<!-- formula-not-decoded -->";
+/** A picture in docling's markdown: a placeholder, or the image itself when images are embedded. */
+const PICTURE = /<!-- image -->|!\[[^\]]*\]\(data:image\/[^)]*\)/g;
+
+/**
+ * Puts back what docling's markdown leaves out: formulas it cannot turn into LaTeX become their raw text from the
+ * PDF (`[formule : …]`), and pictures become `[figure <n> : <labels>]`, their image being returned to be saved.
+ * Formulas and pictures appear in the markdown in the order of the document's body; if the counts disagree, the
+ * placeholders are left as they are rather than risk attaching a formula to the wrong place.
+ */
+export function enrichMarkdown(markdown: string, document: DoclingDocument | undefined): { markdown: string; figures: Buffer[] } {
+  if (!document) return { markdown: markdown.replace(PICTURE, "<!-- image -->"), figures: [] };
+  const formulas: DoclingNode[] = [];
+  const pictures: DoclingNode[] = [];
+  const resolve = (ref: string): DoclingNode | undefined => {
+    const [, kind, index] = ref.split("/");
+    return (document[kind as keyof DoclingDocument] as DoclingNode[] | undefined)?.[Number(index)];
+  };
+  const walk = (node: DoclingNode, kind: string) => {
+    if (kind === "pictures") return void pictures.push(node);
+    if (kind === "tables") return; // rendered by docling itself, cells included
+    if (node.label === "formula" && !node.text) formulas.push(node);
+    for (const child of node.children ?? []) {
+      const resolved = resolve(child.$ref);
+      if (resolved) walk(resolved, child.$ref.split("/")[1]);
+    }
+  };
+  walk(document.body, "body");
+
+  let result = markdown;
+  if (result.split(FORMULA_PLACEHOLDER).length - 1 === formulas.length) {
+    let i = 0;
+    result = result.replaceAll(FORMULA_PLACEHOLDER, () => {
+      const text = formulaText(formulas[i++].orig ?? "");
+      return text ? `[formule : ${text}]` : FORMULA_PLACEHOLDER;
+    });
+  }
+
+  const figures: Buffer[] = [];
+  if ((result.match(PICTURE) ?? []).length === pictures.length) {
+    let i = 0;
+    result = result.replace(PICTURE, () => {
+      const picture = pictures[i++];
+      const uri = picture.image?.uri ?? "";
+      if (!uri.startsWith("data:image/png;base64,")) return "<!-- image -->";
+      figures.push(Buffer.from(uri.slice(uri.indexOf(",") + 1), "base64"));
+      const labels = (picture.children ?? [])
+        .map((child) => resolve(child.$ref)?.text ?? "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, MAX_FIGURE_LABELS_CHARS);
+      return `[figure ${figures.length}${labels ? ` : ${labels}` : ""}]`;
+    });
+  } else {
+    result = result.replace(PICTURE, "<!-- image -->");
+  }
+  return { markdown: result, figures };
+}
+
+/**
+ * Pieces of big brackets in the private use area of the Symbol font (U+F8EB to U+F8FE), where many PDFs leave them,
+ * as their Unicode characters; the integral extender (U+F8F5) is dropped.
+ */
+const SYMBOL_FONT_PIECES = [..."⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪", "", ..."⎞⎟⎠⎤⎥⎦⎫⎬⎭"];
+
+/**
+ * Makes the raw text of a formula readable: PDFs draw big brackets with pieces (⎡ ⎢ ⎣), and a matrix's entries
+ * come row after row, so a square matrix is written back as rows, e.g. `[1 0; 0 1]`.
+ */
+export function formulaText(raw: string): string {
+  return raw
+    .replace(/[\uf8eb-\uf8fe]/g, (c) => SYMBOL_FONT_PIECES[c.charCodeAt(0) - 0xf8eb] ?? c)
+    .replace(/([⎡⎛])[⎢⎜\s]*[⎣⎝]([^⎡⎛⎤⎞]*?)[⎤⎞][⎥⎟\s]*[⎦⎠]/g, (_, open: string, inner: string) => {
+      const [left, right] = open === "⎛" ? ["(", ")"] : ["[", "]"];
+      const entries = inner.trim().split(/\s+/).filter(Boolean);
+      const size = Math.round(Math.sqrt(entries.length));
+      if (size < 2 || size * size !== entries.length) return `${left}${entries.join(" ")}${right}`;
+      const rows = Array.from({ length: size }, (_, r) => entries.slice(r * size, (r + 1) * size).join(" "));
+      return `${left}${rows.join("; ")}${right}`;
+    })
+    .replace(/[⎧⎨⎩⎪]+/g, "{")
+    .replace(/[⎫⎬⎭]+/g, "}")
+    .replace(/[⎡⎢⎣]+/g, "[")
+    .replace(/[⎤⎥⎦]+/g, "]")
+    .replace(/[⎛⎜⎝]+/g, "(")
+    .replace(/[⎞⎟⎠]+/g, ")")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Asynchronous conversion (submit, then poll): large documents take longer than an HTTP request may wait. */
-async function convert(bytes: Buffer, filename: string): Promise<string> {
+async function convert(bytes: Buffer, filename: string): Promise<[string, DoclingDocument | undefined]> {
   const form = new FormData();
   form.append("files", new Blob([new Uint8Array(bytes)]), filename);
   form.append("to_formats", "md");
+  form.append("to_formats", "json");
   // Course documents are text PDFs: OCR would only slow conversion down. Scanned documents are not supported yet.
   form.append("do_ocr", "false");
-  form.append("image_export_mode", "placeholder");
-  form.append("include_images", "false");
+  // Figures come embedded in the JSON document, to be saved as images.
+  form.append("image_export_mode", "embedded");
+  form.append("include_images", "true");
+  form.append("images_scale", "2");
   form.append("do_pdf_heading_hierarchy", "true");
   form.append("md_page_break_placeholder", PAGE_BREAK);
 
@@ -71,7 +209,7 @@ async function convert(bytes: Buffer, filename: string): Promise<string> {
   }
 
   const result = (await (await fetch(`${DOCLING_URL}/v1/result/${task_id}`)).json()) as {
-    document?: { md_content?: string };
+    document?: { md_content?: string; json_content?: DoclingDocument };
   };
-  return result.document?.md_content ?? "";
+  return [result.document?.md_content ?? "", result.document?.json_content];
 }
