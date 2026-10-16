@@ -80,7 +80,7 @@ export async function search(db: Db, query: string, filters: SearchFilters = {})
      FROM fused f JOIN chunks c ON c.id = f.id JOIN active a USING (content_hash)
      ORDER BY f.score DESC
      LIMIT $6`,
-    [toVector(vector), filters.course ?? null, filters.docType ?? null, query, exercises, filters.limit ?? 8],
+    [toVector(vector), filters.course ?? null, filters.docType ?? null, query, exercises, filters.limit ?? 6],
   );
   return rows.map((row) => ({
     score: Number(row.score),
@@ -200,17 +200,30 @@ export async function listDocuments(db: Db, course: string, docType?: string) {
   return rows.map((r) => ({ id: Number(r.id), title: r.title, docType: r.doc_type, chapter: r.chapter, uploadedAt: r.uploaded_at, url: r.url }));
 }
 
-/** Search results as text: where each passage comes from (course, chapter, document, pages, exercise), then the passage. */
+/**
+ * Search results as text, grouped by document in order of first appearance: one header per document (course, chapter,
+ * title, kind, id, link), then each of its passages with pages, exercise and headings. Repeating the header for every
+ * passage only costs the model tokens.
+ */
 export function formatResults(results: SearchResult[]): string {
-  return results
-    .map((r, i) => {
-      const where = [r.course, r.chapter, `${r.title} (${r.docType})`, r.pages && `p. ${r.pages}`, r.exercise && `ex. ${r.exercise}`]
-        .filter(Boolean)
-        .join(" · ");
-      const heading = r.headingPath ? `\n${r.headingPath}` : "";
-      return `[${i + 1}] ${where}${heading}\n${r.text}\n(document ${r.documentId}${r.url ? `, ${r.url}` : ""})`;
+  const byDocument = new Map<number, SearchResult[]>();
+  for (const r of results) byDocument.set(r.documentId, [...(byDocument.get(r.documentId) ?? []), r]);
+  return [...byDocument.values()]
+    .map((passages) => {
+      const d = passages[0];
+      const title = [d.course, d.chapter, `${d.title} (${d.docType})`, `document ${d.documentId}`, d.url].filter(Boolean).join(" · ");
+      const texts = passages.map((r) => {
+        const where = [r.pages && `p. ${r.pages}`, r.exercise && `ex. ${r.exercise}`, r.headingPath].filter(Boolean).join(" · ");
+        return `### ${where}\n${r.text}`;
+      });
+      return [`## ${title}`, ...texts].join("\n\n");
     })
-    .join("\n\n---\n\n");
+    .join("\n\n");
+}
+
+/** Documents of a course as text, one per line: id, kind, chapter and title. */
+export function formatDocuments(documents: { id: number; title: string; docType: string; chapter: string | null }[]): string {
+  return documents.map((d) => `${d.id} · ${d.docType} · ${d.chapter ?? "-"} · ${d.title}`).join("\n");
 }
 
 function pageRange(from: number | null, to: number | null): string {

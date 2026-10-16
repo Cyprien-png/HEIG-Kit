@@ -18,7 +18,16 @@ import { fetchStudentRecord } from "./gaps/student.js";
 import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
 import { openDb } from "./rag/db.js";
-import { documentText, figureFile, findExercise, formatResults, listCourses, listDocuments, search } from "./rag/search.js";
+import {
+  documentText,
+  figureFile,
+  findExercise,
+  formatDocuments,
+  formatResults,
+  listCourses,
+  listDocuments,
+  search,
+} from "./rag/search.js";
 import type { ColorMode } from "./render.js";
 import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
@@ -170,7 +179,7 @@ export async function knowledgeBase(args: string[], course?: string, docType?: s
         return JSON.stringify(await listCourses(db), null, 2);
       case "documents":
         if (!rest[0]) throw new Error("Usage: npm run kb -- documents <course>");
-        return JSON.stringify(await listDocuments(db, rest[0], docType), null, 2);
+        return formatDocuments(await listDocuments(db, rest[0], docType)) || `No documents for ${rest[0]}.`;
       default:
         throw new Error("Usage: npm run kb -- search|exercise|document|figure|courses|documents …");
     }

@@ -27,7 +27,7 @@ const USAGE = `Usage:
   npm run gaps -- grades           continuous assessment grades and transcript
   npm run gaps -- absences         absences per unit
   npm run gaps -- find <name>      search students, teachers, rooms, classes and course groups (--type)
-  npm run kb -- search <query>     search the indexed course material (--course MAD, --type exam, --limit 8)
+  npm run kb -- search <query>     search the indexed course material (--course MAD, --type exam, --limit 6)
   npm run kb -- exercise <number>  statement and solution of an exercise, e.g. 2.22 (--course MAD)
   npm run kb -- document <id>      extracted text of a document (--pages 41-42)
   npm run kb -- figure <id> <n>    image file of [figure n] of a document (diagram, graph, drawing)

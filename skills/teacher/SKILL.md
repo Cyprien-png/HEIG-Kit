@@ -14,7 +14,7 @@ Prefer the MCP tools of the `heig-kit` server when they are available (`search_c
 `get_document`, `list_courses`, `list_documents`). Otherwise use the equivalent commands; `<root>` is the plugin root,
 two levels above this skill's base directory (the folder holding `package.json`):
 
-- `npm --prefix <root> run -s kb -- search "<query>" [--course MAD] [--type lecture|exercises|solutions|exam|lab|planning] [--limit 8]`
+- `npm --prefix <root> run -s kb -- search "<query>" [--course MAD] [--type lecture|exercises|solutions|exam|lab|planning] [--limit 6]`
 - `npm --prefix <root> run -s kb -- exercise 2.22 [--course MAD]`: statement and, if available, solution
 - `npm --prefix <root> run -s kb -- document <id> [--pages 41-43]`: full text of a document or of pages
 - `npm --prefix <root> run -s kb -- figure <id> <n>`: path of the image of `[figure n …]` of a document; read it
