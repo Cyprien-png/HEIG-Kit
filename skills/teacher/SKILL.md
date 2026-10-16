@@ -76,7 +76,8 @@ existing document or video on the topic (`generated -- --open <file>`) before cr
 - When the user wants something to keep, print or share (exercise sheet, revision sheet, practice exam), export it with
   the `heig:documents` skill (PDF, DOCX), keeping the formulas in LaTeX and diagrams in Mermaid.
 - When a concept is easier to grasp in motion (a construction, a transformation, a limit, a graph that evolves), offer
-  an animation with the `heig:visuals` skill, and embed it in the document when there is one.
+  an animation with the `heig:visuals` skill, and embed it in the document when there is one. The video opens by
+  itself as soon as it is rendered: write your explanation while it renders, never hold the video back for it.
 
 ## Correcting the user's answer
 

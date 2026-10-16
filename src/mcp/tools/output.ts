@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -92,38 +92,45 @@ export function registerOutputTools(server: McpServer): void {
       title: "Create an animation",
       description:
         "Writes a ManimGL scene (3b1b/manim 1.7: `from manimlib import *`, ShowCreation not Create, Tex(r\"…\") for math, " +
-        "Text/TexText for text) to the user's videos folder, renders it to MP4 and opens it. On failure, returns manim's " +
-        "error so you can fix the code and call again. Give each Scene class a one-line docstring saying what it shows. " +
-        "Requires the visuals module.",
+        "Text/TexText for text, colored with .set_color() since Text(color=…) is ignored) to the user's videos folder, " +
+        "checks it, renders it to MP4 and opens it as soon as it is ready, then returns an image of its key frames to check " +
+        "the layout. Ready-made pieces: `from heigkit_manim import *` (title_card, Panel, colored, live_value, approach, " +
+        "hole, vertical_asymptote, sign_line, value_table, UnitCircle, recap, source_line). Never create Text or Tex inside " +
+        "always_redraw or an updater. On failure, returns manim's error so you can fix the code and call again. Give each " +
+        "Scene class a one-line docstring saying what it shows. Requires the visuals module.",
       inputSchema: {
         name: z.string().describe("File name without spaces, e.g. divisibilite_antisymetrie"),
         code: z.string().describe("Python source of the scene(s)"),
         scene: z.string().describe("Name of the Scene class to render"),
-        quality: z.enum(["low", "medium", "high"]).optional().describe("low for a quick check, medium by default"),
+        quality: z.enum(["low", "medium", "high"]).optional().describe("medium (720p) by default"),
         open: z.boolean().optional().describe("Open the video (default: true)"),
       },
     },
-    async (a) =>
-      respond(async () => {
-        const folder = outputDir("videos");
-        await mkdir(folder, { recursive: true });
-        const source = path.join(folder, `${fileName(a.name)}.py`);
-        await writeFile(source, a.code);
-        const args = [TSX, path.join(ROOT, "modules", "visuals", "render.ts"), source, a.scene, "--quality", a.quality ?? "medium"];
-        if (a.open !== false) args.push("--open");
-        try {
-          const { stdout } = await run(process.execPath, args, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PYTHONWARNINGS: "ignore" } });
-          // manim's progress bar also prints file names: keep the paths of files that exist.
-          const videos = stdout
-            .split(/[\r\n]+/)
-            .map((l) => l.trim())
-            .filter((l) => /\.(mp4|mov|gif)$/.test(l) && path.isAbsolute(l) && existsSync(l));
-          return `Scene: ${source}\nVideo: ${videos.join(", ") || "(see the videos folder)"}`;
-        } catch (error) {
-          const output = error as { stdout?: string; stderr?: string };
-          const log = `${output.stderr ?? ""}\n${output.stdout ?? ""}`.replace(/\r/g, "\n").split("\n").filter((l) => l.trim() && !/it\/s\]|\d+%\|/.test(l));
-          throw new Error(`Rendering failed. Scene file: ${source}\n${log.slice(-40).join("\n")}`);
-        }
-      }),
+    async (a) => {
+      const folder = outputDir("videos");
+      await mkdir(folder, { recursive: true });
+      const source = path.join(folder, `${fileName(a.name)}.py`);
+      await writeFile(source, a.code);
+      const args = [TSX, path.join(ROOT, "modules", "visuals", "render.ts"), source, a.scene, "--quality", a.quality ?? "medium", "--frames"];
+      if (a.open !== false) args.push("--open");
+      try {
+        const { stdout } = await run(process.execPath, args, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PYTHONWARNINGS: "ignore" } });
+        const lines = stdout.split(/[\r\n]+/).map((l) => l.trim());
+        const videos = lines.filter((l) => /\.(mp4|mov|gif)$/.test(l) && path.isAbsolute(l) && existsSync(l));
+        const frames = lines.find((l) => l.startsWith("Frames: "))?.slice("Frames: ".length);
+        const summary = `Scene: ${source}\nVideo: ${videos.join(", ") || "(see the videos folder)"}${a.open !== false ? " (opened)" : ""}`;
+        if (!frames || !existsSync(frames)) return { content: [{ type: "text" as const, text: summary }] };
+        return {
+          content: [
+            { type: "text" as const, text: `${summary}\nKey frames of the video (3 per row): check the layout, fix the scene and render again if needed.` },
+            { type: "image" as const, data: (await readFile(frames)).toString("base64"), mimeType: "image/png" },
+          ],
+        };
+      } catch (error) {
+        const output = error as { stdout?: string; stderr?: string };
+        const log = `${output.stderr ?? ""}\n${output.stdout ?? ""}`.replace(/\r/g, "\n").split("\n").filter((l) => l.trim() && !/it\/s\]|\d+%\|/.test(l));
+        return { content: [{ type: "text" as const, text: `Rendering failed. Scene file: ${source}\n${log.slice(-40).join("\n")}` }], isError: true };
+      }
+    },
   );
 }
