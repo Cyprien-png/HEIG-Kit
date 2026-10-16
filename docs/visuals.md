@@ -28,7 +28,8 @@ npm run video -- scene.py MyScene --jobs 2          # parallel parts (default: h
 npm run video -- --where                            # default folder used by the assistant
 ```
 
-A scene is first run without rendering (dry run): errors show up in seconds, and the duration of each animation is
+A scene is first run without rendering (dry run): errors show up in seconds, the layout is checked at the end of every
+animation (texts over each other, a line through a text, something off screen), and the duration of each animation is
 measured. Its frames are then rendered in parallel parts of similar length (`manimgl -n start,end`), joined with FFmpeg
 without re-encoding: a 1 min 40 video renders in about 15 to 30 seconds instead of one minute on an 8-core Mac.
 

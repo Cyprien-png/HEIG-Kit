@@ -94,8 +94,8 @@ export function registerOutputTools(server: McpServer): void {
       description:
         "Writes a ManimGL scene (3b1b/manim 1.7: `from manimlib import *`, ShowCreation not Create, Tex(r\"…\") for math, " +
         "Text/TexText for text, colored with .set_color() since Text(color=…) is ignored) to the user's videos folder, " +
-        "checks it, renders it to MP4 and opens it as soon as it is ready, then returns an image of its key frames to check " +
-        "the layout. Ready-made pieces: `from heigkit_manim import *` (title_card, Panel, colored, live_value, approach, " +
+        "checks it, renders it to MP4 and opens it as soon as it is ready, then returns its layout problems (texts over each " +
+        "other, lines through texts, off screen) and an image of its key frames: fix them and call again. Ready-made pieces: `from heigkit_manim import *` (title_card, Panel, colored, live_value, approach, " +
         "hole, vertical_asymptote, sign_line, value_table, UnitCircle, recap, source_line). Never create Text or Tex inside " +
         "always_redraw or an updater. On failure, returns manim's error so you can fix the code and call again. Give each " +
         "Scene class a one-line docstring saying what it shows. Requires the visuals module.",
@@ -119,7 +119,13 @@ export function registerOutputTools(server: McpServer): void {
         const lines = stdout.split(/[\r\n]+/).map((l) => l.trim());
         const videos = lines.filter((l) => /\.(mp4|mov|gif)$/.test(l) && path.isAbsolute(l) && existsSync(l));
         const frames = lines.find((l) => l.startsWith("Frames: "))?.slice("Frames: ".length);
-        const summary = `Scene: ${source}\nVideo: ${videos.join(", ") || "(see the videos folder)"}${a.open !== false ? " (opened)" : ""}`;
+        // Layout problems found by the dry run (texts over each other, lines through texts, off screen).
+        const layout = lines.filter((l) => l.startsWith("Layout:") || l.startsWith("- animation"));
+        const summary = [
+          `Scene: ${source}`,
+          `Video: ${videos.join(", ") || "(see the videos folder)"}${a.open !== false ? " (opened)" : ""}`,
+          ...layout,
+        ].join("\n");
         if (!frames || !existsSync(frames)) return { content: [{ type: "text" as const, text: summary }] };
         return {
           content: [

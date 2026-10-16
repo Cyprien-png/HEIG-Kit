@@ -27,8 +27,10 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
    a one-line docstring saying what it shows (used to find it again later). Build it from `heigkit_manim` (below):
    shorter to write, fewer layout mistakes, faster to render.
 3. Check it in a few seconds: `npm --prefix <root> run -s video -- <file.py> <SceneName> --check` runs the scene
-   without rendering it (Python, LaTeX and position errors) and prints the image of its last frame. Fix and check again
-   until it passes. No low-quality preview render: it costs as much time as the real one.
+   without rendering it (Python and LaTeX errors) and lists its layout problems at the end of each animation: texts
+   over each other, a line or curve through a text, something off screen, with the time in the video. Fix every problem
+   that is not intended (move or shorten a text, fade an object out earlier) and check again until it passes. No
+   low-quality preview render: it costs as much time as the real one.
 4. Render the final video directly: `npm --prefix <root> run -s video -- <file.py> <SceneName> --open --frames`
    (720p; parts rendered in parallel). **The video opens by itself as soon as it is rendered**: never hold it back until
    your explanation is written. In Claude Code, run this command in the background and write the explanation to the

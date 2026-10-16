@@ -1,18 +1,25 @@
 """
 Dry run of a ManimGL scene: `python plan.py <manimgl arguments> -s -w` runs the scene without rendering its frames (a few
-seconds), saves its last frame, and writes to the JSON file named by HEIGKIT_PLAN the duration of each animation (every
-play and wait, in order), so that render.ts can split the rendering into balanced parts (manimgl -n start,end).
+seconds), saves its last frame, and writes to the JSON file named by HEIGKIT_PLAN:
+- "durations": the duration of each animation (every play and wait, in order), so that render.ts can split the rendering
+  into balanced parts (manimgl -n start,end);
+- "layout": the layout problems found at the end of each animation (layout.py), each reported once, when it appears.
 """
 import atexit
 import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.argv = ["manimgl", *sys.argv[1:]]  # manimlib reads its command line when imported
 
 from manimlib.scene.scene import Scene  # noqa: E402
 
+import layout  # noqa: E402
+
 durations: list[float] = []
+problems: list[dict] = []
+current: set[str] = set()
 play_progression = Scene.get_animation_time_progression
 wait_progression = Scene.get_wait_time_progression
 
@@ -28,14 +35,31 @@ def record_wait(self, duration, stop_condition=None):
     return wait_progression(self, duration, stop_condition)
 
 
+post_play = Scene.post_play
+
+
+def check_layout(self):
+    """After each animation: the layout problems that were not there after the previous one."""
+    post_play(self)
+    global current
+    try:
+        found = set(layout.check(self))
+    except Exception as error:  # a check must never stop the scene
+        found = {f"vérification impossible : {error}"}
+    for warning in sorted(found - current):
+        problems.append({"animation": len(durations) - 1, "time": round(sum(durations), 1), "warning": warning})
+    current = found
+
+
 Scene.get_animation_time_progression = record_play
 Scene.get_wait_time_progression = record_wait
+Scene.post_play = check_layout
 
 
 @atexit.register
 def write_plan():
     with open(os.environ["HEIGKIT_PLAN"], "w") as f:
-        json.dump(durations, f)
+        json.dump({"durations": durations, "layout": problems}, f)
 
 
 from manimlib.__main__ import main  # noqa: E402

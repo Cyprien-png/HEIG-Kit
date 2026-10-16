@@ -175,7 +175,16 @@ async function renderScene(name: string): Promise<void> {
     const plan = path.join(work, "plan.json");
     const dry = await run(manimBin("python"), [path.join(HERE, "plan.py"), source, name, "-s", "-w", QUALITY[values.quality], "--video_dir", work], { HEIGKIT_PLAN: plan });
     if (dry.status !== 0) fail(`The scene does not run (dry run):\n${errorLog(dry.output)}`);
-    const durations = JSON.parse(readFileSync(plan, "utf-8")) as number[];
+    const { durations, layout } = JSON.parse(readFileSync(plan, "utf-8")) as {
+      durations: number[];
+      layout: { animation: number; time: number; warning: string }[];
+    };
+    if (layout.length > 0) {
+      console.log(`Layout: ${layout.length} problem${layout.length > 1 ? "s" : ""} (end of animation, time in the video):`);
+      for (const p of layout) console.log(`  - animation ${p.animation} (${p.time.toFixed(1)} s): ${p.warning}`);
+    } else {
+      console.log("Layout: no overlapping texts, no line through a text, nothing off screen.");
+    }
     const lastFrame = readdirSync(work).find((f) => f.endsWith(".png"));
     if (values.check) {
       const kept = path.join(os.tmpdir(), "heig-kit-frames", `${name}-last.png`);
