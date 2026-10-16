@@ -73,6 +73,10 @@ This is 3b1b's ManimGL (version 1.7): `from manimlib import *`. Its API differs 
 - Rendering time grows with what is rebuilt at every frame: never create `Text` or `Tex` inside `always_redraw` or an
   updater; move existing objects instead (`add_updater(lambda m: m.move_to(...))`, `put_start_and_end_on`,
   `live_value`).
+- The video is rendered in parallel parts, each starting by skipping the animations before it: what is on screen must
+  depend only on the current values, never be accumulated frame after frame. No `TracedPath` nor updater that adds to
+  an object with `dt`: draw from the current value instead, e.g. a curve traced up to the angle α with
+  `always_redraw(lambda: axes.get_graph(f, x_range=(0, alpha.get_value())))`.
 
 ## Good demonstrations
 
