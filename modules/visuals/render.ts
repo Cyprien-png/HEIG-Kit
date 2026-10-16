@@ -13,7 +13,7 @@
  * TinyTeX installed by the setup; scenes can import the ready-made pieces of heigkit_manim.py (this folder).
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -78,6 +78,27 @@ const env = {
 // ManimGL renders with OpenGL: on a Linux machine without display, through a virtual one.
 const headless = process.platform === "linux" && !process.env.DISPLAY;
 const command = (program: string, args: string[]): [string, string[]] => (headless ? ["xvfb-run", ["-a", program, ...args]] : [program, args]);
+
+/**
+ * QuickTime Player keeps showing a video it has open, even once the file is replaced: close that window first, so
+ * that opening the file shows the new version. Silently does nothing if QuickTime is not running or may not be
+ * controlled (macOS asks once for the permission).
+ */
+function closeInQuickTime(file: string): void {
+  if (process.platform !== "darwin" || spawnSync("pgrep", ["-x", "QuickTime Player"]).status !== 0) return;
+  const script = [
+    "on run argv",
+    'tell application "QuickTime Player"',
+    "repeat with d in (get documents)",
+    "try",
+    "if POSIX path of (file of d as alias) is (item 1 of argv) then close d saving no",
+    "end try",
+    "end repeat",
+    "end tell",
+    "end run",
+  ];
+  spawnSync("osascript", [...script.flatMap((line) => ["-e", line]), file], { timeout: 5000 });
+}
 
 function open(file: string): void {
   if (process.platform === "darwin") spawnSync("open", [file]);
@@ -148,6 +169,7 @@ function renderAll(): void {
 async function renderScene(name: string): Promise<void> {
   const started = Date.now();
   const work = mkdtempSync(path.join(os.tmpdir(), "heig-kit-video-"));
+  let staging: string | undefined;
   try {
     // 1. Dry run: errors in seconds, last frame, duration of each animation.
     const plan = path.join(work, "plan.json");
@@ -177,16 +199,23 @@ async function renderScene(name: string): Promise<void> {
       }),
     ).catch((error: Error) => fail(error.message));
 
-    // 3. Joined without re-encoding.
+    // 3. Joined without re-encoding, into a new file that then replaces the video: a player still showing the former
+    // version keeps reading it intact (writing over it while it plays froze the picture).
     const video = path.join(folder, `${name}.mp4`);
+    staging = path.join(folder, `.${name}.rendering.mp4`);
     if (parts.length === 1) {
-      copyFileSync(parts[0], video);
+      copyFileSync(parts[0], staging);
     } else {
       const list = path.join(work, "parts.txt");
       writeFileSync(list, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
-      const joined = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", video], { encoding: "utf-8" });
-      if (joined.status !== 0) fail(`FFmpeg could not join the parts: ${joined.stderr}`);
+      const joined = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", staging], { encoding: "utf-8" });
+      if (joined.status !== 0) {
+        rmSync(staging, { force: true });
+        fail(`FFmpeg could not join the parts: ${joined.stderr}`);
+      }
     }
+    if (values.open) closeInQuickTime(video);
+    renameSync(staging, video);
     console.log(video);
     // Opened as soon as it exists: checking the frames comes after.
     if (values.open) open(video);
@@ -197,6 +226,7 @@ async function renderScene(name: string): Promise<void> {
     }
   } finally {
     rmSync(work, { recursive: true, force: true });
+    if (staging) rmSync(staging, { force: true });
   }
 }
 
