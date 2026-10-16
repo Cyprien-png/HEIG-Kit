@@ -39,7 +39,7 @@ divisibilité n'est pas antisymétrique sur Z*"*, *"anime la construction d'un d
 ## Notes
 
 - The scenes use ManimGL (`from manimlib import *`), whose API differs from Manim Community (`ShowCreation` instead of
-  `Create`, for instance). In ManimGL 1.7, `Text(..., color=...)` and `Circle(color=...)` are ignored: color them with
+  `Create`, for instance). In ManimGL 1.7, `color=` is ignored by `Text`, `Dot` and `Circle`: color them with
   `.set_color()` or `.set_stroke()`.
 - `from heigkit_manim import *` gives ready-made pieces for course animations (`modules/visuals/heigkit_manim.py`):
   title and text panel, live values with a decimal comma, a point approaching a limit, holes, asymptotes, sign lines,

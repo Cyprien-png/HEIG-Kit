@@ -66,7 +66,7 @@ This is 3b1b's ManimGL (version 1.7): `from manimlib import *`. Its API differs 
   `Tex(r"\forall a \in A", color=RED)` for math (always raw strings). Accented text is fine in `Text` and `TexText`.
 - Shapes and layout: `Circle`, `Square`, `Dot`, `Line`, `Arrow`, `VGroup(...).arrange(DOWN, buff=0.5)`,
   `.next_to(m, DOWN)`, `.move_to([x, y, 0])`, `.set_color(BLUE)`; colors `BLUE`, `RED`, `GREEN`, `YELLOW`, `GREY`.
-  `Circle(...).set_stroke(BLUE, 3)` (its `color=` is ignored too).
+  `color=` is also ignored by `Dot` and `Circle`: `Dot().set_color(RED)`, `Circle(...).set_stroke(BLUE, 3)`.
 - Graphs of functions: `axes = Axes((-3, 3), (-2, 2))`, `axes.get_graph(lambda x: x**2, color=BLUE)`,
   `axes.add_coordinate_labels()`.
 - Rendering time grows with what is rebuilt at every frame: never create `Text` or `Tex` inside `always_redraw` or an

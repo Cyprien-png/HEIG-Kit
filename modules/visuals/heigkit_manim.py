@@ -20,7 +20,7 @@ __all__ = [
 
 
 def colored(content: str, font_size: int = 30, color=WHITE) -> Text:
-    """Text in a color: in ManimGL 1.7, Text(..., color=...) is ignored and the text stays white."""
+    """Text in a color: in ManimGL 1.7, Text(..., color=...) is ignored and the text stays white (Dot and Circle too)."""
     return Text(content, font_size=font_size).set_color(color)
 
 
@@ -159,7 +159,7 @@ def approach(scene: Scene, axes: Axes, f, x_from: float, x_to: float, color=YELL
     in the bottom right corner. Returns the moving objects (to remove or fade out afterwards).
     """
     t = ValueTracker(x_from)
-    dot = Dot(color=color).add_updater(lambda m: m.move_to(axes.c2p(t.get_value(), f(t.get_value()))))
+    dot = Dot().set_color(color).add_updater(lambda m: m.move_to(axes.c2p(t.get_value(), f(t.get_value()))))
     guide = Line(axes.c2p(x_from, 0), axes.c2p(x_from, f(x_from)) + 1e-6 * UP, color=GREY, stroke_width=2)
     guide.add_updater(lambda m: m.put_start_and_end_on(axes.c2p(t.get_value(), 0) + 1e-6 * UP,
                                                        axes.c2p(t.get_value(), f(t.get_value()))))
@@ -222,7 +222,7 @@ class UnitCircle(VGroup):
             self.tangent_line = Line(p(1, -tangent_limit), p(1, tangent_limit), color=YELLOW, stroke_width=2).set_opacity(0.5)
             self.ray = Line(self.O, p(1, 1), color=GREY_B, stroke_width=2)
             self.tan_segment = Line(color=YELLOW, stroke_width=8)
-            self.T = Dot(color=YELLOW, radius=0.07)
+            self.T = Dot(radius=0.07).set_color(YELLOW)
             self.T_label = colored("T", 26, YELLOW)
             self.add(self.tangent_line, self.ray, self.tan_segment, self.T, self.T_label)
         self.tangent = tangent
