@@ -42,8 +42,9 @@ divisibilité n'est pas antisymétrique sur Z*"*, *"anime la construction d'un d
 - The scenes use ManimGL (`from manimlib import *`), whose API differs from Manim Community (`ShowCreation` instead of
   `Create`, for instance). In ManimGL 1.7, `color=` is ignored by `Text`, `Dot` and `Circle`: color them with
   `.set_color()` or `.set_stroke()`.
-- `from heigkit_manim import *` gives ready-made pieces for course animations (`modules/visuals/heigkit_manim.py`):
-  title and text panel, live values with a decimal comma, a point approaching a limit, holes, asymptotes, sign lines,
-  tables of values, the trigonometric circle. They update objects in place instead of rebuilding them at every frame,
+- `from heigkit_manim import *` gives the `CourseScene` template (title, figure on the left, text panel on the right,
+  end card with the source) and ready-made pieces for course animations (`modules/visuals/heigkit_manim.py`): live
+  values with a decimal comma, a point approaching a limit, holes, asymptotes, sign lines, tables of values, the
+  trigonometric circle (heights, signs, unrolled curve), Hasse diagrams, 0/1 matrices, labeled points and classes. They update objects in place instead of rebuilding them at every frame,
   which is what makes a scene slow to render.
 - Rendering uses OpenGL: on a remote Linux server, `xvfb` provides the display (installed by the setup).

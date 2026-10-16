@@ -4,6 +4,16 @@ Ready-made pieces for HEIG-Kit course animations (ManimGL 1.7), so that a scene 
     from manimlib import *
     from heigkit_manim import *
 
+    class Sinus(CourseScene):
+        '''ANA1 : sin(α) sur le cercle trigonométrique.'''
+
+        def construct(self):
+            self.title("Le sinus", "ANA1, §3.3")
+            c = UnitCircle(center=FIGURE)
+            self.play(FadeIn(c))
+            self.say("sin(α) = ordonnée de M", wait=2)
+            self.finish(["sin(α) = ordonnée de M"], "Polycopié ANA1, §3.3")
+
 `npm run video` puts this folder on the Python path. Everything that moves is updated in place (no Text or Tex created
 again at every frame), which keeps rendering fast. Numbers are written the French way (0,73).
 """
@@ -14,9 +24,13 @@ import math
 from manimlib import *
 
 __all__ = [
-    "colored", "FrDecimal", "title_card", "Panel", "live_value", "follow", "steps", "recap", "source_line",
-    "value_table", "sign_line", "approach", "hole", "vertical_asymptote", "UnitCircle",
+    "FIGURE", "CourseScene", "colored", "FrDecimal", "title_card", "Panel", "live_value", "follow", "steps", "recap",
+    "source_line", "value_table", "sign_line", "approach", "hole", "vertical_asymptote", "UnitCircle", "unroll",
+    "labeled_dot", "group_box", "hasse", "incomparable", "Matrix01",
 ]
+
+# Center of the figure in the usual layout: figure on the left half, text panel on the right half.
+FIGURE = np.array([-3.3, -0.4, 0])
 
 
 def colored(content: str, font_size: int = 30, color=WHITE) -> Text:
@@ -80,11 +94,54 @@ class Panel:
             self.group = None
 
 
+class CourseScene(Scene):
+    """
+    Template of a course video: a title at the top, the figure on the left (around FIGURE), a text panel on the right
+    (`self.say`), and an end card. In construct: `self.title(...)`, then the steps, then `self.finish(...)`.
+    """
+
+    def setup(self):
+        super().setup()
+        self.panel = Panel()
+        self.heading: VGroup | None = None
+
+    def title(self, text: str, sub: str | None = None) -> VGroup:
+        """Title (and grey subtitle) at the top, kept until the end card."""
+        self.heading = title_card(text, sub)
+        self.play(FadeIn(self.heading))
+        return self.heading
+
+    def say(self, *lines, wait: float = 0) -> VGroup:
+        """Replaces the text of the right panel: lines are str or (str, color)."""
+        return self.panel.say(self, *lines, wait=wait)
+
+    def clear(self, *keep: Mobject) -> None:
+        """Fades out everything but the title and `keep` (the panel too), to start a new step."""
+        kept = {id(m) for m in keep} | ({id(self.heading)} if self.heading else set())
+        gone = [m for m in self.mobjects if id(m) not in kept]
+        for m in gone:
+            # Frozen while they fade out: a live value changing its number of digits would break the fading.
+            m.clear_updaters()
+        if gone:
+            self.play(*[FadeOut(m) for m in gone])
+        self.panel.group = None
+
+    def finish(self, bullets: list[str], source: str | None = None, title: str = "À retenir", wait: float = 5) -> None:
+        """End card: everything fades out, then the recap and the source of the course."""
+        self.clear()
+        card = [FadeIn(recap(title, *bullets).shift(DOWN * 0.3))]
+        if source:
+            card.append(FadeIn(source_line(source)))
+        self.play(*card)
+        self.wait(wait)
+
+
 def live_value(label: str, value, decimals: int = 2, color=YELLOW, font_size: int = 30, unit: str | None = None) -> VGroup:
     """
     "label 0,73" whose number follows `value()` at every frame, e.g.
     `live_value("tan(α) =", lambda: math.tan(alpha.get_value()))`, or with a unit in plain text: `unit="°"`.
-    Returns VGroup(label, number[, unit]).
+    Returns VGroup(label, number[, unit]). Before fading it out while its value still changes, freeze it with
+    `.clear_updaters()` (its number of digits must not change during the fading); `CourseScene.clear` does it.
     """
     caption = colored(label, font_size, color)
     number = FrDecimal(value(), num_decimal_places=decimals, font_size=font_size, color=color)
@@ -188,6 +245,71 @@ def vertical_asymptote(axes: Axes, x: float, label: str | None = None) -> VGroup
     return group
 
 
+def labeled_dot(name: str, color=WHITE, font_size: int = 22, direction=DOWN) -> VGroup:
+    """A colored point with its name under it (or in `direction`): VGroup(dot, label)."""
+    dot = Dot(radius=0.12).set_color(color)
+    return VGroup(dot, colored(name, font_size, color).next_to(dot, direction, buff=0.12))
+
+
+def group_box(*mobjects: Mobject, color=YELLOW, buff: float = 0.25) -> SurroundingRectangle:
+    """Frame around a group of objects, e.g. an equivalence class."""
+    return SurroundingRectangle(VGroup(*mobjects), buff=buff).set_stroke(color, 3)
+
+
+def hasse(nodes: dict, edges: list, center=FIGURE, scale: float = 1.3, color=WHITE, font_size: int = 34) -> VGroup:
+    """
+    Hasse diagram: nodes {Tex label: (x, y)} (y grows upwards), edges [(lower, upper)]. Labels are outside the diagram
+    (on the left for the nodes on its left half). Returns VGroup(lines, dots, labels), with `.pos[label]` the screen point
+    of a node, e.g. hasse({"1": (0, -1), "2": (-1, 0), "3": (1, 0), "6": (0, 1)}, [("1", "2"), ("1", "3"), ("2", "6"), ("3", "6")]).
+    """
+    pos = {k: np.array(center, dtype=float) + scale * np.array([x, y, 0]) for k, (x, y) in nodes.items()}
+    lines = VGroup(*[Line(pos[a], pos[b]).set_stroke(GREY_B, 3) for a, b in edges])
+    dots = VGroup(*[Dot(pos[k], radius=0.09).set_color(color) for k in nodes])
+    labels = VGroup(*[Tex(k, font_size=font_size).next_to(pos[k], LEFT if x < 0 else RIGHT, buff=0.15)
+                      for k, (x, _) in nodes.items()])
+    group = VGroup(lines, dots, labels)
+    group.pos = pos
+    return group
+
+
+def incomparable(diagram: VGroup, a: str, b: str, color=RED) -> VGroup:
+    """Red dashed line and ✗ between two nodes of a Hasse diagram that are not comparable."""
+    line = DashedLine(diagram.pos[a], diagram.pos[b]).set_stroke(color, 3)
+    return VGroup(line, colored("✗", 36, color).next_to(line, UP, buff=0.1))
+
+
+class Matrix01(VGroup):
+    """
+    0/1 matrix of a relation between brackets: `m = Matrix01(["1 1 1", "0 1 1", "0 0 1"])`, then `m.entry(i, j)`,
+    `m.box(i, j, GREEN)` (frame around an entry) and `m.diagonal()` (line along the main diagonal).
+    """
+
+    def __init__(self, rows: list[str], center=FIGURE, cell: float = 0.6, font_size: int = 36, **kwargs):
+        super().__init__(**kwargs)
+        n = len(rows)
+        center = np.array(center, dtype=float)
+        self.entries = VGroup(*[
+            VGroup(*[Tex(v, font_size=font_size).move_to(center + cell * np.array([j - (n - 1) / 2, (n - 1) / 2 - i, 0]))
+                     for j, v in enumerate(row.split())])
+            for i, row in enumerate(rows)
+        ])
+        h, w = cell * n / 2 + 0.1, cell * n / 2 + 0.05
+        left = VGroup(Line(center + [-w, h, 0], center + [-w, -h, 0]), Line(center + [-w, h, 0], center + [-w + 0.15, h, 0]),
+                      Line(center + [-w, -h, 0], center + [-w + 0.15, -h, 0]))
+        self.brackets = VGroup(left, left.copy().flip(UP, about_point=center)).set_stroke(GREY_A, 2)
+        self.add(self.entries, self.brackets)
+
+    def entry(self, i: int, j: int) -> Mobject:
+        return self.entries[i][j]
+
+    def box(self, i: int, j: int, color=YELLOW) -> SurroundingRectangle:
+        return SurroundingRectangle(self.entry(i, j), buff=0.06).set_stroke(color, 3)
+
+    def diagonal(self) -> Line:
+        n = len(self.entries)
+        return Line(self.entry(0, 0).get_center(), self.entry(n - 1, n - 1).get_center()).set_stroke(GREY_B, 2, opacity=0.6)
+
+
 class UnitCircle(VGroup):
     """
     Trigonometric circle driven by an angle tracker: `c = UnitCircle(radius=1.8, center=LEFT * 3.3)`, then animate
@@ -259,3 +381,48 @@ class UnitCircle(VGroup):
         """tan(α), or a very large number near π/2 + kπ (for a live_value)."""
         c = math.cos(self.alpha.get_value())
         return math.sin(self.alpha.get_value()) / c if abs(c) > 1e-9 else float("inf")
+
+    def height_mark(self, degrees: float, label: str | None = None, color=RED) -> VGroup:
+        """
+        The height sin(α) of the point at `degrees` carried to the left of the circle by a dashed line, with a small
+        label there (e.g. "√3/2"), where several values stay readable.
+        """
+        a = math.radians(degrees)
+        guide = DashedLine(self.p(math.cos(a), math.sin(a)), self.p(-1.1, math.sin(a))).set_stroke(color, 2)
+        group = VGroup(guide)
+        if label:
+            group.add(colored(label, 20, color).next_to(self.p(-1.1, math.sin(a)), LEFT, buff=0.08))
+        return group
+
+    def width_mark(self, degrees: float, label: str | None = None, color=GREEN) -> VGroup:
+        """The abscissa cos(α) of the point at `degrees` carried below the circle, with a small label there."""
+        a = math.radians(degrees)
+        guide = DashedLine(self.p(math.cos(a), math.sin(a)), self.p(math.cos(a), -1.1)).set_stroke(color, 2)
+        group = VGroup(guide)
+        if label:
+            group.add(colored(label, 20, color).next_to(self.p(math.cos(a), -1.1), DOWN, buff=0.08))
+        return group
+
+    def quadrant_signs(self, signs: str = "++--") -> VGroup:
+        """Signs of quadrants I, II, III and IV ("++--" for sin, "+--+" for cos, "+-+-" for tan), green or red."""
+        places = ((0.55, 0.45), (-0.55, 0.45), (-0.55, -0.45), (0.55, -0.45))
+        return VGroup(*[colored("+" if s == "+" else "−", 40, GREEN if s == "+" else RED).move_to(self.p(x, y))
+                        for s, (x, y) in zip(signs, places)])
+
+
+def unroll(circle: UnitCircle, axes: Axes, f=math.sin, color=RED) -> VGroup:
+    """
+    The graph of f (math.sin or math.cos) drawn up to the circle's current angle, the point (α, f(α)) and a thin line
+    from M to it: add it, then animate `circle.alpha` from 0 to 2π. Drawn from the current angle at every frame (never
+    accumulated), so it is right in every part of a parallel rendering. The axes need the circle's vertical scale:
+    `Axes((0, 2 * PI, PI / 2), (-1, 1, 0.5), width=6.6, height=2 * circle.R)`, shifted so that y = 0 is at the circle's
+    center.
+    """
+    # Both computed from the angle itself: an updater reading another object's position would lag one frame behind.
+    target = lambda: axes.c2p(circle.alpha.get_value(), f(circle.alpha.get_value()))
+    start = lambda: circle.p(math.cos(circle.alpha.get_value()), math.sin(circle.alpha.get_value()))
+    point = Dot(radius=0.07).set_color(color).add_updater(lambda m: m.move_to(target()))
+    link = Line(start(), target() + 1e-6 * RIGHT).set_stroke(GREY_B, 1.5)
+    link.add_updater(lambda m: m.put_start_and_end_on(start(), target() + 1e-6 * RIGHT))
+    curve = always_redraw(lambda: axes.get_graph(f, x_range=(0, max(circle.alpha.get_value(), 0.02), 0.02)).set_stroke(color, 4))
+    return VGroup(curve, link, point)

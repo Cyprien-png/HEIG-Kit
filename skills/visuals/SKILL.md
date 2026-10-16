@@ -40,24 +40,48 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
 6. To include it in a document, reference it from Markdown with `![caption](../videos/<SceneName>.mp4)` and render the
    document with `heig:documents`.
 
-## Ready-made pieces: `from heigkit_manim import *`
+## Template and ready-made pieces: `from heigkit_manim import *`
 
 The renderer puts `heigkit_manim` on the Python path. Everything that moves is updated in place; numbers are written
-the French way (0,73).
+the French way (0,73). Start every course video from the `CourseScene` template:
 
-- `title_card("Titre", "sous-titre")`: title at the top. `source_line("Polycopié ANA1, §1.6")`: reference at the
-  bottom right. `recap("À retenir", "point 1", "point 2")`: end card.
-- `Panel()`: text block on the right half, replaced step by step: `panel.say(self, "ligne", ("ligne en jaune", YELLOW),
-  wait=2)`, `panel.clear(self)`. `steps("1. …", ("2. …", GREEN))`: lines to show one by one.
-- `colored("texte", 30, YELLOW)`: colored Text (`Text(..., color=...)` is ignored by ManimGL 1.7: the text stays white).
-- `live_value("tan(α) =", lambda: …, decimals=2, unit="°")`: label and number that follows a value at every frame.
-  `follow(mobject, lambda: point)`: keeps a label next to a moving point.
+```python
+from manimlib import *
+from heigkit_manim import *
+
+
+class SinusCercle(CourseScene):
+    """ANA1 : sin(α) sur le cercle trigonométrique (ordonnée de M, valeurs remarquables, signes)."""
+
+    def construct(self):
+        self.title("Le sinus sur le cercle trigonométrique", "ANA1, §3.3")
+        c = UnitCircle(center=FIGURE)              # the figure on the left half, around FIGURE
+        self.play(FadeIn(c))
+        self.say("M sur le cercle de rayon 1 :", ("sin(α) = ordonnée de M", RED), wait=2)   # panel on the right
+        self.play(c.alpha.animate.set_value(PI / 6))
+        self.play(FadeIn(c.height_mark(30, "1/2")))
+        self.clear()                               # new step: everything but the title fades out
+        self.finish(["sin(α) = ordonnée de M"], "Polycopié ANA1, §3.3 p. 17")   # recap and source
+```
+
+- Text: `colored("texte", 30, YELLOW)` (`Text(..., color=...)` is ignored by ManimGL 1.7: the text stays white),
+  `steps("1. …", ("2. …", GREEN))` (lines to show one by one), `title_card`, `recap`, `source_line`, `Panel` (used by
+  `CourseScene`).
+- Live values: `live_value("tan(α) =", lambda: …, decimals=2, unit="°")`, a label and a number following a value at
+  every frame. Freeze it (`.clear_updaters()`) before fading it out while its value still changes; `self.clear()` does
+  it. `follow(mobject, lambda: point)` keeps a label next to a moving point.
 - Functions and limits: `approach(self, axes, f, x_from, x_to, RED)` (dot sliding along the graph with x and f(x)),
   `hole(axes, x, y)`, `vertical_asymptote(axes, 2, "x = 2")`, `sign_line(split=2, left="x - 2 < 0", right="x - 2 > 0")`,
   `value_table(("x", "f(x)"), [(1.9, -39), (1.99, -399)])`.
-- Trigonometry: `c = UnitCircle(radius=1.8, center=[-3.3, -0.4, 0], tangent=True)`, then animate
-  `c.alpha.animate.set_value(angle)`; `c.p(x, y)` is the screen point of circle coordinates, `c.tan_value()` for a
-  `live_value`.
+- Trigonometry: `c = UnitCircle(center=FIGURE, tangent=True)`, then animate `c.alpha.animate.set_value(angle)`;
+  `c.p(x, y)` is the screen point of circle coordinates, `c.tan_value()` for a `live_value`;
+  `c.height_mark(30, "1/2")` / `c.width_mark(60, "1/2")` carry sin / cos to the side of the circle with a label;
+  `c.quadrant_signs("++--")` (sin; "+--+" cos, "+-+-" tan); `unroll(c, axes, math.sin)` draws the curve while α turns
+  (axes at the circle's scale: see its docstring).
+- Discrete mathematics: `hasse({"1": (0, -1), "2": (-1, 0), "3": (1, 0), "6": (0, 1)}, [("1", "2"), …])` (labels
+  outside, `.pos[label]`), `incomparable(diagram, "2", "3")`, `Matrix01(["1 1 1", "0 1 1", "0 0 1"])` with
+  `.entry(i, j)`, `.box(i, j, GREEN)` and `.diagonal()`, `labeled_dot("Aline", BLUE)`, `group_box(a, d, f, color=BLUE)`
+  (an equivalence class).
 
 ## ManimGL, not Manim Community
 
@@ -75,6 +99,8 @@ This is 3b1b's ManimGL (version 1.7): `from manimlib import *`. Its API differs 
 - Rendering time grows with what is rebuilt at every frame: never create `Text` or `Tex` inside `always_redraw` or an
   updater; move existing objects instead (`add_updater(lambda m: m.move_to(...))`, `put_start_and_end_on`,
   `live_value`).
+- An updater must compute its position from the values (the angle, the tracker), not from another object's
+  position: updaters run one after the other, so reading another moving object lags one frame behind.
 - The video is rendered in parallel parts, each starting by skipping the animations before it: what is on screen must
   depend only on the current values, never be accumulated frame after frame. No `TracedPath` nor updater that adds to
   an object with `dt`: draw from the current value instead, e.g. a curve traced up to the angle α with

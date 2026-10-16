@@ -52,8 +52,9 @@ Never print or commit the content of `.env` or `.cache/`.
   capture of a GAPS or Cyberlearn page (they contain personal data): keep experiments in `.cache/`
 - `modules/documents/`: Markdown → PDF/HTML/DOCX renderer (own package.json: markdown-it, KaTeX, Mermaid, puppeteer;
   pandoc for DOCX), `npm run doc`
-- `modules/visuals/render.ts`: ManimGL wrapper (`npm run video`): dry run (`plan.py`, durations of the animations), parts
-  rendered in parallel (`parts.ts`) and joined with FFmpeg, key frames sheet; `heigkit_manim.py`: ready-made scene pieces;
+- `modules/visuals/render.ts`: ManimGL wrapper (`npm run video`): dry run (`plan.py`: durations of the animations, each
+  animation computed halfway, layout check of `layout.py`), parts rendered in parallel (`parts.ts`) and joined with
+  FFmpeg, key frames sheet; `heigkit_manim.py`: `CourseScene` template and ready-made scene pieces;
   manim and TinyTeX live in `vendor/` (see `src/vendor.ts`)
 - `scripts/setup.ts`: module installer (`npm run setup`)
 - `scripts/generated.ts`: lists and reopens generated documents and videos (`npm run generated`), checked by the skills
