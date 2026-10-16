@@ -36,6 +36,21 @@ def record_wait(self, duration, stop_condition=None):
 
 
 post_play = Scene.post_play
+progress = Scene.progress_through_animations
+
+
+def probe_animations(self, animations):
+    """
+    The dry run skips the frames of an animation; some errors only happen in the middle of one (e.g. a number changing
+    its count of digits while it fades). Each animation is computed halfway and almost at its end, with the updaters
+    run in between as for real frames, so that they show up now instead of in a rendered part.
+    """
+    if self.skip_animations:
+        for alpha in (0.5, 0.99):
+            for animation in animations:
+                animation.interpolate(alpha)
+            self.update_mobjects(0)
+    progress(self, animations)
 
 
 def check_layout(self):
@@ -54,6 +69,7 @@ def check_layout(self):
 Scene.get_animation_time_progression = record_play
 Scene.get_wait_time_progression = record_wait
 Scene.post_play = check_layout
+Scene.progress_through_animations = probe_animations
 
 
 @atexit.register
