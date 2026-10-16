@@ -16,9 +16,9 @@ const token = readFileSync(path.join(ROOT, "data", "mcp-token"), "utf-8").trim()
 const db = openDb();
 
 serveHttp(
-  () => {
+  async () => {
     const server = new McpServer({ name: "heig-kit-knowledge", version: "0.4.0" });
-    registerKnowledgeTools(server, db);
+    await registerKnowledgeTools(server, db);
     return server;
   },
   PORT,

@@ -2,7 +2,16 @@ import { readFile } from "node:fs/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Db } from "../../rag/db.js";
-import { documentText, figureFile, findExercise, formatResults, listCourses, listDocuments, search } from "../../rag/search.js";
+import {
+  documentText,
+  figureFile,
+  findExercise,
+  formatDocuments,
+  formatResults,
+  listCourses,
+  listDocuments,
+  search,
+} from "../../rag/search.js";
 
 const MAX_DOCUMENT_CHARS = 60_000;
 const DOC_TYPES = ["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"] as const;
@@ -11,21 +20,38 @@ function text(value: string) {
   return { content: [{ type: "text" as const, text: value }] };
 }
 
-/** Search and reading tools over the course knowledge base (indexed course documents). */
-export function registerKnowledgeTools(server: McpServer, db: Db): void {
+/** Indexed courses as "MAD (name), SYL (name)…", or undefined when the knowledge base is unreachable. */
+async function courseList(db: Db): Promise<{ codes: string; names: string } | undefined> {
+  try {
+    const courses = (await listCourses(db)).filter((c) => c.course);
+    if (courses.length === 0) return undefined;
+    return { codes: courses.map((c) => c.course).join(", "), names: courses.map((c) => `${c.course} (${c.name})`).join(", ") };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Search and reading tools over the course knowledge base (indexed course documents). The indexed courses are written in
+ * the search tool's description, so the model knows their codes without an extra call.
+ */
+export async function registerKnowledgeTools(server: McpServer, db: Db): Promise<void> {
+  const courses = await courseList(db);
   server.registerTool(
     "search_course_material",
     {
       title: "Search course material",
       description:
-        "Searches the student's indexed course material (lecture notes, exercise sheets, solutions, past exams, labs, " +
-        "plannings) by meaning and keywords, including exercise numbers such as 2.22. Returns passages with their " +
-        "course, chapter, document, pages and link. Course material is mostly in French: French queries work best.",
+        "Searches the student's course material (lectures, exercise sheets, solutions, past exams 'TE', labs, plannings) " +
+        "by meaning and keywords, including exercise numbers such as 2.22. Results are grouped by document, each passage " +
+        "with its pages; the header gives the document id and link to cite. " +
+        (courses ? `Courses: ${courses.names}. ` : "") +
+        "Material is in French: search in French. Independent searches can be sent in parallel.",
       inputSchema: {
-        query: z.string().describe("What to look for, e.g. 'diagramme de Hasse' or 'exercice 2.22'"),
-        course: z.string().optional().describe("Timetable course code, e.g. MAD (see list_courses)"),
+        query: z.string().describe("What to look for, e.g. 'diagramme de Hasse' or 'TE 1 2024-2025 problème 3'"),
+        course: z.string().optional().describe(`Course code${courses ? `: ${courses.codes}` : ", e.g. MAD"}`),
         doc_type: z.enum(DOC_TYPES).optional().describe("Only this kind of document"),
-        limit: z.number().int().min(1).max(20).optional().describe("Number of passages (default 8)"),
+        limit: z.number().int().min(1).max(20).optional().describe("Number of passages (default 6)"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -37,10 +63,10 @@ export function registerKnowledgeTools(server: McpServer, db: Db): void {
     "get_exercise",
     {
       title: "Get an exercise",
-      description: "Statement and, when available, solution of a numbered exercise, e.g. number 2.22 in course MAD.",
+      description: "Statement and, when available, solution of a numbered exercise of an exercise sheet, e.g. 2.22 in MAD.",
       inputSchema: {
         number: z.string().describe("Exercise number, e.g. 2.22"),
-        course: z.string().optional().describe("Timetable course code, e.g. MAD"),
+        course: z.string().optional().describe("Course code, e.g. MAD"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -52,10 +78,10 @@ export function registerKnowledgeTools(server: McpServer, db: Db): void {
     {
       title: "Read a document",
       description:
-        "Extracted text of an indexed document (id from search results or list_documents), optionally limited to pages. " +
-        "Use it to read a whole chapter before writing exercises or an exam. Formulas appear as [formule : …], their " +
-        "raw text (square matrices row by row: [1 0; 0 1]), or as [formule] when even that is missing: the original " +
-        "is at the document's link. Figures appear as [figure <n> : <labels>]: see them with get_figure.",
+        "Text of a document (id from search results or list_documents), optionally only some pages: to read around a " +
+        "passage, a whole exam or a chapter. Formulas appear as [formule : …] (raw text, matrices row by row) or " +
+        "[formule] when missing: the original is at the document's link. Figures appear as [figure n : labels]: see " +
+        "them with get_figure.",
       inputSchema: {
         document_id: z.number().int(),
         page_from: z.number().int().min(1).optional(),
@@ -105,27 +131,17 @@ export function registerKnowledgeTools(server: McpServer, db: Db): void {
   );
 
   server.registerTool(
-    "list_courses",
-    {
-      title: "List courses",
-      description: "Indexed courses with their code, name, teachers and number of documents.",
-      annotations: { readOnlyHint: true },
-    },
-    async () => text(JSON.stringify(await listCourses(db), null, 2)),
-  );
-
-  server.registerTool(
     "list_documents",
     {
       title: "List documents of a course",
-      description: "Indexed documents of a course (id, title, kind, chapter, upload date, link).",
+      description: "Documents of a course, one per line: id, kind, chapter, title. Use it to find an exam or a sheet by name.",
       inputSchema: {
         course: z.string().describe("Timetable course code, e.g. MAD"),
         doc_type: z.enum(DOC_TYPES).optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ course, doc_type }) => text(JSON.stringify(await listDocuments(db, course, doc_type), null, 2)),
+    async ({ course, doc_type }) => text(formatDocuments(await listDocuments(db, course, doc_type)) || `No documents for ${course}.`),
   );
 
 }

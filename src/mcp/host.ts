@@ -34,10 +34,10 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).`;
 
-function buildServer(): McpServer {
+async function buildServer(): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions: INSTRUCTIONS });
   registerCampusTools(server);
-  registerKnowledgeTools(server, db);
+  await registerKnowledgeTools(server, db);
   registerOutputTools(server);
 
   server.registerPrompt(
@@ -100,5 +100,5 @@ if (values.http) {
   }
   serveHttp(buildServer, Number(values.port), readFileSync(tokenFile, "utf-8").trim(), "127.0.0.1");
 } else {
-  await buildServer().connect(new StdioServerTransport());
+  await (await buildServer()).connect(new StdioServerTransport());
 }

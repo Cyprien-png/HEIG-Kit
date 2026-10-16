@@ -38,7 +38,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
  * Serves MCP over Streamable HTTP at /mcp (stateless: a server per request), requiring `Authorization: Bearer <token>`;
  * /health answers without token.
  */
-export function serveHttp(buildServer: () => McpServer, port: number, token: string, host?: string): void {
+export function serveHttp(buildServer: () => Promise<McpServer>, port: number, token: string, host?: string): void {
   createServer(async (req, res) => {
     if (req.url === "/health") {
       res.writeHead(200).end("ok");
@@ -53,7 +53,7 @@ export function serveHttp(buildServer: () => McpServer, port: number, token: str
       return;
     }
     try {
-      const server = buildServer();
+      const server = await buildServer();
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on("close", () => {
         void transport.close();

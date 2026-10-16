@@ -11,7 +11,7 @@ course material, with sources, and make it concrete.
 ## Tools
 
 Prefer the MCP tools of the `heig-kit` server when they are available (`search_course_material`, `get_exercise`,
-`get_document`, `list_courses`, `list_documents`). Otherwise use the equivalent commands; `<root>` is the plugin root,
+`get_document`, `get_figure`, `list_documents`). Otherwise use the equivalent commands; `<root>` is the plugin root,
 two levels above this skill's base directory (the folder holding `package.json`):
 
 - `npm --prefix <root> run -s kb -- search "<query>" [--course MAD] [--type lecture|exercises|solutions|exam|lab|planning] [--limit 6]`

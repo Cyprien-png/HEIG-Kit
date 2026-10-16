@@ -90,11 +90,11 @@ as a `Bearer` authorization header. Other MCP clients (Claude Desktop, n8n…) c
 
 | Tool | Purpose |
 |---|---|
-| `search_course_material` | Searches by meaning and keywords, optionally filtered by course and document type |
+| `search_course_material` | Searches by meaning and keywords, optionally filtered by course and document type; its description lists the indexed courses |
 | `get_exercise` | Statement and solution of a numbered exercise, e.g. `2.22` in `MAD` |
 | `get_document` | Extracted text of a document or of a page range |
 | `get_figure` | Image of a figure of a document (diagram, graph, drawing), `[figure n]` in the text |
-| `list_courses`, `list_documents` | What is indexed |
+| `list_documents` | Documents of a course, one per line |
 
 The same queries are available from the terminal, and are used by the Claude Code skills when the MCP server is not
 registered:
