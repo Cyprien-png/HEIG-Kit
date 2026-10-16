@@ -21,10 +21,16 @@ when there is no screen.
 ## Usage
 
 ```sh
-npm run video -- scene.py MyScene --open            # render a scene (720p) and open the video
-npm run video -- scene.py MyScene --quality low     # quick preview (480p); high = 1080p
+npm run video -- scene.py MyScene --check           # runs the scene without rendering it (a few seconds), last frame
+npm run video -- scene.py MyScene --open --frames   # render (720p), open the video, image of its key frames
+npm run video -- scene.py MyScene --quality low     # 480p; high = 1080p
+npm run video -- scene.py MyScene --jobs 2          # parallel parts (default: half the processors, at most 4)
 npm run video -- --where                            # default folder used by the assistant
 ```
+
+A scene is first run without rendering (dry run): errors show up in seconds, and the duration of each animation is
+measured. Its frames are then rendered in parallel parts of similar length (`manimgl -n start,end`), joined with FFmpeg
+without re-encoding: a 1 min 40 video renders in about 15 to 30 seconds instead of one minute on an 8-core Mac.
 
 In Claude Code, the `heig:visuals` skill writes and renders the scene for you: *"montre-moi visuellement pourquoi la
 divisibilité n'est pas antisymétrique sur Z*"*, *"anime la construction d'un diagramme de Hasse"*. Videos go to
@@ -33,5 +39,6 @@ divisibilité n'est pas antisymétrique sur Z*"*, *"anime la construction d'un d
 ## Notes
 
 - The scenes use ManimGL (`from manimlib import *`), whose API differs from Manim Community (`ShowCreation` instead of
-  `Create`, for instance).
+  `Create`, for instance). In ManimGL 1.7, `Text(..., color=...)` and `Circle(color=...)` are ignored: color them with
+  `.set_color()` or `.set_stroke()`.
 - Rendering uses OpenGL: on a remote Linux server, `xvfb` provides the display (installed by the setup).
