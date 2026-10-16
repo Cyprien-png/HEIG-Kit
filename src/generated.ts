@@ -12,6 +12,8 @@ export interface GeneratedItem {
   title: string;
   modified: Date;
   extra: string;
+  /** Whole text searched besides the name and title: the Markdown of a document, the Python source of a video. */
+  content: string;
 }
 
 function documents(): GeneratedItem[] {
@@ -23,8 +25,16 @@ function documents(): GeneratedItem[] {
       const file = path.join(folder, f);
       const base = file.slice(0, -3);
       const formats = ["pdf", "docx", "html"].filter((ext) => existsSync(`${base}.${ext}`));
-      const title = /^#\s+(.+)$/m.exec(readFileSync(file, "utf-8"))?.[1] ?? f;
-      return { kind: "document" as const, file, title, modified: statSync(file).mtime, extra: formats.length ? `rendered: ${formats.join(", ")}` : "not rendered" };
+      const content = readFileSync(file, "utf-8");
+      const title = /^#\s+(.+)$/m.exec(content)?.[1] ?? f;
+      return {
+        kind: "document" as const,
+        file,
+        title,
+        modified: statSync(file).mtime,
+        extra: formats.length ? `rendered: ${formats.join(", ")}` : "not rendered",
+        content,
+      };
     });
 }
 
@@ -39,14 +49,19 @@ function videos(): GeneratedItem[] {
     .map((f) => {
       const scene = path.basename(f, path.extname(f));
       const source = scenes.find((s) => new RegExp(`class\\s+${scene}\\b`).test(s.source));
-      // The scene's docstring or first comment usually says what it shows.
-      const about = source && (/"""([\s\S]*?)"""/.exec(source.source)?.[1] ?? /^#\s*(.+)$/m.exec(source.source)?.[1]);
+      // The docstring of the scene's class says what it shows; otherwise the file's first docstring or comment.
+      const about =
+        source &&
+        (new RegExp(`class\\s+${scene}\\b[^\\n]*:\\s*"""([\\s\\S]*?)"""`).exec(source.source)?.[1] ??
+          /"""([\s\S]*?)"""/.exec(source.source)?.[1] ??
+          /^#\s*(.+)$/m.exec(source.source)?.[1]);
       return {
         kind: "video" as const,
         file: path.join(folder, f),
         title: about?.trim().split("\n")[0] || scene,
         modified: statSync(path.join(folder, f)).mtime,
         extra: source ? `scene: ${path.basename(source.file)} (${scene})` : "",
+        content: source?.source ?? "",
       };
     });
 }
@@ -64,12 +79,23 @@ export function openGenerated(file: string): void {
 }
 
 
-/** Generated items whose file name, title or scene mentions every keyword, most recent first. */
+/**
+ * Generated items mentioning any of the keywords (accents and case ignored), best matches first: a keyword in the file
+ * name or title counts twice as much as one in the text (Markdown of a document, scene source of a video), then the
+ * most recent first. Give several words at once, synonyms included: "ordre total hasse".
+ */
 export function listGenerated(keywords: string[] = []): GeneratedItem[] {
-  const words = keywords.map(normalize);
+  const words = keywords.map(normalize).filter(Boolean);
   return [...documents(), ...videos()]
-    .filter((item) => words.every((w) => normalize(`${path.basename(item.file)} ${item.title} ${item.extra}`).includes(w)))
-    .sort((a, b) => b.modified.getTime() - a.modified.getTime());
+    .map((item) => {
+      const name = normalize(`${path.basename(item.file)} ${item.title} ${item.extra}`);
+      const text = normalize(item.content);
+      const score = words.reduce((sum, w) => sum + (name.includes(w) ? 2 : text.includes(w) ? 1 : 0), 0);
+      return { item, score };
+    })
+    .filter(({ score }) => words.length === 0 || score > 0)
+    .sort((a, b) => b.score - a.score || b.item.modified.getTime() - a.item.modified.getTime())
+    .map(({ item }) => item);
 }
 
 export function formatGenerated(items: GeneratedItem[], filtered: boolean): string {

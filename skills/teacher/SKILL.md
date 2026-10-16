@@ -70,7 +70,8 @@ unreachable or empty, say so and suggest `npm --prefix <root> run rag:start` the
 
 ## Documents and animations
 
-Always check first what was already generated: `npm --prefix <root> run -s generated -- <keywords>`. Reuse and reopen an
+Always check first what was already generated: `npm --prefix <root> run -s generated -- <keywords>` (one call with several
+words and synonyms, any of them matches; in the same turn as the course search). Reuse and reopen an
 existing document or video on the topic (`generated -- --open <file>`) before creating a new one, and say so.
 
 - When the user wants something to keep, print or share (exercise sheet, revision sheet, practice exam), export it with

@@ -3,7 +3,7 @@
  * before creating something new, and opens an existing file.
  *
  *   npm run generated                    everything, most recent first
- *   npm run generated -- hasse ordre     items whose name, title or scene mentions all these words
+ *   npm run generated -- hasse ordre     items mentioning any of these words (name, title, text), best first
  *   npm run generated -- --open <file>   open a generated file with the default application
  */
 import { formatGenerated, listGenerated, openGenerated } from "../src/generated.js";

@@ -25,9 +25,10 @@ export function registerOutputTools(server: McpServer): void {
     {
       title: "Already generated documents and videos",
       description:
-        "Lists documents and videos already generated for the user (most recent first), optionally on a topic. Call it " +
-        "BEFORE creating a document or an animation, and reuse or update what exists instead of regenerating it.",
-      inputSchema: { keywords: z.string().optional().describe("Topic words, e.g. 'hasse ordre'") },
+        "Lists documents and videos already generated for the user, optionally on a topic: items mentioning any of the " +
+        "keywords in their name, title or text, best matches first. Call it BEFORE creating a document or an animation, " +
+        "once with several words and synonyms, and reuse or update what exists instead of regenerating it.",
+      inputSchema: { keywords: z.string().optional().describe("Topic words and synonyms, e.g. 'ordre total hasse'") },
       annotations: { readOnlyHint: true },
     },
     async (a) =>

@@ -12,7 +12,8 @@ skill needs the `documents` module: if a command reports that it is missing, tel
 ## Always start from what already exists
 
 Before creating anything, look for what was already generated on the topic:
-`npm --prefix <root> run -s generated -- <one or two keywords>` (e.g. `hasse`, `antisymetrie`, `MAD`).
+`npm --prefix <root> run -s generated -- <keywords>`, in one call with several words and synonyms (any of them
+matches, best matches first, e.g. `ordre total hasse`), and in the same turn as the search of the course material.
 
 - If something matches the request, reuse it: open it with `npm --prefix <root> run -s generated -- --open <file>` and
   say it already existed; offer to complete, update or redo it rather than regenerating it silently.
