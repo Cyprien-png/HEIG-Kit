@@ -23,7 +23,24 @@ export const claude: Module = {
     console.log("  HEIG-Kit MCP server registered (heig-kit)");
   },
   async check() {
-    const installed = commandExists("claude") && run("claude", ["plugin", "list"], { quiet: true }).includes("heig@heig-kit");
-    return [{ label: "heig plugin installed in Claude Code", ok: installed, hint: "npm run setup -- claude" }];
+    if (!commandExists("claude")) return [{ label: "Claude Code installed", ok: false, hint: "https://claude.com/claude-code" }];
+    const quiet = { quiet: true };
+    const query = (args: string[]) => {
+      try {
+        return run("claude", args, quiet);
+      } catch {
+        return "";
+      }
+    };
+    // Both are registered with this folder's path: after moving or renaming it, the plugin no longer loads and the MCP
+    // server no longer starts, without any other sign than missing skills and tools.
+    const installed = query(["plugin", "list"]).includes("heig@heig-kit");
+    const marketplaceHere = query(["plugin", "marketplace", "list"]).includes(`(${ROOT})`);
+    const mcpHere = query(["mcp", "get", "heig-kit"]).includes(path.join(ROOT, "src", "mcp", "host.ts"));
+    return [
+      { label: "heig plugin installed in Claude Code", ok: installed, hint: "npm run setup -- claude" },
+      { label: "heig plugin read from this folder", ok: installed && marketplaceHere, hint: "npm run setup -- claude (the folder moved)" },
+      { label: "heig-kit MCP server started from this folder", ok: mcpHere, hint: "npm run setup -- claude" },
+    ];
   },
 };
