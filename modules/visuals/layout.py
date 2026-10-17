@@ -1,6 +1,6 @@
 """
 Layout check of a ManimGL scene, run by plan.py at the end of every animation of the dry run: texts that overlap each
-other, texts crossed by a line or a curve, and objects partly off screen. Returns readable warnings, so that layout
+other, texts crossed by a line or a curve or covered by a small filled shape (arrow tip, dot), and objects partly off screen. Returns readable warnings, so that layout
 mistakes are fixed before rendering instead of after looking at the video.
 """
 from __future__ import annotations
@@ -20,6 +20,8 @@ SHRINK = 0.2
 MARGIN = 0.05
 # Distance between the points sampled along a line or a curve: smaller than the height of a small text.
 STEP = 0.04
+# Filled shapes up to this area are marks drawn on the figure (arrow tips, dots), not backgrounds placed behind texts.
+SMALL_SHAPE = 0.3
 
 
 def _visible(mobject) -> bool:
@@ -79,6 +81,29 @@ def _strokes(scene) -> list[tuple[VMobject, int]]:
     return found
 
 
+def _small_shapes(scene) -> list[tuple[VMobject, int]]:
+    """Visible small filled shapes outside texts (arrow tips, dots), with the index of their top-level mobject."""
+    found = []
+
+    def walk(m, top):
+        if isinstance(m, (StringMobject, DecimalNumber)):
+            return
+        if isinstance(m, VMobject) and m.has_points() and m.get_fill_opacity() > 0.1 \
+                and 0 < m.get_width() * m.get_height() <= SMALL_SHAPE:
+            found.append((m, top))
+        for sub in m.submobjects:
+            walk(sub, top)
+
+    for i, m in enumerate(scene.mobjects):
+        walk(m, i)
+    return found
+
+
+def _shrunk(box: np.ndarray) -> np.ndarray:
+    dx, dy = (box[2] - box[0]) * SHRINK, (box[3] - box[1]) * SHRINK
+    return box + np.array([dx, dy, -dx, -dy])
+
+
 def _sample(stroke: VMobject) -> np.ndarray:
     """Points every STEP or so along a line or curve (its control points alone can skip over a small text)."""
     samples = []
@@ -112,11 +137,19 @@ def check(scene) -> list[str]:
         for (text, text_top), box in zip(texts, boxes):
             if text_top == top:
                 continue
-            dx, dy = (box[2] - box[0]) * SHRINK, (box[3] - box[1]) * SHRINK
-            inside = (points[:, 0] > box[0] + dx) & (points[:, 0] < box[2] - dx) \
-                & (points[:, 1] > box[1] + dy) & (points[:, 1] < box[3] - dy)
+            inner = _shrunk(box)
+            inside = (points[:, 0] > inner[0]) & (points[:, 0] < inner[2]) \
+                & (points[:, 1] > inner[1]) & (points[:, 1] < inner[3])
             if inside.any():
                 warnings.append(f"une ligne ({type(stroke).__name__}) traverse {_name(text)}")
+
+    # Arrow tips and dots over texts.
+    for shape, top in _small_shapes(scene):
+        s = _box(shape)
+        for (text, text_top), box in zip(texts, boxes):
+            inner = _shrunk(box)
+            if text_top != top and s[0] < inner[2] and s[2] > inner[0] and s[1] < inner[3] and s[3] > inner[1]:
+                warnings.append(f"une forme pleine ({type(shape).__name__}) couvre {_name(text)}")
 
     # Off screen.
     for m in scene.mobjects:

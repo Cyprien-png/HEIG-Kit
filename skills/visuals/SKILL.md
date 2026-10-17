@@ -28,7 +28,8 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
    shorter to write, fewer layout mistakes, faster to render.
 3. Check it in a few seconds: `npm --prefix <root> run -s video -- <file.py> <SceneName> --check` runs the scene
    without rendering it (Python and LaTeX errors) and lists its layout problems at the end of each animation: texts
-   over each other, a line or curve through a text, something off screen, with the time in the video. Fix every problem
+   over each other, a line or curve through a text, an arrow tip or a dot over a text, something off screen, with the
+   time in the video. Fix every problem
    that is not intended (move or shorten a text, fade an object out earlier) and check again until it passes. No
    low-quality preview render: it costs as much time as the real one.
 4. Render the final video directly: `npm --prefix <root> run -s video -- <file.py> <SceneName> --open --frames`
