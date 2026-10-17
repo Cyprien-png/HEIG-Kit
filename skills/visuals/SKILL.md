@@ -37,7 +37,10 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
    your explanation is written. In Claude Code, run this command in the background and write the explanation to the
    user while it renders.
 5. Read the `Frames:` image it prints (key frames of the video, 3 per row): overlapping texts, objects off screen, wrong
-   colors. If something is wrong, fix the scene and run step 4 again (the corrected video opens in its turn).
+   colors. If something is wrong, fix the scene and run step 4 again. The user is probably already watching the first
+   version: a video open in a player is never closed nor reopened (that would cut their viewing); tell them that a
+   corrected version is ready and that reopening the video shows it. Only one render may open the video: never run
+   two renders of the same scene at the same time.
 6. To include it in a document, reference it from Markdown with `![caption](../videos/<SceneName>.mp4)` and render the
    document with `heig:documents`.
 

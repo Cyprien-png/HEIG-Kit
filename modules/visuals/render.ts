@@ -80,24 +80,37 @@ const headless = process.platform === "linux" && !process.env.DISPLAY;
 const command = (program: string, args: string[]): [string, string[]] => (headless ? ["xvfb-run", ["-a", program, ...args]] : [program, args]);
 
 /**
- * QuickTime Player keeps showing a video it has open, even once the file is replaced: close that window first, so
- * that opening the file shows the new version. Silently does nothing if QuickTime is not running or may not be
- * controlled (macOS asks once for the permission).
+ * Whether a player has the video open: the user may be watching it, so a new render must neither close nor reopen it
+ * (reopening restarts the video and interrupts them). QuickTime Player is asked through AppleScript (macOS asks once
+ * for the permission), by document name: after a render that did not reopen it, it shows the former file, replaced
+ * since; other players are found with lsof, on macOS and Linux.
  */
-function closeInQuickTime(file: string): void {
-  if (process.platform !== "darwin" || spawnSync("pgrep", ["-x", "QuickTime Player"]).status !== 0) return;
-  const script = [
-    "on run argv",
-    'tell application "QuickTime Player"',
-    "repeat with d in (get documents)",
-    "try",
-    "if POSIX path of (file of d as alias) is (item 1 of argv) then close d saving no",
-    "end try",
-    "end repeat",
-    "end tell",
-    "end run",
-  ];
-  spawnSync("osascript", [...script.flatMap((line) => ["-e", line]), file], { timeout: 5000 });
+function isOpenInPlayer(file: string): boolean {
+  if (!existsSync(file)) return false;
+  if (process.platform === "darwin" && spawnSync("pgrep", ["-x", "QuickTime Player"]).status === 0) {
+    const script = [
+      "on run argv",
+      'tell application "QuickTime Player"',
+      "repeat with d in (get documents)",
+      "try",
+      'if name of d is (item 1 of argv) then return "open"',
+      "end try",
+      "end repeat",
+      "end tell",
+      'return ""',
+      "end run",
+    ];
+    const asked = spawnSync("osascript", [...script.flatMap((line) => ["-e", line]), path.basename(file)], { encoding: "utf-8", timeout: 5000 });
+    if (asked.stdout?.trim() === "open") return true;
+  }
+  if (process.platform === "win32") return false;
+  return spawnSync("lsof", ["-t", "--", file], { stdio: "ignore", timeout: 5000 }).status === 0;
+}
+
+/** Opens the video, unless a player already shows it: it then says so instead of interrupting the user. */
+function openUnlessWatched(file: string, watched: boolean): void {
+  if (watched) console.log("Already open in a player: not reopened, so as not to interrupt it. Reopen it to see the new version.");
+  else open(file);
 }
 
 function open(file: string): void {
@@ -147,6 +160,7 @@ function frameSheet(video: string, times: number[], name: string): string | unde
 /** Every scene of the file, one after the other, as manim does it (no dry run, no parallel parts). */
 function renderAll(): void {
   const started = Date.now();
+  const watching = new Set(values.open ? readdirSync(folder).map((f) => path.join(folder, f)).filter((f) => /\.(mp4|mov|gif)$/i.test(f) && isOpenInPlayer(f)) : []);
   const [bin, argv] = command(manimgl, [source, "-a", "-w", QUALITY[values.quality], "--video_dir", folder]);
   const result = spawnSync(bin, argv, { env, stdio: "inherit", cwd: path.dirname(source) });
   if (result.status !== 0) {
@@ -162,7 +176,7 @@ function renderAll(): void {
     .filter((f) => statSync(f).mtimeMs >= started);
   for (const video of videos) {
     console.log(video);
-    if (values.open) open(video);
+    if (values.open) openUnlessWatched(video, watching.has(video));
   }
 }
 
@@ -223,11 +237,11 @@ async function renderScene(name: string): Promise<void> {
         fail(`FFmpeg could not join the parts: ${joined.stderr}`);
       }
     }
-    if (values.open) closeInQuickTime(video);
+    const watched = values.open && isOpenInPlayer(video);
     renameSync(staging, video);
     console.log(video);
     // Opened as soon as it exists: checking the frames comes after.
-    if (values.open) open(video);
+    if (values.open) openUnlessWatched(video, watched);
     console.log(`Rendered in ${((Date.now() - started) / 1000).toFixed(1)} s (${parts.length} part${parts.length > 1 ? "s" : ""}).`);
     if (values.frames) {
       const sheet = frameSheet(video, keyFrameTimes(durations, SHEET_FRAMES), name);
