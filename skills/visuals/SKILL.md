@@ -1,6 +1,7 @@
 ---
 name: visuals
 description: Creates mathematical and scientific animations (videos) with 3b1b/manim (ManimGL) to explain or demonstrate a concept visually, then opens them, and can embed them in documents. Use whenever the user asks for an animation, a video, a visual demonstration or explanation ("montre-moi visuellement", "anime", "fais une vidéo qui explique…"), or when a moving illustration would make a course concept much clearer and the user wants one.
+effort: medium
 ---
 
 # Visual demonstrations (manim)
@@ -9,11 +10,27 @@ description: Creates mathematical and scientific animations (videos) with 3b1b/m
 skill needs the `visuals` module: if a command reports that manim is not installed, tell the user to run
 `npm --prefix <root> run setup -- visuals` (one time, installs manim, Python, FFmpeg and LaTeX automatically).
 
-## Always start from what already exists
+## Always start from what already exists, in one call
 
-Before creating anything, look for what was already generated on the topic:
-`npm --prefix <root> run -s generated -- <keywords>`, in one call with several words and synonyms (any of them
-matches, best matches first, e.g. `ordre total hasse`), and in the same turn as the search of the course material.
+Every round trip costs several seconds: gather everything in **a single Bash call** at the start, before writing
+anything: what was already generated, the output folder and the course material, through the CLI (no MCP tool to
+load first):
+
+```sh
+cd <root> && npm run -s generated -- <keywords> ; npm run -s video -- --where ; \
+  npm run -s kb -- exercise <number> --course <COURSE> ; npm run -s kb -- search "<notion>" --course <COURSE> --limit 4
+```
+
+`generated` takes several words and synonyms (any of them matches, best matches first, e.g. `ordre total hasse`);
+drop the `kb` commands when the request names no course material. Use this call even when the request comes through
+`heig:teacher`: no MCP tool to load with `ToolSearch`, no separate `get_exercise` or `search_course_material`. Then
+write the scene right away from the API below, which lists every signature: never read `heigkit_manim.py` nor former
+scenes (`grep`, `sed`, `cat`), each read costs a round trip and delays the video by 20 to 40 seconds.
+
+**Plan in the code, not before it.** As soon as the results are in, say in one sentence which example the video
+uses, then call `Write` at once: the scene's steps are decided while writing it (comments `# Step 1: …` in
+`construct`), not drafted beforehand in your reasoning. Planning the whole video before writing doubles the wait
+(about 30 seconds) for no better result; the `--check` and the key frames catch the mistakes afterwards.
 
 - If something matches the request, reuse it: open it with `npm --prefix <root> run -s generated -- --open <file>` and
   say it already existed; offer to complete, update or redo it rather than regenerating it silently.
@@ -22,7 +39,7 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
 
 ## Steps: one render, opened as soon as it is ready
 
-1. Get the output folder: `npm --prefix <root> run -s video -- --where` (e.g. `~/Documents/HEIG-Kit/videos`).
+1. The output folder is the one printed by `video -- --where` above (e.g. `~/Documents/HEIG-Kit/videos`).
 2. Write the scene in that folder as `<descriptive-name>.py` (no spaces), one `Scene` subclass per animation, each with
    a one-line docstring saying what it shows (used to find it again later). Build it from `heigkit_manim` (below):
    shorter to write, fewer layout mistakes, faster to render.
@@ -68,6 +85,10 @@ class SinusCercle(CourseScene):
         self.finish(["sin(α) = ordonnée de M"], "Polycopié ANA1, §3.3 p. 17")   # recap and source
 ```
 
+- `CourseScene` methods: `self.title(text, sub=None)` (kept until the end card); `self.say(*lines, wait=0)` replaces
+  the right panel (font 26, top left corner at (0,3; 2,1)), each line a str or `(str, color)`; `self.clear(*keep)`
+  fades out everything but the title and `keep` (the panel too); `self.finish(bullets, source=None,
+  title="À retenir", wait=5)` clears the screen and shows the recap and the source.
 - Text: `colored("texte", 30, YELLOW)` (`Text(..., color=...)` is ignored by ManimGL 1.7: the text stays white),
   `steps("1. …", ("2. …", GREEN))` (lines to show one by one), `title_card`, `recap`, `source_line`, `Panel` (used by
   `CourseScene`).
@@ -82,10 +103,18 @@ class SinusCercle(CourseScene):
   `c.height_mark(30, "1/2")` / `c.width_mark(60, "1/2")` carry sin / cos to the side of the circle with a label;
   `c.quadrant_signs("++--")` (sin; "+--+" cos, "+-+-" tan); `unroll(c, axes, math.sin)` draws the curve while α turns
   (axes at the circle's scale: see its docstring).
-- Discrete mathematics: `hasse({"1": (0, -1), "2": (-1, 0), "3": (1, 0), "6": (0, 1)}, [("1", "2"), …])` (labels
-  outside, `.pos[label]`), `incomparable(diagram, "2", "3")`, `Matrix01(["1 1 1", "0 1 1", "0 0 1"])` with
-  `.entry(i, j)`, `.box(i, j, GREEN)` and `.diagonal()`, `labeled_dot("Aline", BLUE)`, `group_box(a, d, f, color=BLUE)`
-  (an equivalence class).
+- Layout: `FIGURE` is the center of the left half (the panel takes the right half, from x = 0,3); figures may use x
+  from -6,8 to 0.
+- Discrete mathematics: `hasse(nodes, edges, center=FIGURE, scale=1.3, color=WHITE, font_size=34)`, nodes
+  `{Tex label: (x, y)}` (y grows upwards, screen point = center + scale·(x, y)), edges `[(lower, upper)]`, e.g.
+  `hasse({"1": (0, -1), "2": (-1, 0), "3": (1, 0), "6": (0, 1)}, [("1", "2"), ("1", "3"), ("2", "6"), ("3", "6")])`;
+  returns `VGroup(lines, dots, labels)` (`d[0][k]` is the k-th edge, `d[1][k]` / `d[2][k]` the k-th node's dot / label,
+  in the dict's order) with `.pos[label]` the screen point of a node; labels are outside (left of nodes with x < 0).
+  `incomparable(diagram, "2", "3", color=RED)` (dashed line and ✗). `Matrix01(["1 1 1", "0 1 1", "0 0 1"],
+  center=FIGURE, cell=0.6, font_size=36)` (entries spaced by `cell`, brackets) with `.entry(i, j)` (a `Tex`),
+  `.box(i, j, GREEN)` (frame to add), `.diagonal()` (a line to add), `.entries[i]` (row i), `.brackets`.
+  `labeled_dot("Aline", BLUE, font_size=22, direction=DOWN)`, `group_box(a, d, f, color=BLUE, buff=0.25)` (an
+  equivalence class).
 
 ## ManimGL, not Manim Community
 
@@ -112,7 +141,12 @@ This is 3b1b's ManimGL (version 1.7): `from manimlib import *`. Its API differs 
 
 ## Good demonstrations
 
-- One idea per scene, 10 to 40 seconds, in steps that match the explanation (build the objects, then show the
-  property, then a counter-example).
+- **Demonstrate every step, never skip one.** A video is a complete step-by-step demonstration the user can follow
+  without the course: every step of the method appears on screen in order, every intermediate result is shown
+  (each pair checked, each entry of a matrix read, each line of a calculation, each edge removed and why), and no
+  step is summarised as "and so on" or jumped over to the result. When a step repeats on many cases, show the first
+  ones in full, then the others faster, but still all of them. Keep the end card with the key points.
+- One idea per scene, in steps that match the explanation (build the objects, then show the property, then a
+  counter-example); the length follows from showing every step (often 40 seconds to 2 minutes).
 - Use the course's notation and examples (search them with `heig:teacher` when the knowledge base is available).
 - Pause with `self.wait()` after each key step so the viewer can read.
