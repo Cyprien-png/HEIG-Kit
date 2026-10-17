@@ -23,6 +23,8 @@ export interface ChunkOptions {
 
 interface Block {
   page: number;
+  /** Last page of a block continued on the following pages (an exercise with its lines), when not `page`. */
+  pageTo?: number;
   text: string;
   heading?: { level: number; title: string };
   exercise?: string;
@@ -118,6 +120,7 @@ function toBlocks(markdown: string, exerciseSheet: boolean): Block[] {
     const previous = blocks[i - 1];
     if (!blocks[i].heading && !blocks[i].exercise && previous.exercise && !previous.heading) {
       previous.text += `\n\n${blocks[i].text}`;
+      previous.pageTo = blocks[i].pageTo ?? blocks[i].page;
       blocks.splice(i--, 1);
     }
   }
@@ -144,7 +147,7 @@ function split(blocks: Block[], headingPath: string, exercise: string | undefine
     chunks.push({
       ordinal: 0,
       pageFrom: parts[0].page,
-      pageTo: parts.at(-1)!.page,
+      pageTo: Math.max(...parts.map((p) => p.pageTo ?? p.page)),
       headingPath,
       exercise,
       text: parts.map((p) => p.text).join("\n\n"),

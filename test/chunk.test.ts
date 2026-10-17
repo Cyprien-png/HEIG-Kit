@@ -65,6 +65,12 @@ test("pages, formulas, images and the table of contents", () => {
   assert.ok(!chunks.some((c) => c.text.includes(". . .")));
 });
 
+test("an exercise continued on the next page ends on that page", () => {
+  const sheet = `- 3.1 Soit A = {1, 2, 3}. Déterminer l'ensemble des parties de A.\n\n${PAGE_BREAK}\n\nb) Combien d'éléments contient-il ?`;
+  const [exercise] = chunkMarkdown(sheet, { exercises: true });
+  assert.deepEqual([exercise.exercise, exercise.pageFrom, exercise.pageTo], ["3.1", 1, 2]);
+});
+
 test("other documents only split on explicit exercise markers", () => {
   const lecture = `## 1.2 Inclusion\n\nUn ensemble A est inclus dans B si tout élément de A appartient à B.\n\n**Exercice 3** Montrer que l'inclusion est transitive pour tous les ensembles.`;
   const chunks = chunkMarkdown(lecture, { exercises: false });
