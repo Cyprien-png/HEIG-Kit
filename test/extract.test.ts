@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type DoclingDocument, PAGE_BREAK, enrichMarkdown, formulaText } from "../src/rag/extract.js";
+import { type DoclingDocument, PAGE_BREAK, enrichMarkdown, formulaText, restorePages } from "../src/rag/extract.js";
 
 const PNG = Buffer.from("89504e470d0a1a0a", "hex");
 
@@ -40,4 +40,31 @@ test("placeholders are kept when the markdown and the document disagree", () => 
   const { markdown, figures } = enrichMarkdown("<!-- formula-not-decoded -->\n\n![Image](data:image/png;base64,AAAA)\n\n<!-- image -->", DOCUMENT);
   assert.equal(markdown, "<!-- formula-not-decoded -->\n\n<!-- image -->\n\n<!-- image -->");
   assert.deepEqual(figures, []);
+});
+
+test("pages without text are put back, so that page numbers match the document", () => {
+  const document: DoclingDocument = {
+    body: { children: [{ $ref: "#/texts/0" }, { $ref: "#/pictures/0" }, { $ref: "#/texts/1" }, { $ref: "#/texts/2" }] },
+    texts: [
+      { label: "text", text: "Couverture", prov: [{ page_no: 1 }] },
+      { label: "text", text: "Chapitre 1", prov: [{ page_no: 4 }] },
+      // Page footers are left out of the markdown: page 5 has no text.
+      { label: "page_footer", content_layer: "furniture", text: "5", prov: [{ page_no: 5 }] },
+    ],
+    // A figure without labels, on the same page as the cover's text.
+    pictures: [{ prov: [{ page_no: 1 }] }],
+    pages: { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} },
+  };
+  const { markdown } = enrichMarkdown(`Couverture\n\n<!-- image -->\n\n${PAGE_BREAK}\n\nChapitre 1`, document);
+  assert.deepEqual(
+    markdown.split(PAGE_BREAK).map((page) => page.trim()),
+    ["Couverture\n\n<!-- image -->", "", "", "Chapitre 1", ""],
+  );
+});
+
+test("page breaks are kept when they disagree with the document's pages", () => {
+  const markdown = `a\n\n${PAGE_BREAK}\n\nb`;
+  assert.equal(restorePages(markdown, [1, 2, 5], 5), markdown);
+  assert.equal(restorePages(markdown, [3, 2], 5), markdown);
+  assert.equal(restorePages(markdown, [2, 3], 3).split(PAGE_BREAK).length, 3, "a document starting on page 2");
 });

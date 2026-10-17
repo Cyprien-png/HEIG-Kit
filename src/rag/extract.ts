@@ -14,8 +14,9 @@ const MAX_FIGURE_LABELS_CHARS = 300;
 /**
  * Version of the extraction. Raising it makes the next ingestion convert and index every document again.
  * 2: formulas as their raw text (matrices row by row) and figures saved as images with their labels.
+ * 3: pages without text (blank pages, scans, full-page images) are kept, so that page numbers match the document.
  */
-export const EXTRACTOR_VERSION = 2;
+export const EXTRACTOR_VERSION = 3;
 
 /** Placed between pages in the extracted markdown, so chunks can keep page numbers. */
 export const PAGE_BREAK = "<!-- page break -->";
@@ -71,6 +72,8 @@ export async function isDoclingAvailable(): Promise<boolean> {
 /** The parts of docling's JSON document used here. */
 interface DoclingNode {
   label?: string;
+  /** "body", or "furniture" for page headers and footers. */
+  content_layer?: string;
   text?: string;
   orig?: string;
   children?: { $ref: string }[];
@@ -83,6 +86,8 @@ export interface DoclingDocument {
   pictures: DoclingNode[];
   groups?: DoclingNode[];
   tables?: DoclingNode[];
+  /** Pages of the document by number ("1", "2"…). */
+  pages?: Record<string, unknown>;
 }
 
 const FORMULA_PLACEHOLDER = "<!-- formula-not-decoded -->";
@@ -99,11 +104,19 @@ export function enrichMarkdown(markdown: string, document: DoclingDocument | und
   if (!document) return { markdown: markdown.replace(PICTURE, "<!-- image -->"), figures: [] };
   const formulas: DoclingNode[] = [];
   const pictures: DoclingNode[] = [];
+  const pages: number[] = [];
+  let previousPage: number | undefined;
   const resolve = (ref: string): DoclingNode | undefined => {
     const [, kind, index] = ref.split("/");
     return (document[kind as keyof DoclingDocument] as DoclingNode[] | undefined)?.[Number(index)];
   };
   const walk = (node: DoclingNode, kind: string) => {
+    if (node.content_layer === "furniture") return; // page headers and footers, left out of the markdown
+    const page = node.prov?.[0]?.page_no;
+    if (page !== undefined) {
+      if (previousPage === undefined || page > previousPage) pages.push(page);
+      previousPage = page;
+    }
     if (kind === "pictures") return void pictures.push(node);
     if (kind === "tables") return; // rendered by docling itself, cells included
     if (node.label === "formula" && !node.text) formulas.push(node);
@@ -142,7 +155,24 @@ export function enrichMarkdown(markdown: string, document: DoclingDocument | und
   } else {
     result = result.replace(PICTURE, "<!-- image -->");
   }
-  return { markdown: result, figures };
+  return { markdown: restorePages(result, pages, Object.keys(document.pages ?? {}).length), figures };
+}
+
+/**
+ * docling only places a page break where the page of the next item is higher than the previous one: pages without
+ * any item are left out, and counting breaks would shift the following page numbers. `pages` are the pages that
+ * start a part of the markdown, in order (the same rule applied to the document's items); empty pages are put back
+ * before them, and after the last one up to `pageCount`. If the parts and the pages disagree (or the reading order
+ * goes back to an earlier page), the markdown is kept.
+ */
+export function restorePages(markdown: string, pages: number[], pageCount: number): string {
+  const parts = markdown.split(PAGE_BREAK);
+  if (pages.length !== parts.length || pages.some((page, i) => page <= (pages[i - 1] ?? 0))) return markdown;
+  const emptyPages = (count: number) => `\n\n${PAGE_BREAK}\n\n`.repeat(count);
+  return parts
+    .map((part, i) => emptyPages(pages[i] - (pages[i - 1] ?? 0) - 1) + part)
+    .join(PAGE_BREAK)
+    .concat(emptyPages(Math.max(0, pageCount - pages.at(-1)!)));
 }
 
 /**
