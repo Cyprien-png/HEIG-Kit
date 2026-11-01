@@ -25,8 +25,11 @@ npm run video -- scene.py MyScene --check           # runs the scene without ren
 npm run video -- scene.py MyScene --open --frames   # render (720p), open the video, image of its key frames
 npm run video -- scene.py MyScene --quality low     # 480p; high = 1080p
 npm run video -- scene.py MyScene --jobs 2          # parallel parts (default: half the processors, at most 4)
+npm run video -- scene.py MyScene --voice           # with a spoken explanation (see the voice module)
 npm run video -- --where                            # default folder used by the assistant
 ```
+
+Videos are silent unless you ask for a voice: see the optional [`voice`](voice.md) module.
 
 A scene is first run without rendering (dry run): errors show up in seconds, the layout is checked at the end of every
 animation (texts over each other, a line through a text, something off screen), and the duration of each animation is

@@ -3,7 +3,8 @@ Dry run of a ManimGL scene: `python plan.py <manimgl arguments> -s -w` runs the 
 seconds), saves its last frame, and writes to the JSON file named by HEIGKIT_PLAN:
 - "durations": the duration of each animation (every play and wait, in order), so that render.ts can split the rendering
   into balanced parts (manimgl -n start,end);
-- "layout": the layout problems found at the end of each animation (layout.py), each reported once, when it appears.
+- "layout": the layout problems found at the end of each animation (layout.py), each reported once, when it appears;
+- "voice": the spoken lines of the scene and their time in the video.
 """
 import atexit
 import json
@@ -75,7 +76,9 @@ Scene.progress_through_animations = probe_animations
 @atexit.register
 def write_plan():
     with open(os.environ["HEIGKIT_PLAN"], "w") as f:
-        json.dump({"durations": durations, "layout": problems}, f)
+        # Scenes built on heigkit_manim may have spoken lines (self.voice).
+        course = sys.modules.get("heigkit_manim")
+        json.dump({"durations": durations, "layout": problems, "voice": course.VOICE_LINES if course else []}, f)
 
 
 from manimlib.__main__ import main  # noqa: E402

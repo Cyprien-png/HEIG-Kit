@@ -22,6 +22,18 @@ export function manimBin(name: string): string {
   return windows ? path.join(MANIM_DIR, ".venv", "Scripts", `${name}.exe`) : path.join(MANIM_DIR, ".venv", "bin", name);
 }
 
+/** Speech synthesis of the voice module. */
+export const PIPER_DIR = path.join(VENDOR_DIR, "piper");
+export const PIPER_VOICE = "fr_FR-siwis-medium";
+
+export function piperPython(): string {
+  return windows ? path.join(PIPER_DIR, ".venv", "Scripts", "python.exe") : path.join(PIPER_DIR, ".venv", "bin", "python");
+}
+
+export function piperVoiceFile(): string {
+  return path.join(PIPER_DIR, "voices", `${PIPER_VOICE}.onnx`);
+}
+
 /** TinyTeX installation folder: TinyTeX on macOS and Windows, .TinyTeX on Linux (the installer's own naming). */
 export function tinytexDir(): string {
   return path.join(VENDOR_DIR, process.platform === "linux" ? ".TinyTeX" : "TinyTeX");

@@ -105,6 +105,10 @@ export function registerOutputTools(server: McpServer): void {
         scene: z.string().describe("Name of the Scene class to render"),
         quality: z.enum(["low", "medium", "high"]).optional().describe("medium (720p) by default"),
         open: z.boolean().optional().describe("Open the video (default: true)"),
+        voice: z.boolean().optional().describe(
+          "Speak the scene's lines, only when the user asks for a voice (default: false, silent and faster; requires the voice module). " +
+            "In a CourseScene, self.voice(\"spoken French, formulas in words\") starts a line while the next animations run, after the previous line ended; self.wait_voice() holds the picture until it ends.",
+        ),
       },
     },
     async (a) => {
@@ -114,6 +118,7 @@ export function registerOutputTools(server: McpServer): void {
       await writeFile(source, a.code);
       const args = [TSX, path.join(ROOT, "modules", "visuals", "render.ts"), source, a.scene, "--quality", a.quality ?? "medium", "--frames"];
       if (a.open !== false) args.push("--open");
+      if (a.voice) args.push("--voice");
       try {
         const { stdout } = await run(process.execPath, args, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PYTHONWARNINGS: "ignore" } });
         const lines = stdout.split(/[\r\n]+/).map((l) => l.trim());

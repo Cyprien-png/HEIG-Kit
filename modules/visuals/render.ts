@@ -1,7 +1,7 @@
 /**
  * HEIG-Kit visuals module: renders a ManimGL (3b1b/manim) scene to a video.
  *
- *   npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--jobs N] [--out <folder>]
+ *   npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--voice] [--jobs N] [--out <folder>]
  *   npm run video -- --where    default folder for generated videos
  *
  * With a scene name, a dry run first checks the scene in a few seconds (Python, LaTeX and layout errors) and measures
@@ -9,15 +9,22 @@
  * stops after the dry run and prints the image of the last frame; --frames prints a sheet of key frames of the video,
  * to check its layout. Without a scene name, every scene of the file is rendered, one after the other.
  *
+ * --voice (voice module) speaks the self.voice lines of the scene: a first dry run lists them, Piper synthesizes them,
+ * and a second dry run gives the timing of the animations with the duration of the speech, which the parts then use.
+ * Without it, these lines take no time and nothing about the rendering changes.
+ *
  * Videos go to ~/Documents/HEIG-Kit/videos by default (HEIG_OUTPUT_DIR in .env). LaTeX formulas (Tex, TexText) use the
  * TinyTeX installed by the setup; scenes can import the ready-made pieces of heigkit_manim.py (this folder).
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { manimBin, outputDir, tinytexBinDir } from "../../src/vendor.js";
+import { ROOT } from "../../src/paths.js";
+import { PIPER_VOICE, manimBin, outputDir, piperPython, piperVoiceFile, tinytexBinDir } from "../../src/vendor.js";
+import { type Wav, buildTrack, parseWav, wavSeconds } from "../voice/track.js";
 import { keyFrameTimes, splitAnimations } from "./parts.js";
 
 const QUALITY: Record<string, string> = { low: "-l", medium: "-m", high: "--hd" };
@@ -37,6 +44,7 @@ const { values, positionals } = parseArgs({
     where: { type: "boolean", default: false },
     check: { type: "boolean", default: false },
     frames: { type: "boolean", default: false },
+    voice: { type: "boolean", default: false },
     jobs: { type: "string" },
   },
 });
@@ -53,7 +61,9 @@ function fail(message: string): never {
 }
 
 const [file, scene] = positionals;
-if (!file) fail("Usage: npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--jobs N] [--out <folder>]");
+if (!file) fail("Usage: npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--voice] [--jobs N] [--out <folder>]");
+if (values.voice && !scene) fail("--voice needs a scene name");
+if (values.voice && !(existsSync(piperPython()) && existsSync(piperVoiceFile()))) fail("The voice is not installed: npm run setup -- voice");
 if (!QUALITY[values.quality]) fail(`Invalid --quality "${values.quality}", expected low, medium or high`);
 const jobs = values.jobs ? Number(values.jobs) : DEFAULT_JOBS;
 if (!Number.isInteger(jobs) || jobs < 1) fail(`Invalid --jobs "${values.jobs}", expected a positive integer`);
@@ -157,6 +167,23 @@ function frameSheet(video: string, times: number[], name: string): string | unde
   return count > 0 && existsSync(sheet) ? sheet : undefined;
 }
 
+/** The speech of each line, synthesized only once (.cache/voice): rendering again only pays for the lines that changed. */
+function speak(texts: string[], work: string): Map<string, Wav> {
+  const cache = path.join(ROOT, ".cache", "voice");
+  mkdirSync(cache, { recursive: true });
+  const fileOf = (text: string) => path.join(cache, `${createHash("sha256").update(`${PIPER_VOICE}\n${text}`).digest("hex").slice(0, 32)}.wav`);
+  const unique = [...new Set(texts)];
+  const missing = unique.filter((text) => !existsSync(fileOf(text)));
+  if (missing.length > 0) {
+    const lines = path.join(work, "lines.json");
+    writeFileSync(lines, JSON.stringify(missing.map((text) => ({ text, file: fileOf(text) }))));
+    const result = spawnSync(piperPython(), [path.join(HERE, "..", "voice", "synth.py"), piperVoiceFile(), lines], { encoding: "utf-8" });
+    if (result.status !== 0) fail(`Speech synthesis failed:\n${result.stderr}`);
+  }
+  console.log(`Voice: ${unique.length} line${unique.length > 1 ? "s" : ""}, ${missing.length} synthesized.`);
+  return new Map(unique.map((text) => [text, parseWav(readFileSync(fileOf(text)))]));
+}
+
 /** Every scene of the file, one after the other, as manim does it (no dry run, no parallel parts). */
 function renderAll(): void {
   const started = Date.now();
@@ -186,13 +213,30 @@ async function renderScene(name: string): Promise<void> {
   let staging: string | undefined;
   try {
     // 1. Dry run: errors in seconds, last frame, duration of each animation.
-    const plan = path.join(work, "plan.json");
-    const dry = await run(manimBin("python"), [path.join(HERE, "plan.py"), source, name, "-s", "-w", QUALITY[values.quality], "--video_dir", work], { HEIGKIT_PLAN: plan });
-    if (dry.status !== 0) fail(`The scene does not run (dry run):\n${errorLog(dry.output)}`);
-    const { durations, layout } = JSON.parse(readFileSync(plan, "utf-8")) as {
-      durations: number[];
-      layout: { animation: number; time: number; warning: string }[];
+    const dryRun = async (voiceEnv: Record<string, string> = {}) => {
+      const plan = path.join(work, "plan.json");
+      const dry = await run(manimBin("python"), [path.join(HERE, "plan.py"), source, name, "-s", "-w", QUALITY[values.quality], "--video_dir", work], { ...voiceEnv, HEIGKIT_PLAN: plan });
+      if (dry.status !== 0) fail(`The scene does not run (dry run):\n${errorLog(dry.output)}`);
+      return JSON.parse(readFileSync(plan, "utf-8")) as {
+        durations: number[];
+        layout: { animation: number; time: number; warning: string }[];
+        voice: { text: string; time: number }[];
+      };
     };
+    let plan = await dryRun();
+
+    // With the speech: the lines make the scene longer, so its timing is measured again with their durations.
+    let voiceEnv: Record<string, string> = {};
+    let speech: Map<string, Wav> | undefined;
+    if (values.voice) {
+      if (plan.voice.length === 0) fail(`--voice: the scene ${name} has no spoken line (self.voice("…") of CourseScene).`);
+      speech = speak(plan.voice.map((l) => l.text), work);
+      const seconds = path.join(work, "voice.json");
+      writeFileSync(seconds, JSON.stringify(Object.fromEntries([...speech].map(([text, wav]) => [text, wavSeconds(wav)]))));
+      voiceEnv = { HEIGKIT_VOICE: seconds };
+      plan = await dryRun(voiceEnv);
+    }
+    const { durations, layout } = plan;
     if (layout.length > 0) {
       console.log(`Layout: ${layout.length} problem${layout.length > 1 ? "s" : ""} (end of animation, time in the video):`);
       for (const p of layout) console.log(`  - animation ${p.animation} (${p.time.toFixed(1)} s): ${p.warning}`);
@@ -216,7 +260,7 @@ async function renderScene(name: string): Promise<void> {
         const range = i === ranges.length - 1 ? `${a}` : `${a},${b}`;
         const args = [source, name, "-w", QUALITY[values.quality], "--video_dir", work, "--file_name", `part${i}`];
         if (ranges.length > 1) args.push("-n", range);
-        const result = await run(manimgl, args);
+        const result = await run(manimgl, args, voiceEnv);
         if (result.status !== 0) throw new Error(`Part ${i + 1} (animations ${range}) failed:\n${errorLog(result.output)}`);
         return path.join(work, `part${i}.mp4`);
       }),
@@ -226,16 +270,25 @@ async function renderScene(name: string): Promise<void> {
     // version keeps reading it intact (writing over it while it plays froze the picture).
     const video = path.join(folder, `${name}.mp4`);
     staging = path.join(folder, `.${name}.rendering.mp4`);
+    const pictures = speech ? path.join(work, "pictures.mp4") : staging;
     if (parts.length === 1) {
-      copyFileSync(parts[0], staging);
+      copyFileSync(parts[0], pictures);
     } else {
       const list = path.join(work, "parts.txt");
       writeFileSync(list, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
-      const joined = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", staging], { encoding: "utf-8" });
+      const joined = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", pictures], { encoding: "utf-8" });
       if (joined.status !== 0) {
         rmSync(staging, { force: true });
         fail(`FFmpeg could not join the parts: ${joined.stderr}`);
       }
+    }
+    if (speech) {
+      const lines = plan.voice.map(({ text, time }) => ({ time, wav: speech.get(text)! }));
+      const track = path.join(work, "voice.wav");
+      writeFileSync(track, buildTrack(lines, durations.reduce((a, b) => a + b, 0)));
+      // The picture is copied as it is: only the sound is encoded.
+      const muxed = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-i", pictures, "-i", track, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "96k", staging], { encoding: "utf-8" });
+      if (muxed.status !== 0) fail(`FFmpeg could not add the voice: ${muxed.stderr}`);
     }
     const watched = values.open && isOpenInPlayer(video);
     renameSync(staging, video);

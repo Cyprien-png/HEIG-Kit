@@ -15,7 +15,7 @@ grades and absences) skills.
 
 ## Modules
 
-HEIG-Kit is a template made of optional modules (campus, knowledge, documents, visuals, shortcuts, claude), installed with
+HEIG-Kit is a template made of optional modules (campus, knowledge, documents, visuals, voice, shortcuts, claude), installed with
 `npm run setup -- <module…>` (`--status` to check them). Each module is defined in `src/setup/modules/<id>.ts` (install and
 check functions) and registered in `src/setup/registry.ts`; system packages go through `src/setup/system.ts` (Homebrew,
 winget, apt, dnf, pacman) so that every module installs on macOS, Linux and Windows. User documentation is in `docs/`;
@@ -56,6 +56,8 @@ Never print or commit the content of `.env` or `.cache/`.
   animation computed halfway, layout check of `layout.py`), parts rendered in parallel (`parts.ts`) and joined with
   FFmpeg, key frames sheet; `heigkit_manim.py`: `CourseScene` template and ready-made scene pieces;
   manim and TinyTeX live in `vendor/` (see `src/vendor.ts`)
+- `modules/voice/`: `synth.py` (Piper speech synthesis, in `vendor/piper`), `track.ts` (soundtrack from the spoken lines);
+  `render.ts --voice` speaks the `self.voice` lines of a `CourseScene` (no effect on silent renders)
 - `scripts/setup.ts`: module installer (`npm run setup`)
 - `scripts/generated.ts`: lists and reopens generated documents and videos (`npm run generated`), checked by the skills
   before creating anything new

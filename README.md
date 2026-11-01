@@ -16,6 +16,7 @@ Install only what you need. Each module installs its own dependencies automatica
 | [`knowledge`](docs/knowledge.md) | The **teacher**: explains, cites the course, writes exercises and practice exams from your course documents | Docker, the database, the embedding model |
 | [`documents`](docs/documents.md) | PDF, Word and HTML from Markdown, with LaTeX math, Mermaid diagrams and videos | Renderer, Chromium, pandoc |
 | [`visuals`](docs/visuals.md) | Mathematical animations with [3b1b/manim](https://github.com/3b1b/manim), embeddable in documents | manim, Python, FFmpeg, LaTeX |
+| [`voice`](docs/voice.md) | A spoken explanation synchronized with the animations, with a local French voice; videos stay silent without it | Piper, a French voice |
 | [`shortcuts`](docs/shortcuts.md) | `heig:planning`, `heig:deadlines`… from any terminal | — |
 | `claude` | The `heig:*` skills in Claude Code, and the knowledge base server | — |
 

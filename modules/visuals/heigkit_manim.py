@@ -19,7 +19,9 @@ again at every frame), which keeps rendering fast. Numbers are written the Frenc
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 
 from manimlib import *
 
@@ -31,6 +33,16 @@ __all__ = [
 
 # Center of the figure in the usual layout: figure on the left half, text panel on the right half.
 FIGURE = np.array([-3.3, -0.4, 0])
+
+# Spoken lines of the scene, read by plan.py: [{"text": ..., "time": seconds in the video}].
+VOICE_LINES: list[dict] = []
+# Duration of each spoken line, in a video rendered with --voice; empty in a silent video, where lines take no time.
+VOICE_SECONDS: dict[str, float] = {}
+if os.environ.get("HEIGKIT_VOICE"):
+    with open(os.environ["HEIGKIT_VOICE"], encoding="utf-8") as _f:
+        VOICE_SECONDS = json.load(_f)
+# Silence after a line when the picture waits for its end.
+VOICE_PAUSE = 0.3
 
 
 def colored(content: str, font_size: int = 30, color=WHITE) -> Text:
@@ -99,6 +111,46 @@ class CourseScene(Scene):
     Template of a course video: a title at the top, the figure on the left (around FIGURE), a text panel on the right
     (`self.say`), and an end card. In construct: `self.title(...)`, then the steps, then `self.finish(...)`.
     """
+
+    # Time in the video, and when the current spoken line ends.
+    video_time = 0.0
+    voice_end = 0.0
+
+    def advance_video_time(self, run_time: float) -> None:
+        """
+        An animation lasts a whole number of frames in the video, and Scene.time differs in the animations a part skips:
+        this time is computed from the frames, so that the dry run and every part agree with the rendered video.
+        """
+        self.video_time += len(np.arange(0, run_time, 1 / self.camera.fps)) / self.camera.fps
+
+    def get_animation_time_progression(self, animations):
+        animations = list(animations)
+        self.advance_video_time(self.get_run_time(animations))
+        return super().get_animation_time_progression(animations)
+
+    def get_wait_time_progression(self, duration, stop_condition=None):
+        self.advance_video_time(duration)
+        return super().get_wait_time_progression(duration, stop_condition)
+
+    def voice(self, text: str) -> None:
+        """
+        Starts a spoken line (--voice) and returns at once: the next animations run while it is spoken. The picture
+        first waits for the end of the previous line. Without --voice, it does nothing and takes no time.
+        """
+        self.wait_voice()
+        VOICE_LINES.append({"text": text, "time": self.video_time})
+        self.voice_end = self.video_time + VOICE_SECONDS.get(text, 0)
+
+    def wait_voice(self) -> None:
+        """Holds the picture until the current spoken line ends."""
+        remaining = self.voice_end - self.video_time
+        if remaining > 0:
+            self.wait(remaining + VOICE_PAUSE)
+
+    def interact(self):
+        # Called at the end of construct: the video lasts at least until the end of its last line.
+        self.wait_voice()
+        super().interact()
 
     def setup(self):
         super().setup()

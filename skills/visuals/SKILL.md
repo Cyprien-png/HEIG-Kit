@@ -61,6 +61,23 @@ uses, then call `Write` at once: the scene's steps are decided while writing it 
 6. To include it in a document, reference it from Markdown with `![caption](../videos/<SceneName>.mp4)` and render the
    document with `heig:documents`.
 
+## Voice, only when asked
+
+Videos are silent by default, which is faster. Add a voice only when the user asks for one ("avec une voix", "narré",
+"commenté à l'oral"), or on an existing scene to give it a voice: add the lines, keep the rest. It needs the `voice`
+module: if the command reports that the voice is not installed, tell the user to run
+`npm --prefix <root> run setup -- voice`, and meanwhile render the video silently.
+
+- In a `CourseScene`, `self.voice("…")` starts a line and returns at once: the animations that follow run while it is
+  spoken, so put it just before the animation it explains. A line first waits for the end of the previous one, holding
+  the picture. `self.wait_voice()` holds the picture until the current line ends (before a `self.clear()`, for
+  instance). `self.finish` keeps its end card until the last line ends.
+- Write as someone speaks, in French, one or two sentences per line, explaining the step instead of reading the screen;
+  formulas and symbols in words (`le sinus d'alpha vaut un demi`, never `sin(α) = 1/2`).
+- With a voice, the speech sets the pace: `self.wait` and `wait=` remain useful for pauses but do not need to match it.
+- Add `--voice` to the commands of steps 3 and 4; the layout times then match the video with its voice. Without
+  `--voice`, the same scene renders silently and these lines take no time.
+
 ## Template and ready-made pieces: `from heigkit_manim import *`
 
 The renderer puts `heigkit_manim` on the Python path. Everything that moves is updated in place; numbers are written
