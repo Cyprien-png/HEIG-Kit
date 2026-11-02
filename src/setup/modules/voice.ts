@@ -1,10 +1,28 @@
-import { existsSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
-import { PIPER_DIR, PIPER_VOICE, manimBin, piperPython, piperVoiceFile } from "../../vendor.js";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
+import { KOKORO_DIR, kokoroModelFile, kokoroPython, kokoroVoicesFile, manimBin } from "../../vendor.js";
 import type { Module } from "../module.js";
 import { run } from "../system.js";
 
-const PIPER_VERSION = "1.8.0";
+const KOKORO_ONNX_VERSION = "0.6.1";
+const MODEL_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0";
+
+/** Downloads next to the destination, so an interrupted download never looks like an installed file. */
+async function download(url: string, file: string): Promise<void> {
+  mkdirSync(path.dirname(file), { recursive: true });
+  const partial = `${file}.partial`;
+  const response = await fetch(url);
+  if (!response.ok || !response.body) throw new Error(`Could not download ${url} (${response.status})`);
+  try {
+    await pipeline(Readable.fromWeb(response.body as WebReadableStream), createWriteStream(partial));
+    renameSync(partial, file);
+  } finally {
+    rmSync(partial, { force: true });
+  }
+}
 
 export const voice: Module = {
   id: "voice",
@@ -12,27 +30,28 @@ export const voice: Module = {
   summary: "spoken explanations on the animations, with a local French voice (npm run video -- --voice)",
   requires: () => ["visuals"],
   async install() {
-    // Its own environment, built from the Python of the visuals module: removing vendor/piper removes everything.
-    if (!existsSync(piperPython())) run(manimBin("python"), ["-m", "venv", path.join(PIPER_DIR, ".venv")]);
-    console.log("  installing Piper (speech synthesis)…");
-    run(piperPython(), ["-m", "pip", "install", "--quiet", `piper-tts==${PIPER_VERSION}`]);
-    if (!existsSync(piperVoiceFile())) {
-      console.log(`  downloading the voice ${PIPER_VOICE} (about 60 MB)…`);
-      run(piperPython(), ["-m", "piper.download_voices", "--download-dir", path.dirname(piperVoiceFile()), PIPER_VOICE]);
+    // Its own environment, built from the Python of the visuals module: removing vendor/kokoro removes everything.
+    if (!existsSync(kokoroPython())) run(manimBin("python"), ["-m", "venv", path.join(KOKORO_DIR, ".venv")]);
+    console.log("  installing Kokoro (speech synthesis)…");
+    run(kokoroPython(), ["-m", "pip", "install", "--quiet", `kokoro-onnx==${KOKORO_ONNX_VERSION}`]);
+    for (const file of [kokoroModelFile(), kokoroVoicesFile()]) {
+      if (existsSync(file)) continue;
+      console.log(`  downloading ${path.basename(file)}…`);
+      await download(`${MODEL_RELEASE}/${path.basename(file)}`, file);
     }
   },
   async check() {
-    const piperOk = (() => {
+    const kokoroOk = (() => {
       try {
-        run(piperPython(), ["-c", "import piper"], { quiet: true });
+        run(kokoroPython(), ["-c", "import kokoro_onnx"], { quiet: true });
         return true;
       } catch {
         return false;
       }
     })();
     return [
-      { label: "Piper installed in vendor/piper", ok: piperOk, hint: "npm run setup -- voice" },
-      { label: `Voice ${PIPER_VOICE}`, ok: existsSync(piperVoiceFile()), hint: "npm run setup -- voice" },
+      { label: "Kokoro installed in vendor/kokoro", ok: kokoroOk, hint: "npm run setup -- voice" },
+      { label: "Kokoro model and voices", ok: existsSync(kokoroModelFile()) && existsSync(kokoroVoicesFile()), hint: "npm run setup -- voice" },
     ];
   },
 };

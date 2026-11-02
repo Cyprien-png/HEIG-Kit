@@ -9,12 +9,13 @@ optional: without it, or without `--voice`, videos stay silent and render exactl
 npm run setup -- voice
 ```
 
-Installs, in `vendor/piper` (about 240 MB, deleting that folder removes everything), and the `visuals` module if it is
+Installs, in `vendor/kokoro` (about 280 MB, deleting that folder removes everything), and the `visuals` module if it is
 missing:
 
-- [Piper](https://github.com/OHF-Voice/piper1-gpl) 1.8, a speech synthesis that runs on the processor, without a GPU,
-  account or Internet connection;
-- the French voice `fr_FR-siwis-medium` (trained on a [CC BY 4.0 dataset](https://datashare.is.ed.ac.uk/handle/10283/2353)).
+- [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), a small AI speech model (Apache 2.0) run by
+  [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) on the processor, without a GPU, account or Internet
+  connection, about 7 times faster than real time on a recent Mac;
+- its French voice `ff_siwis`, trained on the [SIWIS dataset](https://datashare.ed.ac.uk/handle/10283/2353).
 
 ## Usage
 
@@ -46,4 +47,7 @@ Lines are read aloud as written: write formulas and symbols in words (`sinus d'a
 kept in `.cache/voice`, so rendering again only synthesizes the lines that changed.
 
 `--voice` renders the frames again rather than adding sound to an existing video, because the speech changes the timing of
-the animations. The speech itself only adds a few seconds, plus a second dry run.
+the animations. Synthesis adds about 20 seconds for two minutes of new speech, plus a second dry run.
+
+A scene whose pace comes only from its spoken lines runs much faster in its silent version, too fast to read: keep
+`self.wait` and `wait=` pauses in a scene meant to be watched both ways.

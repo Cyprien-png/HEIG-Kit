@@ -1,4 +1,4 @@
-/** The soundtrack of a video: spoken lines (16-bit mono WAV, as Piper writes them) placed at their time in the video. */
+/** The soundtrack of a video: spoken lines (16-bit mono WAV, as synth.py writes them) placed at their time in the video. */
 
 export interface Wav {
   rate: number;

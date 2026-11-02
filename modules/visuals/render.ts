@@ -9,7 +9,7 @@
  * stops after the dry run and prints the image of the last frame; --frames prints a sheet of key frames of the video,
  * to check its layout. Without a scene name, every scene of the file is rendered, one after the other.
  *
- * --voice (voice module) speaks the self.voice lines of the scene: a first dry run lists them, Piper synthesizes them,
+ * --voice (voice module) speaks the self.voice lines of the scene: a first dry run lists them, Kokoro synthesizes them,
  * and a second dry run gives the timing of the animations with the duration of the speech, which the parts then use.
  * Without it, these lines take no time and nothing about the rendering changes.
  *
@@ -23,7 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { ROOT } from "../../src/paths.js";
-import { PIPER_VOICE, manimBin, outputDir, piperPython, piperVoiceFile, tinytexBinDir } from "../../src/vendor.js";
+import { VOICE_ID, kokoroModelFile, kokoroPython, kokoroVoicesFile, manimBin, outputDir, tinytexBinDir } from "../../src/vendor.js";
 import { type Wav, buildTrack, parseWav, wavSeconds } from "../voice/track.js";
 import { keyFrameTimes, splitAnimations } from "./parts.js";
 
@@ -63,7 +63,7 @@ function fail(message: string): never {
 const [file, scene] = positionals;
 if (!file) fail("Usage: npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--voice] [--jobs N] [--out <folder>]");
 if (values.voice && !scene) fail("--voice needs a scene name");
-if (values.voice && !(existsSync(piperPython()) && existsSync(piperVoiceFile()))) fail("The voice is not installed: npm run setup -- voice");
+if (values.voice && ![kokoroPython(), kokoroModelFile(), kokoroVoicesFile()].every((f) => existsSync(f))) fail("The voice is not installed: npm run setup -- voice");
 if (!QUALITY[values.quality]) fail(`Invalid --quality "${values.quality}", expected low, medium or high`);
 const jobs = values.jobs ? Number(values.jobs) : DEFAULT_JOBS;
 if (!Number.isInteger(jobs) || jobs < 1) fail(`Invalid --jobs "${values.jobs}", expected a positive integer`);
@@ -171,13 +171,13 @@ function frameSheet(video: string, times: number[], name: string): string | unde
 function speak(texts: string[], work: string): Map<string, Wav> {
   const cache = path.join(ROOT, ".cache", "voice");
   mkdirSync(cache, { recursive: true });
-  const fileOf = (text: string) => path.join(cache, `${createHash("sha256").update(`${PIPER_VOICE}\n${text}`).digest("hex").slice(0, 32)}.wav`);
+  const fileOf = (text: string) => path.join(cache, `${createHash("sha256").update(`${VOICE_ID}\n${text}`).digest("hex").slice(0, 32)}.wav`);
   const unique = [...new Set(texts)];
   const missing = unique.filter((text) => !existsSync(fileOf(text)));
   if (missing.length > 0) {
     const lines = path.join(work, "lines.json");
     writeFileSync(lines, JSON.stringify(missing.map((text) => ({ text, file: fileOf(text) }))));
-    const result = spawnSync(piperPython(), [path.join(HERE, "..", "voice", "synth.py"), piperVoiceFile(), lines], { encoding: "utf-8" });
+    const result = spawnSync(kokoroPython(), [path.join(HERE, "..", "voice", "synth.py"), kokoroModelFile(), kokoroVoicesFile(), lines], { encoding: "utf-8" });
     if (result.status !== 0) fail(`Speech synthesis failed:\n${result.stderr}`);
   }
   console.log(`Voice: ${unique.length} line${unique.length > 1 ? "s" : ""}, ${missing.length} synthesized.`);

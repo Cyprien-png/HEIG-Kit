@@ -23,15 +23,20 @@ export function manimBin(name: string): string {
 }
 
 /** Speech synthesis of the voice module. */
-export const PIPER_DIR = path.join(VENDOR_DIR, "piper");
-export const PIPER_VOICE = "fr_FR-siwis-medium";
+export const KOKORO_DIR = path.join(VENDOR_DIR, "kokoro");
+/** Identifies the speech in the cache: a new model or voice must not reuse former files. */
+export const VOICE_ID = "kokoro-v1.0.int8/ff_siwis";
 
-export function piperPython(): string {
-  return windows ? path.join(PIPER_DIR, ".venv", "Scripts", "python.exe") : path.join(PIPER_DIR, ".venv", "bin", "python");
+export function kokoroPython(): string {
+  return windows ? path.join(KOKORO_DIR, ".venv", "Scripts", "python.exe") : path.join(KOKORO_DIR, ".venv", "bin", "python");
 }
 
-export function piperVoiceFile(): string {
-  return path.join(PIPER_DIR, "voices", `${PIPER_VOICE}.onnx`);
+export function kokoroModelFile(): string {
+  return path.join(KOKORO_DIR, "kokoro-v1.0.int8.onnx");
+}
+
+export function kokoroVoicesFile(): string {
+  return path.join(KOKORO_DIR, "voices-v1.0.bin");
 }
 
 /** TinyTeX installation folder: TinyTeX on macOS and Windows, .TinyTeX on Linux (the installer's own naming). */
