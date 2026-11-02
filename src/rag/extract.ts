@@ -37,7 +37,7 @@ export function figurePath(contentHash: string, number: number): string {
  * Converts a document to markdown with docling, pages separated by `PAGE_BREAK`. Results are cached in
  * data/extracted by content hash: a document is only converted once, even across ingestion runs.
  */
-export async function extractMarkdown(bytes: Buffer, filename: string, contentHash: string): Promise<string> {
+export async function extractMarkdown(bytes: Buffer, filename: string, contentHash: string, imagesScale = 2): Promise<string> {
   const cached = extractedMarkdownPath(contentHash);
   try {
     return await readFile(cached, "utf-8");
@@ -49,7 +49,7 @@ export async function extractMarkdown(bytes: Buffer, filename: string, contentHa
   if (/\.(md|txt)$/i.test(filename)) {
     markdown = bytes.toString("utf-8");
   } else {
-    const converted = enrichMarkdown(...(await convert(bytes, filename)));
+    const converted = enrichMarkdown(...(await convert(bytes, filename, imagesScale)));
     markdown = converted.markdown;
     await rm(path.join(EXTRACTED_DIR, contentHash), { recursive: true, force: true });
     if (converted.figures.length > 0) await mkdir(path.join(EXTRACTED_DIR, contentHash), { recursive: true });
@@ -207,7 +207,7 @@ export function formulaText(raw: string): string {
 }
 
 /** Asynchronous conversion (submit, then poll): large documents take longer than an HTTP request may wait. */
-async function convert(bytes: Buffer, filename: string): Promise<[string, DoclingDocument | undefined]> {
+async function convert(bytes: Buffer, filename: string, imagesScale: number): Promise<[string, DoclingDocument | undefined]> {
   const form = new FormData();
   form.append("files", new Blob([new Uint8Array(bytes)]), filename);
   form.append("to_formats", "md");
@@ -217,7 +217,7 @@ async function convert(bytes: Buffer, filename: string): Promise<[string, Doclin
   // Figures come embedded in the JSON document, to be saved as images.
   form.append("image_export_mode", "embedded");
   form.append("include_images", "true");
-  form.append("images_scale", "2");
+  form.append("images_scale", String(imagesScale));
   form.append("do_pdf_heading_hierarchy", "true");
   form.append("md_page_break_placeholder", PAGE_BREAK);
 

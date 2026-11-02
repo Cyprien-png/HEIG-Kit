@@ -6,7 +6,7 @@ import { ROOT } from "../paths.js";
 import { type Chunk, chunkMarkdown } from "./chunk.js";
 import { type Db, toVector, transaction } from "./db.js";
 import { embed } from "./embed.js";
-import { EXTRACTOR_VERSION, extractMarkdown } from "./extract.js";
+import { EXTRACTOR_VERSION, extractMarkdown, isDoclingAvailable } from "./extract.js";
 import type { SourceDocument } from "./sources/source.js";
 
 export interface IngestStats {
@@ -29,6 +29,8 @@ export interface IngestOptions {
    */
   removalScope: string[] | "all";
   dryRun?: boolean;
+  /** Starts the extraction service again when a document made it run out of memory. */
+  restartExtractor?: () => Promise<void>;
   log?: (line: string) => void;
 }
 
@@ -86,7 +88,7 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
         continue;
       }
 
-      const markdown = (await extractMarkdown(bytes, doc.filename, hash)).normalize("NFC");
+      const markdown = (await extractWithRecovery(bytes, doc.filename, hash, options, (line) => log(`${label}: ${line}`))).normalize("NFC");
       const chunks = chunkMarkdown(markdown, { exercises: ["exercises", "solutions", "exam"].includes(doc.docType) });
       const vectors = await embed(chunks.map((chunk) => contextualize(doc, chunk)));
       await transaction(db, async (client) => {
@@ -141,6 +143,27 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
     await db.query("DELETE FROM contents c WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.content_hash = c.content_hash)");
   }
   return stats;
+}
+
+/**
+ * Extraction surviving documents too large for the service's memory (e.g. full HD slides): the service is started again
+ * and the document retried with smaller figures. If it still dies, it is restarted for the next documents.
+ */
+async function extractWithRecovery(bytes: Buffer, filename: string, hash: string, options: IngestOptions, log: (line: string) => void): Promise<string> {
+  const restart = options.restartExtractor;
+  try {
+    return await extractMarkdown(bytes, filename, hash);
+  } catch (error) {
+    if (!restart || (await isDoclingAvailable())) throw error;
+  }
+  log("the extraction service ran out of memory, retrying with smaller figures");
+  await restart();
+  try {
+    return await extractMarkdown(bytes, filename, hash, 1);
+  } catch (error) {
+    if (!(await isDoclingAvailable())) await restart();
+    throw error;
+  }
 }
 
 /** The text that is embedded: the chunk preceded by where it comes from, so a bare paragraph keeps its context. */
