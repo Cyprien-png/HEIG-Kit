@@ -10,6 +10,7 @@ import { isDoclingAvailable } from "./rag/extract.js";
 import { type IngestStats, ingestSource } from "./rag/ingest.js";
 import { search } from "./rag/search.js";
 import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
+import { GitHubSource, addCourseRepo, formatCourseRepos, readCourseRepos, removeCourseRepo } from "./rag/sources/github.js";
 import { LocalSource } from "./rag/sources/local.js";
 import type { ColorMode } from "./render.js";
 import { scheduleCourses } from "./table.js";
@@ -22,6 +23,8 @@ const USAGE = `Usage:
   npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
                                    <course> is a timetable code (e.g. MAD), an id or part of the name
   npm run ingest -- [options]      index course documents in the local RAG database (npm run rag:start first)
+  npm run repos -- add <url> --course <code> [--branch <name>] [--exclude <folder>]…   index a GitHub repository, with your local git account
+  npm run repos -- list | remove <url>   indexed GitHub repositories
   npm run gaps -- plan [--all]     study plan: modules, units, credits and status (current year, or all years)
   npm run gaps -- unit <CODE>      unit sheet (e.g. MAD); gaps -- module <CODE> for a module sheet (e.g. MAI1)
   npm run gaps -- grades           continuous assessment grades and transcript
@@ -50,7 +53,8 @@ Deadlines options:
   --json               print deadlines as JSON
 
 Ingest options:
-  --source <name>      only this source: cyberlearn or local (default: both; local needs RAG_LOCAL_DIRS in .env)
+  --source <name>      only this source: cyberlearn, local or github (default: all; local needs RAG_LOCAL_DIRS in .env,
+                       github needs repositories added with \`npm run repos\`)
   --course <code>      only this Cyberlearn course (repeatable), e.g. --course MAD
   --all-courses        every Cyberlearn course, not only those of the GAPS timetable (curriculum)
   --dry-run            only show what is new or changed
@@ -76,6 +80,8 @@ async function main(): Promise<void> {
       course: { type: "string", multiple: true },
       "dry-run": { type: "boolean", default: false },
       "all-courses": { type: "boolean", default: false },
+      branch: { type: "string" },
+      exclude: { type: "string", multiple: true },
       type: { type: "string" },
       limit: { type: "string" },
       pages: { type: "string" },
@@ -86,13 +92,22 @@ async function main(): Promise<void> {
   });
 
   const command = positionals[0];
-  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest", "kb", "gaps"].includes(command)) {
+  if (values.help || !["schedule", "deadlines", "courses", "course", "ingest", "kb", "gaps", "repos"].includes(command)) {
     console.log(USAGE);
     return;
   }
 
   if (command === "gaps") {
     console.log(await gapsInfo(positionals.slice(1), { all: values.all, type: values.type, debug: values.debug, mfaCode: values["mfa-code"] }));
+    return;
+  }
+
+  if (command === "repos") {
+    const [action, url] = positionals.slice(1);
+    if (action === "add" && url && values.course?.[0]) console.log(await addCourseRepo(url, values.course[0], values.branch, values.exclude ?? []));
+    else if (action === "remove" && url) console.log(await removeCourseRepo(url));
+    else if (!action || action === "list") console.log(formatCourseRepos(await readCourseRepos()));
+    else throw new Error("Usage: npm run repos -- add <url> --course <CODE> [--branch <name>] [--exclude <folder>]… | list | remove <url>");
     return;
   }
 
@@ -157,9 +172,12 @@ async function runIngest(
   debug: boolean,
   mfaCode?: string,
 ) {
-  if (only && only !== "cyberlearn" && only !== "local") throw new Error(`Invalid --source "${only}", expected cyberlearn or local`);
+  if (only && only !== "cyberlearn" && only !== "local" && only !== "github") {
+    throw new Error(`Invalid --source "${only}", expected cyberlearn, local or github`);
+  }
   const localDirs = (process.env.RAG_LOCAL_DIRS ?? "").split(path.delimiter).filter(Boolean);
   if (only === "local" && localDirs.length === 0) throw new Error("Set RAG_LOCAL_DIRS in .env to index local folders");
+  const repos = await readCourseRepos();
 
   const db = openDb();
   try {
@@ -176,7 +194,21 @@ async function runIngest(
     try {
       const log = (line: string) => console.log(line);
       const summaries: string[] = [];
-      if (only !== "local") {
+      // First: it needs neither GAPS nor Cyberlearn, so their being down does not hold back the repositories.
+      // Also without repositories: the documents of the last one removed leave the index.
+      if (!only || only === "github") {
+        const source = new GitHubSource(repos, undefined, log);
+        const documents = await source.list();
+        if (repos.length > 0) console.log(`GitHub: ${documents.length} documents in ${repos.length} repositories`);
+        // A repository that could not be fetched lists nothing: its documents must not be removed for that.
+        const stats = await ingestSource(db, "github", documents, { removalScope: source.failed.length > 0 ? [] : "all", dryRun, log, restartExtractor: startDocling });
+        if (repos.length > 0 || stats.removed > 0) summaries.push(summary("GitHub", stats));
+        if (source.failed.length > 0) {
+          summaries.push(`GitHub: could not fetch ${source.failed.join(", ")} (documents kept, see above)`);
+          process.exitCode = 1;
+        }
+      }
+      if (!only || only === "cyberlearn") {
         // The timetable defines the curriculum: refreshed like for `schedule`, so new courses are picked up.
         const scheduleCodes = scheduleCourses((await loadSchedule(false, debug, mfaCode)).lessons);
         const selection = {
@@ -190,13 +222,13 @@ async function runIngest(
           return { documents: await source.list(), selected: source.selectedCourses };
         });
         console.log(`Cyberlearn: ${documents.length} documents in ${selected.length} courses (${selected.join(", ")})`);
-        const stats = await ingestSource(db, "cyberlearn", documents, { removalScope: selected, dryRun, log });
+        const stats = await ingestSource(db, "cyberlearn", documents, { removalScope: selected, dryRun, log, restartExtractor: startDocling });
         summaries.push(summary("Cyberlearn", stats));
       }
-      if (only !== "cyberlearn" && localDirs.length > 0) {
+      if ((!only || only === "local") && localDirs.length > 0) {
         const documents = await new LocalSource(localDirs).list();
         console.log(`Local folders: ${documents.length} documents`);
-        summaries.push(summary("Local folders", await ingestSource(db, "local", documents, { removalScope: "all", dryRun, log })));
+        summaries.push(summary("Local folders", await ingestSource(db, "local", documents, { removalScope: "all", dryRun, log, restartExtractor: startDocling })));
       }
       console.log(`\n${summaries.join("\n")}`);
     } finally {
@@ -213,10 +245,14 @@ async function startServices(): Promise<boolean> {
   await ensureEmbeddingModel();
   if (await isDoclingAvailable()) return false;
   console.log("Starting the document extraction service (first start downloads its image, ~2 GB)…");
+  await startDocling();
+  return true;
+}
+
+async function startDocling(): Promise<void> {
   compose("--profile", "ingest", "up", "-d", "docling");
   for (let i = 0; i < 60 && !(await isDoclingAvailable()); i++) await new Promise((r) => setTimeout(r, 5000));
   if (!(await isDoclingAvailable())) throw new Error("The document extraction service did not start (docker compose -f rag/compose.yml logs docling)");
-  return true;
 }
 
 /** Comma-separated list from .env, e.g. RAG_EXCLUDE_COURSES=PHY,49168. */

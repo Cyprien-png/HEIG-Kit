@@ -16,6 +16,7 @@
     "gaps": "tsx src/cli.ts gaps",
     "ingest": "tsx src/cli.ts ingest",
     "kb": "tsx src/cli.ts kb",
+    "repos": "tsx src/cli.ts repos",
     "mcp": "tsx src/mcp/host.ts",
     "doc": "tsx modules/documents/render.ts",
     "video": "tsx modules/visuals/render.ts",

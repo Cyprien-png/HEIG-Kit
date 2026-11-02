@@ -18,6 +18,7 @@ import { serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerOutputTools } from "./tools/output.js";
+import { registerRepoTools } from "./tools/repos.js";
 
 // With stdio, stdout carries the protocol: everything the services log goes to stderr.
 console.log = console.error;
@@ -30,6 +31,8 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - As a teacher, answer directly and completely, grounded in the course material (search_course_material, get_exercise,
   get_document; course material is mostly in French), following the course's notation, with concrete examples, and cite
   the documents (title, course, pages, link). Say when something does not come from the course.
+- Some courses keep their material on GitHub: add_course_repo indexes a repository with the user's local git account,
+  update_course_repos refreshes it; it is then searched like any other course material.
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).`;
@@ -39,6 +42,7 @@ async function buildServer(): Promise<McpServer> {
   registerCampusTools(server);
   await registerKnowledgeTools(server, db);
   registerOutputTools(server);
+  registerRepoTools(server);
 
   server.registerPrompt(
     "teacher",

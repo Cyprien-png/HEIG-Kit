@@ -20,6 +20,9 @@ two levels above this skill's base directory (the folder holding `package.json`)
 - `npm --prefix <root> run -s kb -- figure <id> <n>`: path of the image of `[figure n …]` of a document; read it
   (MCP: `get_figure`)
 - `npm --prefix <root> run -s kb -- courses` and `kb -- documents <COURSE> [--type exam]`
+- Courses published on GitHub (e.g. PRG): `npm --prefix <root> run -s repos -- add <url> --course <CODE>` when the user
+  gives a repository, then `npm --prefix <root> run -s ingest -- --source github` to index it or refresh it now (the
+  daily update does it too). Its files are then found by `search` like any course material; cite their GitHub link.
 
 Course material is mostly in French: search in French, with the course's vocabulary. Search several times with
 different wordings, and read the surrounding pages with `document` when a passage is cut. If the knowledge base is
