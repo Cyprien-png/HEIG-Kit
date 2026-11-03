@@ -7,6 +7,7 @@ import { type Chunk, chunkMarkdown } from "./chunk.js";
 import { type Db, toVector, transaction } from "./db.js";
 import { embed } from "./embed.js";
 import { EXTRACTOR_VERSION, extractMarkdown, isDoclingAvailable } from "./extract.js";
+import { Progress, formatBytes } from "./progress.js";
 import type { SourceDocument } from "./sources/source.js";
 
 export interface IngestStats {
@@ -19,6 +20,9 @@ export interface IngestStats {
   removed: number;
   failed: number;
   chunks: number;
+  /** Bytes of the documents processed (not the unchanged ones), and the time it took. */
+  bytes: number;
+  ms: number;
 }
 
 export interface IngestOptions {
@@ -47,7 +51,7 @@ interface Existing {
  */
 export async function ingestSource(db: Db, source: string, documents: SourceDocument[], options: IngestOptions): Promise<IngestStats> {
   const log = options.log ?? (() => {});
-  const stats: IngestStats = { listed: documents.length, unchanged: 0, indexed: 0, linked: 0, removed: 0, failed: 0, chunks: 0 };
+  const stats: IngestStats = { listed: documents.length, unchanged: 0, indexed: 0, linked: 0, removed: 0, failed: 0, chunks: 0, bytes: 0, ms: 0 };
   const existing = new Map(
     (
       await db.query<Existing>(
@@ -58,21 +62,32 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
     ).rows.map((row) => [row.external_id, row]),
   );
 
-  for (const [i, doc] of documents.entries()) {
-    const label = `[${i + 1}/${documents.length}] ${[doc.courseCode, doc.title].filter(Boolean).join(" · ")}`;
+  // Unchanged documents first: they take no time, so the progress below only measures real work.
+  const todo: SourceDocument[] = [];
+  for (const doc of documents) {
     const known = existing.get(doc.externalId);
     if (known?.content_hash && known.version === doc.version && (known.extractor_version ?? 0) >= EXTRACTOR_VERSION) {
       stats.unchanged++;
       if (!options.dryRun) await upsertDocument(db, doc, known.content_hash);
-      continue;
+    } else {
+      todo.push(doc);
     }
+  }
+  const progress = new Progress(todo.map((doc) => doc.size));
+  if (todo.length > 0) log(`${todo.length} documents to process (${formatBytes(progress.totalBytes)}), ${stats.unchanged} unchanged`);
+
+  for (const [i, doc] of todo.entries()) {
+    const label = `[${i + 1}/${todo.length}] ${[doc.courseCode, doc.title].filter(Boolean).join(" · ")}`;
+    const known = existing.get(doc.externalId);
     if (options.dryRun) {
-      log(`${label}: ${!known ? "new" : known.version === doc.version ? "to extract again" : "changed"}`);
+      log(`${label}: ${!known ? "new" : known.version === doc.version ? "to extract again" : "changed"}${doc.size ? `, ${formatBytes(doc.size)}` : ""}`);
       continue;
     }
 
+    let loaded: number | undefined;
     try {
       const bytes = await doc.load();
+      loaded = bytes.length;
       if (!path.isAbsolute(doc.localPath)) {
         const file = path.join(DATA_DIR, path.relative("data", doc.localPath));
         await mkdir(path.dirname(file), { recursive: true });
@@ -124,7 +139,15 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
     } catch (error) {
       stats.failed++;
       log(`${label}: FAILED, ${error instanceof Error ? error.message : error}`);
+    } finally {
+      // Also after `continue` (a document already indexed elsewhere).
+      progress.done(i, loaded);
+      log(`  ${progress.line()}`);
     }
+  }
+  if (!options.dryRun) {
+    stats.bytes = progress.processedBytes;
+    stats.ms = progress.elapsedMs;
   }
 
   if (!options.dryRun) {

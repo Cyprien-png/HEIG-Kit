@@ -8,6 +8,7 @@ import { migrate, openDb } from "./rag/db.js";
 import { ensureEmbeddingModel } from "./rag/embed.js";
 import { isDoclingAvailable } from "./rag/extract.js";
 import { type IngestStats, ingestSource } from "./rag/ingest.js";
+import { formatBytes, formatDuration } from "./rag/progress.js";
 import { search } from "./rag/search.js";
 import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
 import { GitHubSource, addCourseRepo, formatCourseRepos, readCourseRepos, removeCourseRepo } from "./rag/sources/github.js";
@@ -265,7 +266,8 @@ function compose(...args: string[]): void {
 }
 
 function summary(name: string, s: IngestStats): string {
-  return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed`;
+  const work = s.bytes > 0 ? `, ${formatBytes(s.bytes)} processed in ${formatDuration(s.ms)} (${formatBytes(s.bytes / Math.max(s.ms / 60_000, 1 / 60))}/min)` : "";
+  return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed${work}`;
 }
 
 main().catch((error: unknown) => {

@@ -19,6 +19,8 @@ export interface SourceDocument {
   chapter?: string;
   docType: DocType;
   uploadedAt?: Date;
+  /** Size in bytes announced by the source, used to show progress and estimate the time left. */
+  size?: number;
   load(): Promise<Buffer>;
 }
 

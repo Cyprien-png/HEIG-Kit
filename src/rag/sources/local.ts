@@ -32,6 +32,7 @@ export class LocalSource implements Source {
           chapter,
           docType: guessDocType(path.basename(file), chapter),
           uploadedAt: mtime,
+          size,
           load: () => readFile(file),
         });
       }

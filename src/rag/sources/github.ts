@@ -146,7 +146,7 @@ export class GitHubSource implements Source {
       if (repo.exclude?.some((folder) => file.startsWith(`${folder.replace(/\/+$/, "")}/`))) continue;
       // Compiled programs sometimes get committed under a source name.
       if (!EXTRACTABLE.test(file) && (await git(mirror, ["cat-file", "blob", blob])).includes(0)) continue;
-      documents.push(this.fileDocument(repo, mirror, file, blob));
+      documents.push({ ...this.fileDocument(repo, mirror, file, blob), size: Number(size) });
     }
     return documents;
   }

@@ -110,6 +110,7 @@ export class CyberlearnSource implements Source {
           localPath: path.join(folder, `${safeName(module.name)}.md`),
           docType: docType === "other" ? "planning" : docType,
           uploadedAt: index.timemodified ? new Date(index.timemodified * 1000) : undefined,
+          size: index.filesize,
           load: async () => Buffer.from(htmlToText(new TextDecoder().decode(await this.client.downloadFile(index.fileurl)))),
         });
         continue;
@@ -158,6 +159,7 @@ export class CyberlearnSource implements Source {
           localPath: path.join(folder, ...relative),
           docType: docType === "other" ? guessDocType(file.filename) : docType,
           uploadedAt: file.timemodified ? new Date(file.timemodified * 1000) : undefined,
+          size: file.filesize,
           load: async () => Buffer.from(await this.client.downloadFile(file.fileurl)),
         };
       });
@@ -178,6 +180,7 @@ function textDocument(
     filename,
     localPath: path.join(folder, filename),
     docType,
+    size: Buffer.byteLength(text),
     load: async () => Buffer.from(text),
   };
 }
