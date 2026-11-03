@@ -1,20 +1,20 @@
 import { existsSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import dotenv from "dotenv";
-import { ROOT } from "./paths.js";
-
-dotenv.config({ path: path.join(ROOT, ".env"), quiet: true });
+import { ROOT, folderFromEnv } from "./paths.js";
 
 /** Programs installed by `npm run setup` (manim, TinyTeX), never committed. */
 export const VENDOR_DIR = path.join(ROOT, "vendor");
 export const MANIM_DIR = path.join(VENDOR_DIR, "manim");
 const windows = process.platform === "win32";
 
-/** Where generated documents and videos go: HEIG_OUTPUT_DIR in .env, ~/Documents/HEIG-Kit by default. */
+/**
+ * Where generated documents and videos go: HEIG_DOCUMENTS_DIR and HEIG_VIDEOS_DIR in .env, otherwise a subfolder of
+ * HEIG_OUTPUT_DIR, itself ~/Documents/HEIG-Kit by default.
+ */
 export function outputDir(kind: "documents" | "videos"): string {
-  const base = process.env.HEIG_OUTPUT_DIR || path.join(os.homedir(), "Documents", "HEIG-Kit");
-  return path.join(base.replace(/^~(?=$|[\\/])/, os.homedir()), kind);
+  const base = folderFromEnv(process.env.HEIG_OUTPUT_DIR, path.join(os.homedir(), "Documents", "HEIG-Kit"));
+  return folderFromEnv(process.env[kind === "documents" ? "HEIG_DOCUMENTS_DIR" : "HEIG_VIDEOS_DIR"], path.join(base, kind));
 }
 
 /** Executable of a program of manim's Python environment (python, pip, manimgl). */

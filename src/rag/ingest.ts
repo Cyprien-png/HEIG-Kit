@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type pg from "pg";
-import { ROOT } from "../paths.js";
+import { DATA_DIR } from "../paths.js";
 import { type Chunk, chunkMarkdown } from "./chunk.js";
 import { type Db, toVector, transaction } from "./db.js";
 import { embed } from "./embed.js";
@@ -74,7 +74,7 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
     try {
       const bytes = await doc.load();
       if (!path.isAbsolute(doc.localPath)) {
-        const file = path.join(ROOT, doc.localPath);
+        const file = path.join(DATA_DIR, path.relative("data", doc.localPath));
         await mkdir(path.dirname(file), { recursive: true });
         await writeFile(file, bytes);
       }

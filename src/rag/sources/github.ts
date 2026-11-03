@@ -3,14 +3,14 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { ROOT } from "../../paths.js";
+import { DATA_DIR } from "../../paths.js";
 import { EXTRACTABLE } from "../extract.js";
 import { type Source, type SourceDocument, guessDocType, safeName } from "./source.js";
 
 const run = promisify(execFile);
 
-const CONFIG_FILE = path.join(ROOT, "data", "github-repos.json");
-const MIRRORS_DIR = path.join(ROOT, "data", "repos");
+const CONFIG_FILE = path.join(DATA_DIR, "github-repos.json");
+const MIRRORS_DIR = path.join(DATA_DIR, "repos");
 const TIP = "refs/heig/tip";
 const MAX_BYTES = 64 * 1024 * 1024;
 /** Larger source files are data or generated code, not course material. */

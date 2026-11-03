@@ -6,10 +6,10 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { ROOT } from "../src/paths.js";
+import { DATA_DIR, ROOT } from "../src/paths.js";
 import { ensureDockerRunning } from "../src/setup/system.js";
 
-const LOG = path.join(ROOT, "data", "logs", "update.log");
+const LOG = path.join(DATA_DIR, "logs", "update.log");
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function log(line: string): void {

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { ROOT } from "../../paths.js";
+import { DATA_DIR, ROOT } from "../../paths.js";
 import { ensureEmbeddingModel } from "../../rag/embed.js";
 import { type Module, runScript } from "../module.js";
 import { commandExists, ensureDockerRunning, installPackage, isWindows, run } from "../system.js";
@@ -46,7 +46,7 @@ export const knowledge: Module = {
     return [
       { label: "Docker installed", ok: docker, hint: isWindows || process.platform === "darwin" ? "npm run setup -- knowledge" : "https://docs.docker.com/engine/install/" },
       { label: "MCP server running", ok: await mcpHealthy(), hint: "npm run rag:start" },
-      { label: "MCP access token created", ok: existsSync(path.join(ROOT, "data", "mcp-token")), hint: "npm run rag:start" },
+      { label: "MCP access token created", ok: existsSync(path.join(DATA_DIR, "mcp-token")), hint: "npm run rag:start" },
     ];
   },
 };

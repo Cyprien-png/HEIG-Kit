@@ -5,9 +5,9 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ROOT } from "../src/paths.js";
+import { DATA_DIR, ROOT } from "../src/paths.js";
 
-const file = path.join(ROOT, "data", "mcp-token");
+const file = path.join(DATA_DIR, "mcp-token");
 if (!existsSync(file)) {
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });

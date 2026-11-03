@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
-import { ROOT } from "../../paths.js";
+import { CACHE_DIR, ROOT } from "../../paths.js";
 import { type Module, runScript } from "../module.js";
 import { ask } from "../prompt.js";
 
@@ -59,7 +59,7 @@ export const campus: Module = {
         ok: Boolean(env.HEIG_EMAIL && env.HEIG_PASSWORD && env.HEIG_PASSWORD !== "change-me"),
         hint: "npm run setup -- campus",
       },
-      { label: "timetable downloaded", ok: existsSync(path.join(ROOT, ".cache", "schedule.json")), hint: "npm run schedule" },
+      { label: "timetable downloaded", ok: existsSync(path.join(CACHE_DIR, "schedule.json")), hint: "npm run schedule" },
     ];
   },
 };

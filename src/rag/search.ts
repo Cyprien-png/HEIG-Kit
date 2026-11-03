@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { ROOT } from "../paths.js";
+import { DATA_DIR } from "../paths.js";
 import { type Db, toVector } from "./db.js";
 import { embed } from "./embed.js";
 import { PAGE_BREAK, extractedMarkdownPath, figurePath } from "./extract.js";
@@ -147,7 +147,7 @@ export async function documentText(db: Db, id: number, pageFrom?: number, pageTo
   if (!doc) return undefined;
   // Documents not extracted again since version 1 of the extraction keep their former file until the next ingestion.
   const markdown = await readFile(extractedMarkdownPath(doc.content_hash), "utf-8").catch(() =>
-    readFile(path.join(ROOT, "data", "extracted", `${doc.content_hash}.md`), "utf-8"),
+    readFile(path.join(DATA_DIR, "extracted", `${doc.content_hash}.md`), "utf-8"),
   );
   const pages = markdown.split(PAGE_BREAK);
   const from = Math.max(1, pageFrom ?? 1);

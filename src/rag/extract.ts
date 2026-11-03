@@ -1,10 +1,10 @@
 import { readFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ROOT } from "../paths.js";
+import { DATA_DIR } from "../paths.js";
 
 /** docling-serve of `rag/compose.yml` (profile "ingest"); RAG_DOCLING_URL overrides it. */
 const DOCLING_URL = process.env.RAG_DOCLING_URL ?? "http://127.0.0.1:5001";
-const EXTRACTED_DIR = path.join(ROOT, "data", "extracted");
+const EXTRACTED_DIR = path.join(DATA_DIR, "extracted");
 const POLL_SECONDS = 10;
 /** docling may answer a poll before `wait` elapses: never poll more often than this. */
 const MIN_POLL_INTERVAL_MS = 2000;

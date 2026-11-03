@@ -69,8 +69,8 @@ function videos(): GeneratedItem[] {
 /** Opens a generated file with the default application; only files of the output folder can be opened. */
 export function openGenerated(file: string): void {
   const resolved = path.resolve(file);
-  const base = path.dirname(outputDir("documents"));
-  if (!resolved.startsWith(base + path.sep)) throw new Error(`Only files in ${base} can be opened`);
+  const folders = [outputDir("documents"), outputDir("videos")];
+  if (!folders.some((folder) => resolved.startsWith(folder + path.sep))) throw new Error(`Only files in ${folders.join(" or ")} can be opened`);
   if (!existsSync(resolved)) throw new Error(`${resolved} does not exist`);
   file = resolved;
   if (process.platform === "darwin") spawnSync("open", [file]);

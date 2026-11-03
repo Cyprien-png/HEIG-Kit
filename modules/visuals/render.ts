@@ -22,7 +22,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { ROOT } from "../../src/paths.js";
+import { CACHE_DIR } from "../../src/paths.js";
 import { VOICE_ID, kokoroModelFile, kokoroPython, kokoroVoicesFile, manimBin, outputDir, tinytexBinDir } from "../../src/vendor.js";
 import { type Wav, buildTrack, parseWav, wavSeconds } from "../voice/track.js";
 import { keyFrameTimes, splitAnimations } from "./parts.js";
@@ -169,7 +169,7 @@ function frameSheet(video: string, times: number[], name: string): string | unde
 
 /** The speech of each line, synthesized only once (.cache/voice): rendering again only pays for the lines that changed. */
 function speak(texts: string[], work: string): Map<string, Wav> {
-  const cache = path.join(ROOT, ".cache", "voice");
+  const cache = path.join(CACHE_DIR, "voice");
   mkdirSync(cache, { recursive: true });
   const fileOf = (text: string) => path.join(cache, `${createHash("sha256").update(`${VOICE_ID}\n${text}`).digest("hex").slice(0, 32)}.wav`);
   const unique = [...new Set(texts)];
