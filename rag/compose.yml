@@ -66,6 +66,8 @@ services:
   # behind a reverse proxy doing HTTPS.
   server:
     profiles: ["server"]
+    # Published by .github/workflows/server-images.yml (npm run server:update); `npm run server:build` builds it here.
+    image: ${HEIG_IMAGE_REGISTRY:-ghcr.io/cyprien-png}/heig-kit-server:${HEIG_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: rag/server.Dockerfile
@@ -102,6 +104,7 @@ services:
   # Handles one job and exits: `restart: always` gives a fresh container for the next one.
   render:
     profiles: ["server"]
+    image: ${HEIG_IMAGE_REGISTRY:-ghcr.io/cyprien-png}/heig-kit-render:${HEIG_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: rag/render.Dockerfile
