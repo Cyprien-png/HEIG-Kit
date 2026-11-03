@@ -4,6 +4,7 @@
  *
  *   npm run -s mcp                 stdio (Claude Desktop, Claude Code, mcpo for Open WebUI…)
  *   npm run -s mcp -- --http       Streamable HTTP on http://127.0.0.1:8766/mcp, with the token of data/mcp-token
+ *   npm run -s server              remote server: account and tokens from .env, isolated rendering, downloads (docs/server.md)
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,12 +13,17 @@ import { parseArgs } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { ROOT } from "../paths.js";
+import { DATA_DIR } from "../paths.js";
 import { openDb } from "../rag/db.js";
+import { Auth } from "../server/auth.js";
+import { loadServerConfig } from "../server/config.js";
+import { createRemoteServer } from "../server/http.js";
+import { JobQueue } from "../server/jobs.js";
 import { serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerOutputTools } from "./tools/output.js";
+import { registerRemoteOutputTools } from "./tools/remote.js";
 import { registerRepoTools } from "./tools/repos.js";
 
 // With stdio, stdout carries the protocol: everything the services log goes to stderr.
@@ -37,12 +43,21 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).`;
 
+const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace(/- Some courses keep[\s\S]*?course material\.\n/, "").replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
+- This server is remote: render_document and render_animation queue a job, followed with get_job, which gives download
+  links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
+
+/** How the server exposes files and rendering: on this computer by default. */
+let registerOutputs: (server: McpServer) => void = registerOutputTools;
+let instructions = INSTRUCTIONS;
+
 async function buildServer(): Promise<McpServer> {
-  const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
   registerCampusTools(server);
   await registerKnowledgeTools(server, db);
-  registerOutputTools(server);
-  registerRepoTools(server);
+  registerOutputs(server);
+  // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
+  if (registerOutputs === registerOutputTools) registerRepoTools(server);
 
   server.registerPrompt(
     "teacher",
@@ -94,10 +109,19 @@ async function buildServer(): Promise<McpServer> {
 }
 
 const db = openDb();
-const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
+const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, server: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
 
-if (values.http) {
-  const tokenFile = path.join(ROOT, "data", "mcp-token");
+if (values.server) {
+  const config = loadServerConfig();
+  const auth = new Auth(config);
+  const queue = config.jobsDir ? new JobQueue(config.jobsDir) : undefined;
+  if (queue) setInterval(() => queue.collect(), 5000).unref();
+  else console.error("HEIG_JOBS_DIR is not set: rendering is disabled, since it must not run next to the secrets.");
+  instructions = REMOTE_INSTRUCTIONS;
+  registerOutputs = (server) => registerRemoteOutputTools(server, auth, config.publicUrl, queue, config.linkMinutes);
+  createRemoteServer(config, buildServer, auth).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
+} else if (values.http) {
+  const tokenFile = path.join(DATA_DIR, "mcp-token");
   if (!existsSync(tokenFile)) {
     mkdirSync(path.dirname(tokenFile), { recursive: true });
     writeFileSync(tokenFile, randomBytes(32).toString("hex"), { mode: 0o600 });

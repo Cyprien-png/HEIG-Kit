@@ -62,6 +62,70 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Remote server (npm run server:start, docs/server.md): the only service holding the secrets. Published on 127.0.0.1 only,
+  # behind a reverse proxy doing HTTPS.
+  server:
+    profiles: ["server"]
+    build:
+      context: ..
+      dockerfile: rag/server.Dockerfile
+    environment:
+      HEIG_HTTP_HOST: 0.0.0.0
+      HEIG_HTTP_PORT: "8766"
+      HEIG_OUTPUT_DIR: /outputs
+      HEIG_JOBS_DIR: /jobs
+      RAG_DATABASE_URL: postgres://heigkit:heigkit@db:5432/heigkit
+      RAG_OLLAMA_URL: http://embedder:11434
+    volumes:
+      - ../.env:/app/.env:ro
+      - ../data:/app/data
+      - ../.cache:/app/.cache
+      - outputs:/outputs
+      - jobs:/jobs
+    ports:
+      - "127.0.0.1:8766:8766"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8766/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      retries: 12
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Runs the code written by the AI (manim scenes, HTML in a browser): no network, no .env, no data, read-only system.
+  # Handles one job and exits: `restart: always` gives a fresh container for the next one.
+  render:
+    profiles: ["server"]
+    build:
+      context: ..
+      dockerfile: rag/render.Dockerfile
+    network_mode: none
+    environment:
+      HEIG_JOBS_DIR: /jobs
+      HEIG_CACHE_DIR: /voice-cache
+    volumes:
+      - jobs:/jobs
+      - voice-cache:/voice-cache
+    read_only: true
+    tmpfs:
+      # exec: the voice loads a library it copies there.
+      - /tmp:size=4g,exec
+    shm_size: 512m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 1024
+    mem_limit: 6g
+    restart: always
+
 volumes:
   db:
   models:
+  outputs:
+  jobs:
+  voice-cache:
