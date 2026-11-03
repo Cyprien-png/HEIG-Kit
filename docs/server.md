@@ -23,7 +23,9 @@ clear in `.env`: protect the machine and keep `.env` readable by you only (`chmo
 
 ## Install
 
-Needs Docker, about 8 GB of RAM and 15 GB of disk (estimate). The render image takes a while to build.
+Step by step on Debian: [install-debian.md](install-debian.md). In short, it needs Docker, Node.js 22, about 8 GB of
+RAM and 15 GB of disk (estimate). `server:start` downloads the `server` and `render` images published by GitHub Actions
+on `ghcr.io` (`npm run server:build` builds them locally instead); `npm run server:update` updates everything.
 
 ```sh
 git clone https://github.com/Cyprien-png/HEIG-Kit.git && cd HEIG-Kit
