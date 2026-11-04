@@ -20,7 +20,8 @@ export function Login() {
       await login(username.trim(), password);
       navigate(location.state?.from ?? "/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error && /credentials/.test(err.message) ? "Identifiants refusés." : err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(/credentials/.test(message) ? "Identifiants refusés : utilisez HEIG_AUTH_USERNAME et HEIG_AUTH_PASSWORD du .env du serveur." : /too many/.test(message) ? "Trop de tentatives : réessayez dans 15 minutes." : message);
     } finally {
       setBusy(false);
     }

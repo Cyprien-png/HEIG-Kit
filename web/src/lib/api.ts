@@ -26,7 +26,8 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     body = JSON.stringify(init.json);
   }
   const res = await fetch(path, { ...init, headers, body, credentials: "same-origin" });
-  if (res.status === 401 && !init.capture) {
+  // A 401 means the session ended, except on the login form itself, where it means wrong credentials.
+  if (res.status === 401 && !init.capture && path !== "/api/auth/login") {
     onUnauthorized?.();
     throw new ApiError(401, "Session expirée");
   }
