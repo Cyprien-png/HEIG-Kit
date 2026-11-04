@@ -153,12 +153,12 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
-export function Segmented<T extends string>({ value, onChange, options, size = "md" }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; size?: "sm" | "md" }) {
+export function Segmented<T extends string | number>({ value, onChange, options, size = "md" }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; size?: "sm" | "md" }) {
   return (
     <div className="inline-flex rounded-lg border border-line bg-surface p-0.5" role="tablist">
       {options.map((o) => (
         <button
-          key={o.value}
+          key={String(o.value)}
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
