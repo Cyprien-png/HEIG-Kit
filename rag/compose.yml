@@ -75,7 +75,10 @@ services:
     environment:
       HEIG_HTTP_HOST: 0.0.0.0
       HEIG_HTTP_PORT: "8766"
-      HEIG_OUTPUT_DIR: /outputs
+      # The library (generated documents and videos): the `outputs` volume, or a folder of this machine named by
+      # HEIG_LIBRARY_DIR in rag/.env (absolute path, writable by uid 1000), mounted at the same path in the container so
+      # that HEIG_DOCUMENTS_DIR / HEIG_VIDEOS_DIR of .env may point inside it.
+      HEIG_OUTPUT_DIR: ${HEIG_LIBRARY_DIR:-/outputs}
       HEIG_JOBS_DIR: /jobs
       RAG_DATABASE_URL: postgres://heigkit:heigkit@db:5432/heigkit
       RAG_OLLAMA_URL: http://embedder:11434
@@ -83,7 +86,7 @@ services:
       - ../.env:/app/.env:ro
       - ../data:/app/data
       - ../.cache:/app/.cache
-      - outputs:/outputs
+      - ${HEIG_LIBRARY_DIR:-outputs}:${HEIG_LIBRARY_DIR:-/outputs}
       - jobs:/jobs
     ports:
       - "${HEIG_BIND:-127.0.0.1}:8766:8766"

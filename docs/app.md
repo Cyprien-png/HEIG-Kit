@@ -64,7 +64,7 @@ Cyberlearn sync, so a planning posted later still reaches the calendar.
 
 ## Library
 
-Generated documents and videos are the files of the output folder, on the server (`outputs` volume). The API lists
+Generated documents and videos are the files of the output folder, on the server (`outputs` volume, or the folder named by `HEIG_LIBRARY_DIR` in `rag/.env`). The API lists
 them, streams them (videos with HTTP range requests, so they seek in the browser) and accepts uploads. A local
 installation syncs with `npm run library -- push|pull` (or the `sync_library` MCP tool): the server is the place where
 everything ends up, whether the agent rendered it there or on the user's computer.

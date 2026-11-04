@@ -114,6 +114,12 @@ echo HEIG_BIND=0.0.0.0 > rag/.env
 npm run server:start
 ```
 
+`rag/.env` also takes `HEIG_LIBRARY_DIR=/path/on/this/machine` to keep the library (generated documents and videos,
+`npm run library -- push` from your computer) in a folder of the machine instead of the `outputs` Docker volume: an
+absolute path, created beforehand and owned by uid 1000 (`sudo chown -R 1000:1000 /path/on/this/machine`). It is
+mounted at the same path in the container, so `HEIG_DOCUMENTS_DIR` and `HEIG_VIDEOS_DIR` of `.env` may name folders
+inside it; any other path in those two settings does not exist in the container (`ENOENT … mkdir`).
+
 **Otherwise, Caddy on this machine** gets and renews the certificate by itself. From its repository:
 
 ```sh
@@ -187,10 +193,11 @@ HEIG_IMAGE_TAG=sha-1a2b3c4 npm run server:update
 | `denied` when downloading the images | The GHCR packages are private: make them public in GitHub (Packages, Package settings), or `docker login ghcr.io` with a token allowed to `read:packages` |
 | The server does not start | Its log names the missing or weak setting of `.env` |
 | `EACCES` on `data/` or `.cache/` | They are not owned by uid 1000: `sudo chown -R 1000:1000 data .cache` |
+| `ENOENT … mkdir` when pushing the library | `HEIG_DOCUMENTS_DIR` / `HEIG_VIDEOS_DIR` of `.env` point outside the container: set `HEIG_LIBRARY_DIR` in `rag/.env` (section 8) or remove them |
 | 421 `unknown host` | `HEIG_PUBLIC_URL` does not match the address used by the client |
 
 ## Backups
 
 `.env`, `data/` (course documents, tokens, job records) and `.cache/` (login session) in the repository folder, and the
-Docker volumes `heig-kit_outputs` (generated documents and videos) and `heig-kit_db` (the index, which `npm run ingest`
+Docker volumes `heig-kit_outputs` (generated documents and videos, unless `HEIG_LIBRARY_DIR` names a folder) and `heig-kit_db` (the index, which `npm run ingest`
 can rebuild).
