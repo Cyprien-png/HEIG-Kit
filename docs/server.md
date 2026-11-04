@@ -51,7 +51,20 @@ heig.example.org {
 }
 ```
 
+## The web application
+
+The same address serves a web application ([app.md](app.md)): log in with the account of `.env` to see your
+calendar (GAPS lessons, Cyberlearn deadlines, exams, with your own changes), grades, study plan, courses and documents,
+the generated library, your flashcards, the corrections of your photographed work, your learning profile, and a status
+page (services, edu-ID session with a reconnect button for the two-step code, syncs, ingestion, last requests). It
+works on a phone as on a wide screen. The server fetches GAPS and Cyberlearn every `HEIG_SYNC_MINUTES` (60).
+
 ## Connect a client
+
+A computer with its own HEIG-Kit installation uses the server for its knowledge base, calendar, flashcards, corrections
+and library with `HEIG_REMOTE_URL=https://heig.example.org` in its `.env` and `npm run remote -- login`
+(`npm run setup -- remote`): nothing to index on the computer, and `npm run library -- push|pull` syncs the generated
+documents and videos. Any MCP client:
 
 ```sh
 curl -s https://heig.example.org/auth/login -H 'Content-Type: application/json' \
@@ -72,6 +85,8 @@ clients that only support OAuth, such as web connectors, cannot use this server.
 | `POST /auth/login` | `{"username", "password"}`, gives the access token |
 | `/mcp` | MCP over Streamable HTTP, `Authorization: Bearer <token>` |
 | `GET /files?token=…` | Signed link given by `get_job` or `get_download_link` |
+| `/api/*` | The web application's API ([app.md](app.md)): session cookie (`POST /api/auth/login`) or `Authorization: Bearer <token>` |
+| `/` and every other path | The web application |
 
 ## What differs from a local installation
 

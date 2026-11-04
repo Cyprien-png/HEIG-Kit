@@ -101,6 +101,9 @@ npm run server:start    # downloads the server and render images, then starts th
 curl -s http://127.0.0.1:8766/health    # ok
 ```
 
+The `server` image also holds the web application ([app.md](app.md)); once HTTPS is set up (next step), open
+`https://heig.example.org` and log in with `HEIG_AUTH_USERNAME` / `HEIG_AUTH_PASSWORD`.
+
 ## 8. HTTPS with Caddy
 
 Caddy gets and renews the certificate by itself. From its repository:

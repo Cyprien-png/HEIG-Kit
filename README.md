@@ -17,6 +17,8 @@ Install only what you need. Each module installs its own dependencies automatica
 | [`documents`](docs/documents.md) | PDF, Word and HTML from Markdown, with LaTeX math, Mermaid diagrams and videos | Renderer, Chromium, pandoc |
 | [`visuals`](docs/visuals.md) | Mathematical animations with [3b1b/manim](https://github.com/3b1b/manim), embeddable in documents | manim, Python, FFmpeg, LaTeX |
 | [`voice`](docs/voice.md) | A spoken explanation synchronized with the animations, with a local French voice; videos stay silent without it | Kokoro, a French voice |
+| [`web`](docs/app.md) | The **web app** of your [remote server](docs/server.md): calendar with your own changes, grades, courses, library, flashcards, corrections of photographed work, learning profile, status page; phone to wide screen | Vite, React |
+| [`remote`](docs/app.md) | Use your remote server from this computer: its knowledge base, calendar, cards, corrections and library, no local indexing | — |
 | [`shortcuts`](docs/shortcuts.md) | `heig:planning`, `heig:deadlines`… from any terminal | — |
 | `claude` | The `heig:*` skills in Claude Code, and the knowledge base server | — |
 
@@ -73,6 +75,8 @@ cp .env.example .env    # then set HEIG_EMAIL and HEIG_PASSWORD
 | *"quels devoirs pour vendredi ?"*, *"mes deadlines"* | `heig:courses`, `heig:deadlines` |
 | *"explique-moi les relations d'équivalence"*, *"prépare-moi un TE blanc de MAD"* | `heig:teacher` |
 | *"exporte en PDF"*, *"montre-moi visuellement pourquoi…"* | `heig:documents`, `heig:visuals` |
+| *"corrige mes exercices"* (photos depuis le téléphone, QR code), *"révise mes points faibles"* | `heig:correct`, `heig:profile` |
+| *"crée-moi des cartes de révision sur…"*, *"ajoute le TE de MAD au calendrier"* | `heig:flashcards`, `heig:calendar` |
 
 Generated documents and videos go to `~/Documents/HEIG-Kit` and open automatically; the assistant reuses what it already
 generated before creating anything new.
