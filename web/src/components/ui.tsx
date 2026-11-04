@@ -34,7 +34,7 @@ export function IconButton({ label, className, children, ...props }: ButtonHTMLA
 
 export function Card({ className, children, title, actions, padded = true, id }: { className?: string; children: ReactNode; title?: ReactNode; actions?: ReactNode; padded?: boolean; id?: string }) {
   return (
-    <section id={id} className={cx("bg-surface border border-line rounded-xl shadow-card", className)}>
+    <section id={id} className={cx("min-w-0 bg-surface border border-line rounded-xl shadow-card", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line">
           <h2 className="text-sm font-semibold tracking-tight text-ink">{title}</h2>

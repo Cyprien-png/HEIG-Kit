@@ -139,7 +139,7 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
     <Card padded={false} className={cx("border-l-4", level >= 1 ? info.ring : "border-l-line")}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <span className="font-mono text-sm font-semibold min-w-[2.5rem] shrink-0 whitespace-nowrap">{e.number}</span>
-        <span className="flex-1 font-medium truncate">{e.title ?? (e.topics[0] ? e.topics[0] : "Exercice")}</span>
+        <span className="flex-1 min-w-0 font-medium truncate">{e.title ?? (e.topics[0] ? e.topics[0] : "Exercice")}</span>
         {level >= 1 ? (
           <Badge tone={info.tone} className="inline-flex items-center gap-1"><Icon className="h-3.5 w-3.5" /> {info.label}{e.points ? ` · ${e.points.obtained}/${e.points.total}` : ""}</Badge>
         ) : (

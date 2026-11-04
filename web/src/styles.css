@@ -106,6 +106,10 @@ body,
 #root {
   height: 100%;
 }
+html,
+body {
+  overflow-x: clip;
+}
 
 body {
   @apply bg-canvas text-ink font-sans antialiased;

@@ -50,7 +50,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const cycleTheme = () => setTheme(theme === "system" ? "dark" : theme === "dark" ? "light" : "system");
 
   return (
-    <div className="min-h-full md:grid md:grid-cols-[13.5rem_1fr] xl:grid-cols-[15rem_1fr]">
+    <div className="min-h-full md:grid md:grid-cols-[13.5rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
       <aside className="hidden md:flex flex-col border-r border-line bg-surface sticky top-0 h-screen">
         <div className="px-4 h-14 flex items-center gap-2 border-b border-line">
           <img src="/favicon.svg" alt="" className="h-7 w-7 rounded-md" />
@@ -85,14 +85,14 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex flex-col min-h-full">
+      <div className="flex flex-col min-h-full min-w-0">
         <header className="md:hidden sticky top-0 z-30 h-12 pt-safe bg-surface/90 backdrop-blur border-b border-line flex items-center justify-between px-4">
           <span className="font-semibold tracking-tight">HEIG-Kit</span>
           <button onClick={cycleTheme} className="h-8 w-8 grid place-items-center rounded-md text-ink-2">
             <ThemeIcon className="h-5 w-5" />
           </button>
         </header>
-        <main className="flex-1 w-full max-w-[1500px] mx-auto px-4 md:px-6 xl:px-8 py-5 md:py-7 pb-24 md:pb-10">{children}</main>
+        <main className="flex-1 w-full min-w-0 max-w-[1500px] mx-auto px-4 md:px-6 xl:px-8 py-5 md:py-7 pb-24 md:pb-10">{children}</main>
       </div>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line pb-safe">

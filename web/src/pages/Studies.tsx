@@ -62,7 +62,7 @@ export function Studies() {
                   {units.map((u, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm rounded-lg border border-line px-2.5 py-1.5">
                       <CourseChip code={u.unit.code} />
-                      <span className="flex-1 truncate">{u.unit.name}</span>
+                      <span className="flex-1 min-w-0 truncate">{u.unit.name}</span>
                       <span className="text-xs text-ink-2 tabular-nums">{u.credits.filter((c) => c.credits > 0).map((c) => `${c.period} ${c.credits}`).join(" · ")}</span>
                       <Badge tone={STATUS[u.status]?.tone ?? "neutral"}>{STATUS[u.status]?.label ?? u.status}</Badge>
                     </li>

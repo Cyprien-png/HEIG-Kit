@@ -69,7 +69,7 @@ export function DeckDetail() {
                 <div className="flex items-center gap-1.5 px-3 py-2 border-t border-line text-xs text-ink-2">
                   <Badge tone={tone}>{!state ? "nouvelle" : new Date(state.dueAt) <= new Date() ? "à réviser" : `revient ${relative(state.dueAt)}`}</Badge>
                   {c.tags.slice(0, 2).map((t) => <Badge key={t}>{t}</Badge>)}
-                  {c.source && <span className="truncate ml-1" title={c.source}>{c.source}</span>}
+                  {c.source && <span className="min-w-0 truncate ml-1" title={c.source}>{c.source}</span>}
                   <span className="ml-auto flex items-center">
                     <IconButton label="Modifier" className="h-7 w-7" onClick={() => setEditing(c)}><PencilSquareIcon className="h-4 w-4" /></IconButton>
                     <IconButton label="Supprimer" className="h-7 w-7" onClick={() => void removeCard(c)}><TrashIcon className="h-4 w-4" /></IconButton>

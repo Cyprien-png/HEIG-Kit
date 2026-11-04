@@ -23,7 +23,7 @@ export function EventRow({ e, showDay }: { e: CalendarEvent; showDay?: boolean }
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <CourseChip code={e.course} />
-          <span className="text-sm font-medium truncate">{title}</span>
+          <span className="text-sm font-medium min-w-0 break-words">{title}</span>
           {e.kind !== "lesson" && <Badge tone={KIND_TONE[e.kind]}>{KIND_LABEL[e.kind]}</Badge>}
           {e.overridden && <Badge tone="info">modifié</Badge>}
         </div>
@@ -103,7 +103,7 @@ export function Dashboard() {
                 <li key={d.id}>
                   <Link to={`/cards/${d.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
                     <CourseChip code={d.course} link={false} />
-                    <span className="flex-1 text-sm font-medium truncate">{d.title}</span>
+                    <span className="flex-1 min-w-0 text-sm font-medium truncate">{d.title}</span>
                     <span className="text-xs text-ink-2 tabular-nums">{d.due > 0 ? <span className="text-accent font-semibold">{d.due} dues</span> : `${d.cards} cartes`}</span>
                   </Link>
                 </li>
@@ -123,7 +123,7 @@ export function Dashboard() {
                     <Link to={`/corrections/${c.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
                       <Dot tone={c.state === "corrected" ? "ok" : c.state === "received" ? "warn" : "neutral"} />
                       <CourseChip code={c.course} link={false} />
-                      <span className="flex-1 text-sm font-medium truncate">{c.title}</span>
+                      <span className="flex-1 min-w-0 text-sm font-medium truncate">{c.title}</span>
                       <span className="text-xs text-ink-2 tabular-nums">{c.state === "corrected" ? `${ok}/${ex.length} justes` : c.state === "received" ? "à corriger" : "photos attendues"}</span>
                     </Link>
                   </li>
