@@ -2,6 +2,7 @@ import type { App } from "../app.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerCalendarRoutes } from "./calendar.js";
 import { registerCampusRoutes } from "./campus.js";
+import { registerKnowledgeRoutes } from "./knowledge.js";
 import { Router } from "./router.js";
 import { registerStatusRoutes } from "./status.js";
 
@@ -11,6 +12,7 @@ export function createApi(app: App): Router {
   registerAuthRoutes(router, app);
   registerCampusRoutes(router, app);
   registerCalendarRoutes(router, app);
+  registerKnowledgeRoutes(router, app);
   registerStatusRoutes(router, app);
   return router;
 }

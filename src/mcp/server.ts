@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DATA_DIR } from "../paths.js";
+import { LocalKnowledge } from "../app/knowledge.js";
 import { openDb } from "../rag/db.js";
 import { serveHttp } from "./common.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
@@ -18,7 +19,7 @@ const db = openDb();
 serveHttp(
   async () => {
     const server = new McpServer({ name: "heig-kit-knowledge", version: "0.4.0" });
-    await registerKnowledgeTools(server, db);
+    await registerKnowledgeTools(server, new LocalKnowledge(db));
     return server;
   },
   PORT,

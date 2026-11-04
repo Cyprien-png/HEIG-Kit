@@ -14,7 +14,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
+import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
 import { migrate, openDb } from "../rag/db.js";
+import { RemoteClient } from "../remote/client.js";
 import { createApp } from "../server/app.js";
 import { loadServerConfig } from "../server/config.js";
 import { createRemoteServer } from "../server/http.js";
@@ -54,7 +56,7 @@ let instructions = INSTRUCTIONS;
 async function buildServer(): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
   registerCampusTools(server);
-  await registerKnowledgeTools(server, db);
+  await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
   // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
   if (registerOutputs === registerOutputTools) registerRepoTools(server);
@@ -109,6 +111,12 @@ async function buildServer(): Promise<McpServer> {
 }
 
 const db = openDb();
+// A laptop with HEIG_REMOTE_URL searches the courses indexed on the server instead of a local database.
+const remote = await RemoteClient.fromEnv().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  return undefined;
+});
+let knowledge: KnowledgeBase = remote ? new RemoteKnowledge(remote) : new LocalKnowledge(db);
 const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, server: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
 
 if (values.server) {
@@ -119,6 +127,7 @@ if (values.server) {
   const applied = await migrate(db);
   if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
   const app = createApp(config, db, queue);
+  knowledge = new LocalKnowledge(db);
   if (process.env.HEIG_SYNC_MINUTES !== "0") app.syncer.start();
   instructions = REMOTE_INSTRUCTIONS;
   registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);

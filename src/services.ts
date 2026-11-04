@@ -17,17 +17,10 @@ import { fetchSheet } from "./gaps/sheets.js";
 import { fetchStudentRecord } from "./gaps/student.js";
 import { type Page, Session } from "./http.js";
 import { CACHE_DIR } from "./paths.js";
+import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "./app/knowledge.js";
 import { openDb } from "./rag/db.js";
-import {
-  documentText,
-  figureFile,
-  findExercise,
-  formatDocuments,
-  formatResults,
-  listCourses,
-  listDocuments,
-  search,
-} from "./rag/search.js";
+import { formatDocuments, formatResults } from "./rag/search.js";
+import { RemoteClient } from "./remote/client.js";
 import type { ColorMode } from "./render.js";
 import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
@@ -153,33 +146,50 @@ export async function loadCourses(query: string | undefined, debug: boolean, mfa
   });
 }
 
+/**
+ * The knowledge base this installation uses: the remote server's when HEIG_REMOTE_URL is set (nothing to index here),
+ * the local database otherwise. `close` releases the local connections.
+ */
+export async function openKnowledge(): Promise<{ kb: KnowledgeBase; close: () => Promise<void> }> {
+  const remote = await RemoteClient.fromEnv();
+  if (remote) return { kb: new RemoteKnowledge(remote), close: async () => {} };
+  const db = openDb();
+  return { kb: new LocalKnowledge(db), close: () => db.end() };
+}
+
 /** Read-only access to the knowledge base, the same as the MCP server's tools (for skills and terminal use). */
 export async function knowledgeBase(args: string[], course?: string, docType?: string, limit?: string, pages?: string): Promise<string> {
   const [action, ...rest] = args;
-  const db = openDb();
+  const { kb, close } = await openKnowledge();
   try {
     switch (action) {
       case "search":
         if (rest.length === 0) throw new Error("Usage: npm run kb -- search <query>");
-        return formatResults(await search(db, rest.join(" "), { course, docType, limit: limit ? Number(limit) : undefined })) || "No matching material.";
+        return formatResults(await kb.search(rest.join(" "), { course, docType, limit: limit ? Number(limit) : undefined })) || "No matching material.";
       case "exercise":
         if (!rest[0]) throw new Error("Usage: npm run kb -- exercise <number>");
-        return formatResults(await findExercise(db, course, rest[0])) || `Exercise ${rest[0]} not found.`;
+        return formatResults(await kb.exercise(course, rest[0])) || `Exercise ${rest[0]} not found.`;
       case "document": {
         const [from, to] = (pages ?? "").split("-").map((p) => (p ? Number(p) : undefined));
-        const doc = await documentText(db, Number(rest[0]), from, to ?? from);
+        const doc = await kb.document(Number(rest[0]), from, to ?? from);
         if (!doc) return `Document ${rest[0]} not found.`;
         return `# ${doc.title}\n${[doc.course, doc.chapter, doc.docType].filter(Boolean).join(" · ")} · ${doc.pageCount} pages · ${doc.url ?? ""}\n\n${doc.text}`;
       }
       case "figure": {
         if (!rest[0] || !rest[1]) throw new Error("Usage: npm run kb -- figure <document-id> <number>");
-        return (await figureFile(db, Number(rest[0]), Number(rest[1]))) ?? `Figure ${rest[1]} of document ${rest[0]} not found.`;
+        const image = await kb.figure(Number(rest[0]), Number(rest[1]));
+        if (!image) return `Figure ${rest[1]} of document ${rest[0]} not found.`;
+        // A file path, like before: remote figures are saved in the cache.
+        const file = `${CACHE_DIR}/figures/${rest[0]}-${rest[1]}.png`;
+        await mkdir(`${CACHE_DIR}/figures`, { recursive: true });
+        await writeFile(file, image);
+        return file;
       }
       case "courses":
-        return JSON.stringify(await listCourses(db), null, 2);
+        return JSON.stringify(await kb.courses(), null, 2);
       case "documents":
         if (!rest[0]) throw new Error("Usage: npm run kb -- documents <course>");
-        return formatDocuments(await listDocuments(db, rest[0], docType)) || `No documents for ${rest[0]}.`;
+        return formatDocuments(await kb.documents(rest[0], docType)) || `No documents for ${rest[0]}.`;
       default:
         throw new Error("Usage: npm run kb -- search|exercise|document|figure|courses|documents …");
     }
@@ -189,7 +199,7 @@ export async function knowledgeBase(args: string[], course?: string, docType?: s
     }
     throw error;
   } finally {
-    await db.end();
+    await close();
   }
 }
 

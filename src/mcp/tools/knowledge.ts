@@ -1,17 +1,7 @@
-import { readFile } from "node:fs/promises";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Db } from "../../rag/db.js";
-import {
-  documentText,
-  figureFile,
-  findExercise,
-  formatDocuments,
-  formatResults,
-  listCourses,
-  listDocuments,
-  search,
-} from "../../rag/search.js";
+import type { KnowledgeBase } from "../../app/knowledge.js";
+import { formatDocuments, formatResults } from "../../rag/search.js";
 
 const MAX_DOCUMENT_CHARS = 60_000;
 const DOC_TYPES = ["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"] as const;
@@ -21,9 +11,9 @@ function text(value: string) {
 }
 
 /** Indexed courses as "MAD (name), SYL (name)…", or undefined when the knowledge base is unreachable. */
-async function courseList(db: Db): Promise<{ codes: string; names: string } | undefined> {
+async function courseList(kb: KnowledgeBase): Promise<{ codes: string; names: string } | undefined> {
   try {
-    const courses = (await listCourses(db)).filter((c) => c.course);
+    const courses = (await kb.courses()).filter((c) => c.course);
     if (courses.length === 0) return undefined;
     return { codes: courses.map((c) => c.course).join(", "), names: courses.map((c) => `${c.course} (${c.name})`).join(", ") };
   } catch {
@@ -35,8 +25,8 @@ async function courseList(db: Db): Promise<{ codes: string; names: string } | un
  * Search and reading tools over the course knowledge base (indexed course documents). The indexed courses are written in
  * the search tool's description, so the model knows their codes without an extra call.
  */
-export async function registerKnowledgeTools(server: McpServer, db: Db): Promise<void> {
-  const courses = await courseList(db);
+export async function registerKnowledgeTools(server: McpServer, kb: KnowledgeBase): Promise<void> {
+  const courses = await courseList(kb);
   server.registerTool(
     "search_course_material",
     {
@@ -56,7 +46,7 @@ export async function registerKnowledgeTools(server: McpServer, db: Db): Promise
       annotations: { readOnlyHint: true },
     },
     async ({ query, course, doc_type, limit }) =>
-      text(formatResults(await search(db, query, { course, docType: doc_type, limit })) || "No matching material."),
+      text(formatResults(await kb.search(query, { course, docType: doc_type, limit })) || "No matching material."),
   );
 
   server.registerTool(
@@ -70,7 +60,7 @@ export async function registerKnowledgeTools(server: McpServer, db: Db): Promise
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ number, course }) => text(formatResults(await findExercise(db, course, number)) || `Exercise ${number} not found.`),
+    async ({ number, course }) => text(formatResults(await kb.exercise(course, number)) || `Exercise ${number} not found.`),
   );
 
   server.registerTool(
@@ -90,7 +80,7 @@ export async function registerKnowledgeTools(server: McpServer, db: Db): Promise
       annotations: { readOnlyHint: true },
     },
     async ({ document_id, page_from, page_to }) => {
-      const doc = await documentText(db, document_id, page_from, page_to);
+      const doc = await kb.document(document_id, page_from, page_to);
       if (!doc) return text(`Document ${document_id} not found.`);
       const truncated = doc.text.length > MAX_DOCUMENT_CHARS;
       return text(
@@ -119,11 +109,11 @@ export async function registerKnowledgeTools(server: McpServer, db: Db): Promise
       annotations: { readOnlyHint: true },
     },
     async ({ document_id, number }) => {
-      const file = await figureFile(db, document_id, number);
-      if (!file) return text(`Figure ${number} of document ${document_id} not found.`);
+      const image = await kb.figure(document_id, number);
+      if (!image) return text(`Figure ${number} of document ${document_id} not found.`);
       return {
         content: [
-          { type: "image" as const, data: (await readFile(file)).toString("base64"), mimeType: "image/png" },
+          { type: "image" as const, data: image.toString("base64"), mimeType: "image/png" },
           { type: "text" as const, text: `Figure ${number} of document ${document_id}` },
         ],
       };
@@ -141,7 +131,7 @@ export async function registerKnowledgeTools(server: McpServer, db: Db): Promise
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ course, doc_type }) => text(formatDocuments(await listDocuments(db, course, doc_type)) || `No documents for ${course}.`),
+    async ({ course, doc_type }) => text(formatDocuments(await kb.documents(course, doc_type)) || `No documents for ${course}.`),
   );
 
 }
