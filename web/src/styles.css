@@ -125,6 +125,14 @@ body {
   overflow-x: clip;
   overscroll-behavior: contain;
 }
+/* Installed on an iPhone (standalone, translucent status bar), the page is laid out from the top of the screen but
+   its viewport is shorter by the status bar: the body is extended by that much so that the bottom bar really sits
+   at the bottom of the screen instead of a status bar's height above it. */
+@media (display-mode: standalone) {
+  body {
+    height: calc(100% + env(safe-area-inset-top, 0px));
+  }
+}
 
 /* A page that fills the scrolling area of the shell, so that it never scrolls itself. */
 .page-fill {
