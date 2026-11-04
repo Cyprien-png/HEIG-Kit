@@ -26,3 +26,18 @@ export function Markdown({ source, className = "" }: { source: string; className
   const html = useMemo(() => markdownToHtml(source ?? ""), [source]);
   return <div className={`prose-kit ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
+
+/** The first words of a Markdown text as plain text, for a one-line summary. */
+export function excerpt(source: string | undefined, max = 120): string {
+  if (!source) return "";
+  const text = source
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[*_`>]/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*[-+]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}

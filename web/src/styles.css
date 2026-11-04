@@ -113,6 +113,17 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* A page that fills the viewport under the app's chrome (header, paddings, bottom bar), so that it never scrolls itself. */
+.page-fill {
+  height: calc(100dvh - 10.25rem - env(safe-area-inset-top, 0px));
+  min-height: 22rem;
+}
+@media (min-width: 768px) {
+  .page-fill {
+    height: calc(100dvh - 4.25rem);
+  }
+}
+
 /* Prose: Markdown of cards, corrections, documents. */
 .prose-kit {
   @apply text-[15px] leading-relaxed;

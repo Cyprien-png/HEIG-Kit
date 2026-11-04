@@ -2,8 +2,24 @@
 
 export type EventKind = "lesson" | "deadline" | "exam" | "event";
 
+export type BuiltinCalendar = "schedule" | "exams" | "deadlines";
+
+/** A calendar (layer): the built-in ones receive the source events, the user's own hold revision plans and the rest. */
+export interface Calendar {
+  id: number;
+  slug?: BuiltinCalendar;
+  name: string;
+  color: string;
+  description?: string;
+  visible: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CalendarEvent {
   key: string;
+  calendarId: number;
   source: "gaps" | "cyberlearn" | "manual";
   kind: EventKind;
   title: string;

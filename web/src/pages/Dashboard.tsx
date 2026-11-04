@@ -1,6 +1,7 @@
 import { ArrowRightIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { excerpt } from "../components/Markdown";
 import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, Stat } from "../components/ui";
 import { useApi } from "../lib/api";
 import { parseLessonCode } from "../lib/courses";
@@ -26,7 +27,7 @@ export function EventRow({ e, showDay }: { e: CalendarEvent; showDay?: boolean }
           {e.kind !== "lesson" && <Badge tone={KIND_TONE[e.kind]}>{KIND_LABEL[e.kind]}</Badge>}
           {e.overridden && <Badge tone="info">modifié</Badge>}
         </div>
-        {(e.location || e.details) && <div className="text-xs text-ink-2 mt-0.5 truncate">{[e.location, e.kind !== "lesson" && e.details].filter(Boolean).join(" · ")}</div>}
+        {(e.location || e.details) && <div className="text-xs text-ink-2 mt-0.5 truncate">{[e.location, e.kind !== "lesson" && excerpt(e.details, 90)].filter(Boolean).join(" · ")}</div>}
       </div>
     </li>
   );
@@ -34,7 +35,7 @@ export function EventRow({ e, showDay }: { e: CalendarEvent; showDay?: boolean }
 
 export function Dashboard() {
   const from = today();
-  const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${from}&to=${addDays(from, 8)}`, [], { refreshMs: 120_000 });
+  const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${from}&to=${addDays(from, 8)}&visible=true`, [], { refreshMs: 120_000 });
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections");
   const status = useApi<StatusReport>("/api/status", [], { refreshMs: 60_000 });
