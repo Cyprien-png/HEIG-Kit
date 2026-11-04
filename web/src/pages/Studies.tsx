@@ -53,18 +53,18 @@ export function Studies() {
           <div className="divide-y divide-line">
             {[...modules.entries()].map(([code, units]) => (
               <div key={code} className="px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-mono text-xs font-semibold bg-surface-2 rounded px-1.5 py-0.5">{code}</span>
-                  <span className="text-sm font-medium">{units[0].module.name}</span>
-                  <span className="ml-auto text-xs text-ink-2 tabular-nums">{units.reduce((s, u) => s + u.credits.reduce((c, p) => c + p.credits, 0), 0)} ECTS</span>
+                <div className="flex items-center gap-2 mb-2 min-w-0">
+                  <span className="shrink-0 font-mono text-xs font-semibold bg-surface-2 rounded px-1.5 py-0.5">{code}</span>
+                  <span className="text-sm font-medium min-w-0 truncate">{units[0].module.name}</span>
+                  <span className="ml-auto shrink-0 text-xs text-ink-2 tabular-nums">{units.reduce((s, u) => s + u.credits.reduce((c, p) => c + p.credits, 0), 0)} ECTS</span>
                 </div>
                 <ul className="grid sm:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   {units.map((u, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm rounded-lg border border-line px-2.5 py-1.5">
+                    <li key={i} className="flex items-center gap-2 min-w-0 text-sm rounded-lg border border-line px-2.5 py-1.5">
                       <CourseChip code={u.unit.code} />
                       <span className="flex-1 min-w-0 truncate">{u.unit.name}</span>
-                      <span className="text-xs text-ink-2 tabular-nums">{u.credits.filter((c) => c.credits > 0).map((c) => `${c.period} ${c.credits}`).join(" · ")}</span>
-                      <Badge tone={STATUS[u.status]?.tone ?? "neutral"}>{STATUS[u.status]?.label ?? u.status}</Badge>
+                      <span className="shrink-0 whitespace-nowrap text-xs text-ink-2 tabular-nums">{u.credits.filter((c) => c.credits > 0).map((c) => `${c.period} ${c.credits}`).join(" · ")}</span>
+                      <Badge tone={STATUS[u.status]?.tone ?? "neutral"} className="shrink-0">{STATUS[u.status]?.label ?? u.status}</Badge>
                     </li>
                   ))}
                 </ul>
