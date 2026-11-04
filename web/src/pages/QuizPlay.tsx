@@ -84,7 +84,7 @@ export function QuizPlay() {
       {next ? (
         <>
           {attempt.answered + 1 < attempt.total && <NextCard />}
-          <SwipeCard ref={swipe} resetKey={next.id} disabled={busy} leftLabel="Faux" rightLabel="Vrai" onSwipe={(d) => void answer(d > 0)}>
+          <SwipeCard key={next.id} ref={swipe} disabled={busy} leftLabel="Faux" rightLabel="Vrai" onSwipe={(d) => void answer(d > 0)}>
             <SessionCard number={cardNumber(next.position, attempt.total)}>
               <CardBody>
                 <Markdown source={next.statement} className="text-xl leading-snug" />

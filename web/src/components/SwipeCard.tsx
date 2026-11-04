@@ -11,13 +11,11 @@ export interface SwipeCardHandle {
 
 interface Props {
   children: ReactNode;
-  /** Called once the card has left the screen. */
+  /** Called once the card has left the screen; the card is then meant to be unmounted (give each card its own key). */
   onSwipe: (direction: -1 | 1) => void;
   onTap?: () => void;
   leftLabel: string;
   rightLabel: string;
-  /** Changes when the card shown changes, so the next card starts centered. */
-  resetKey: string | number;
   disabled?: boolean;
   className?: string;
 }
@@ -25,17 +23,22 @@ interface Props {
 /**
  * A card dragged left or right with a finger or the mouse, with a stamp showing what each side means; a tap (no
  * movement) calls `onTap`. The browser gets no touch gesture on it (`touch-action: none`), so a thumb that starts a
- * little upwards still drags the card instead of scrolling or bouncing the page.
+ * little upwards still drags the card instead of scrolling or bouncing the page. A card never comes back: it mounts
+ * from under the stack (slightly smaller, then grows into place) and leaves for good once swiped.
  */
-export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({ children, onSwipe, onTap, leftLabel, rightLabel, resetKey, disabled, className }, ref) {
+export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({ children, onSwipe, onTap, leftLabel, rightLabel, disabled, className }, ref) {
   const [drag, setDrag] = useState<{ dx: number; dragging: boolean; leaving?: -1 | 1 }>({ dx: 0, dragging: false });
+  const [entered, setEntered] = useState(false);
   const pointer = useRef<{ id: number; startX: number; startY: number; moved: boolean } | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    setDrag({ dx: 0, dragging: false });
-    return () => clearTimeout(timer.current);
-  }, [resetKey]);
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer.current);
+    };
+  }, []);
 
   const fly = (direction: -1 | 1) => {
     if (disabled || drag.leaving) return;
@@ -68,11 +71,12 @@ export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({
     else setDrag({ dx: 0, dragging: false });
   };
   const ratio = Math.max(-1, Math.min(1, drag.dx / (SWIPE_PX * 1.5)));
+  const transform = drag.leaving || drag.dragging || drag.dx !== 0 ? `translateX(${drag.dx}px) rotate(${drag.dx / 24}deg)` : entered ? "none" : UNDER_TRANSFORM;
 
   return (
     <div
       className={cx("absolute inset-0 touch-none", className)}
-      style={{ transform: `translateX(${drag.dx}px) rotate(${drag.dx / 24}deg)`, opacity: drag.leaving ? 0 : 1, transition: drag.dragging ? "none" : `transform ${FLY_MS}ms ease-out, opacity ${FLY_MS}ms` }}
+      style={{ transform, opacity: drag.leaving ? 0 : 1, transition: drag.dragging ? "none" : `transform ${FLY_MS}ms ease-out, opacity ${FLY_MS}ms` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -87,6 +91,18 @@ export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({
     </div>
   );
 });
+
+/** Where the card under the current one sits: a little smaller, peeking above, so the stack shows. */
+const UNDER_TRANSFORM = "translateY(-38px) scale(0.96)";
+
+/** The card under the current one, showing through while the top card is dragged away. */
+export function UnderCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ transform: UNDER_TRANSFORM }} aria-hidden>
+      {children}
+    </div>
+  );
+}
 
 /**
  * The text area of a card: centered while it fits, and only when it overflows does it scroll vertically under the

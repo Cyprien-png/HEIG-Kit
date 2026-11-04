@@ -1,8 +1,9 @@
-import { PencilSquareIcon, PlayIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
+import { ReviewButton } from "../components/ReviewButton";
 import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Textarea, Toggle, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
@@ -50,9 +51,7 @@ export function DeckDetail() {
             <Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />
             <Button onClick={() => setEditingDeck(true)}><PencilSquareIcon className="h-4 w-4" /> Paquet</Button>
             <Button onClick={() => setEditing("new")}><PlusIcon className="h-4 w-4" /> Carte</Button>
-            <Link to={`/study/${d.id}`}>
-              <Button variant="primary" disabled={d.cards === 0}><PlayIcon className="h-4 w-4" /> Réviser</Button>
-            </Link>
+            <ReviewButton deck={d.id} disabled={d.cards === 0} shuffle={shuffle} />
           </>
         }
       />

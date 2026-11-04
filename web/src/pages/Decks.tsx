@@ -1,7 +1,8 @@
-import { PlayIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { ReviewButton } from "../components/ReviewButton";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea, Toggle } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
@@ -27,11 +28,7 @@ export function Decks() {
             <Button onClick={() => setCreating(true)}>
               <PlusIcon className="h-4 w-4" /> Paquet
             </Button>
-            <Link to="/study">
-              <Button variant="primary" disabled={!stats || stats.due + stats.fresh === 0}>
-                <PlayIcon className="h-4 w-4" /> Réviser {stats && stats.due > 0 ? `(${stats.due})` : ""}
-              </Button>
-            </Link>
+            <ReviewButton disabled={!stats || stats.due + stats.fresh === 0} count={stats?.due} shuffle={shuffle} />
           </>
         }
       />

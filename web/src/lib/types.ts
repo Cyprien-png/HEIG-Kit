@@ -141,6 +141,27 @@ export interface DocumentText {
   text: string;
 }
 
+export interface StudySlot {
+  slot: number;
+  card: Card;
+  grade?: number;
+  answeredAt?: string;
+}
+
+/** A review session kept on the server: the cards in order, what was answered, where the student is. */
+export interface StudySession {
+  id: number;
+  deckId?: number;
+  shuffled: boolean;
+  position: number;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt?: string;
+  slots: StudySlot[];
+  answered: number;
+  again: number;
+}
+
 export interface LibraryFile {
   id: string;
   kind: "documents" | "videos";
