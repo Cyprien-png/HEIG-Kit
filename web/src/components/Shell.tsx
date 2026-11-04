@@ -41,24 +41,28 @@ const MAIN: Item[] = [
 ];
 const BOTTOM = MAIN.slice(0, 4);
 
+/** Routes shown without the phone's header and bottom bar: a card fills the screen and has its own way out. */
+const IMMERSIVE = /^\/(study|quiz\/play)(\/|$)/;
+
 export function Shell({ children }: { children: ReactNode }) {
   const { username, logout } = useSession();
   const [theme, setTheme] = useTheme();
   const [more, setMore] = useState(false);
   const location = useLocation();
   const moreActive = !BOTTOM.some((i) => (i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to)));
+  const immersive = IMMERSIVE.test(location.pathname);
 
   const ThemeIcon = theme === "dark" ? MoonIcon : SunIcon;
   const cycleTheme = () => setTheme(theme === "system" ? "dark" : theme === "dark" ? "light" : "system");
 
   return (
-    <div className="min-h-full md:grid md:grid-cols-[13.5rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="hidden md:flex flex-col border-r border-line bg-surface sticky top-0 h-screen">
-        <div className="px-4 h-14 flex items-center gap-2 border-b border-line">
+    <div className="h-full md:grid md:grid-cols-[13.5rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
+      <aside className="hidden md:flex flex-col border-r border-line bg-surface h-full min-h-0">
+        <div className="px-4 h-14 flex items-center gap-2 border-b border-line shrink-0">
           <img src="/favicon.svg" alt="" className="h-7 w-7 rounded-md" />
           <span className="font-semibold tracking-tight">HEIG-Kit</span>
         </div>
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-2 space-y-0.5">
           {MAIN.map((item) => (
             <NavLink
               key={item.to}
@@ -71,7 +75,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-line p-2 flex items-center justify-between gap-2">
+        <div className="border-t border-line p-2 flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0 px-1.5">
             <div className="text-xs text-ink-3">Connecté</div>
             <div className="text-sm font-medium truncate">{username}</div>
@@ -87,30 +91,39 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex flex-col min-h-full min-w-0">
-        <header className="md:hidden sticky top-0 z-30 h-12 pt-safe bg-surface/90 backdrop-blur border-b border-line flex items-center justify-between px-4">
-          <span className="font-semibold tracking-tight">HEIG-Kit</span>
-          <button onClick={cycleTheme} className="h-8 w-8 grid place-items-center rounded-md text-ink-2">
-            <ThemeIcon className="h-5 w-5" />
-          </button>
-        </header>
-        <main className="flex-1 w-full min-w-0 max-w-[1500px] mx-auto px-4 md:px-6 xl:px-8 py-5 md:py-7 pb-24 md:pb-10">{children}</main>
+      <div className="h-full flex flex-col min-w-0 min-h-0">
+        {/* The safe area is padding outside the 3rem row, so the band keeps its height under a translucent status bar. */}
+        {!immersive && (
+          <header className="md:hidden shrink-0 pt-safe bg-surface border-b border-line">
+            <div className="h-12 flex items-center justify-between px-4">
+              <span className="font-semibold tracking-tight">HEIG-Kit</span>
+              <button onClick={cycleTheme} aria-label="Thème" className="h-8 w-8 grid place-items-center rounded-md text-ink-2">
+                <ThemeIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </header>
+        )}
+        {/* The only scrolling area of the app; it never chains its scroll to the document. */}
+        <main className={cx("flex-1 min-h-0 w-full min-w-0 overscroll-y-contain", immersive ? "overflow-hidden" : "overflow-y-auto overflow-x-clip px-4 md:px-6 xl:px-8 py-5 md:py-7")}>
+          {immersive ? children : <div className="h-full max-w-[1500px] mx-auto">{children}</div>}
+        </main>
+        {!immersive && (
+          <nav className="md:hidden shrink-0 bg-surface border-t border-line pb-safe">
+            <div className="grid grid-cols-5">
+              {BOTTOM.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", isActive ? "text-accent" : "text-ink-3")}>
+                  <item.icon className="h-6 w-6" />
+                  {item.label}
+                </NavLink>
+              ))}
+              <button onClick={() => setMore(true)} className={cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", moreActive ? "text-accent" : "text-ink-3")}>
+                <EllipsisHorizontalIcon className="h-6 w-6" />
+                Plus
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
-
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line pb-safe">
-        <div className="grid grid-cols-5">
-          {BOTTOM.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", isActive ? "text-accent" : "text-ink-3")}>
-              <item.icon className="h-6 w-6" />
-              {item.label}
-            </NavLink>
-          ))}
-          <button onClick={() => setMore(true)} className={cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", moreActive ? "text-accent" : "text-ink-3")}>
-            <EllipsisHorizontalIcon className="h-6 w-6" />
-            Plus
-          </button>
-        </div>
-      </nav>
 
       <Modal open={more} onClose={() => setMore(false)} title="Plus">
         <div className="grid grid-cols-2 gap-2">
