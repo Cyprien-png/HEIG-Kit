@@ -60,6 +60,8 @@ uses, then call `Write` at once: the scene's steps are decided while writing it 
    two renders of the same scene at the same time.
 6. To include it in a document, reference it from Markdown with `![caption](../videos/<SceneName>.mp4)` and render the
    document with `heig:documents`.
+7. Tag the video in the library: `npm --prefix <root> run -s library -- tag videos/<SceneName>.mp4 --course <CODE>
+   --tags "vidéo,explication,<topic>"` (or the `tag_library_item` MCP tool), so the web app files it by course and type.
 
 ## Voice, only when asked
 
