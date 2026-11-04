@@ -79,8 +79,8 @@ repetition scheme (`card_state`: due date, interval, ease, four grades), on the 
 ## Quizzes
 
 True/false quizzes (`quizzes`, `quiz_questions`): the agent writes them from the course material (`create_quiz`,
-`heig:quiz` skill), the student answers them one statement at a time: cards swiped right (true) or left (false) on the
-web app's Quiz page, aloud with a voice assistant through `start_quiz` / `answer_quiz` (each call records an answer
+`heig:quiz` skill), the student answers them one statement at a time: full-screen cards swiped right (true) or left (false) on the
+web app's Quiz page (LaTeX between `$…$` is rendered), aloud with a voice assistant through `start_quiz` / `answer_quiz` (each call records an answer
 and returns the next question, the last one returns the result as lines to read), or `npm run quiz -- play` in the
 terminal. Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
 and source; an attempt stopped early counts the rest as wrong.

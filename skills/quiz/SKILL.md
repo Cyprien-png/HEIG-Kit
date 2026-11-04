@@ -18,8 +18,10 @@ the MCP tools when available (`list_quizzes`, `create_quiz`, `start_quiz`, `answ
    of the course: a definition swapped with its neighbour, a value off by one, an inverted condition, a property
    attributed to the wrong layer or the wrong object. Never a trick on wording alone.
 3. Each statement is **one sentence that reads well aloud**: numbers and units in words when a voice would stumble
-   (« soixante-quatre octets »), no LaTeX, no symbol such as ⊆ or ∀ (say « est inclus dans »). Each has an
-   `explanation` (why, with the course's words, two sentences at most) and a `source` (document, chapter, page).
+   (« soixante-quatre octets »), no symbol such as ⊆ or ∀ (say « est inclus dans »). The web app renders LaTeX
+   between `$…$` on the cards, so a quiz meant for the screen (mathematics) may use it; a quiz to be done aloud
+   must not. Each has an `explanation` (why, with the course's words, two sentences at most) and a `source`
+   (document, chapter, page).
 4. `topic`: short and reusable, the same words as the flashcards and the profile (« trame Ethernet », « relation
    d'ordre »), so mistakes can later feed the profile.
 5. JSON for the command line:

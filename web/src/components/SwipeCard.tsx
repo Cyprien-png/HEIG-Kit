@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { cx } from "./ui";
 
 const SWIPE_PX = 90;
@@ -24,7 +24,8 @@ interface Props {
 
 /**
  * A card dragged left or right with a finger or the mouse, with a stamp showing what each side means; a tap (no
- * movement) calls `onTap`. Vertical gestures are left to the page so it still scrolls.
+ * movement) calls `onTap`. The browser gets no touch gesture on it (`touch-action: none`), so a thumb that starts a
+ * little upwards still drags the card instead of scrolling or bouncing the page.
  */
 export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({ children, onSwipe, onTap, leftLabel, rightLabel, resetKey, disabled, className }, ref) {
   const [drag, setDrag] = useState<{ dx: number; dragging: boolean; leaving?: -1 | 1 }>({ dx: 0, dragging: false });
@@ -53,11 +54,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({
     if (!p || p.id !== e.pointerId) return;
     const dx = e.clientX - p.startX;
     const dy = e.clientY - p.startY;
-    if (!p.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    if (!p.moved && Math.abs(dy) > Math.abs(dx)) {
-      pointer.current = undefined;
-      return;
-    }
+    if (!p.moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
     p.moved = true;
     setDrag({ dx, dragging: true });
   };
@@ -74,7 +71,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({
 
   return (
     <div
-      className={cx("absolute inset-0 touch-pan-y", className)}
+      className={cx("absolute inset-0 touch-none", className)}
       style={{ transform: `translateX(${drag.dx}px) rotate(${drag.dx / 24}deg)`, opacity: drag.leaving ? 0 : 1, transition: drag.dragging ? "none" : `transform ${FLY_MS}ms ease-out, opacity ${FLY_MS}ms` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -85,8 +82,37 @@ export const SwipeCard = forwardRef<SwipeCardHandle, Props>(function SwipeCard({
       }}
     >
       {children}
-      <div className="pointer-events-none absolute top-5 left-5 rounded-lg border-2 border-ok text-ok px-3 py-1 text-lg font-bold uppercase tracking-wide -rotate-12 bg-surface/80" style={{ opacity: Math.max(0, ratio) }}>{rightLabel}</div>
-      <div className="pointer-events-none absolute top-5 right-5 rounded-lg border-2 border-bad text-bad px-3 py-1 text-lg font-bold uppercase tracking-wide rotate-12 bg-surface/80" style={{ opacity: Math.max(0, -ratio) }}>{leftLabel}</div>
+      <div className="pointer-events-none absolute top-12 left-5 rounded-lg border-2 border-ok text-ok px-3 py-1 text-lg font-bold uppercase tracking-wide -rotate-12 bg-surface/80" style={{ opacity: Math.max(0, ratio) }}>{rightLabel}</div>
+      <div className="pointer-events-none absolute top-12 right-5 rounded-lg border-2 border-bad text-bad px-3 py-1 text-lg font-bold uppercase tracking-wide rotate-12 bg-surface/80" style={{ opacity: Math.max(0, -ratio) }}>{leftLabel}</div>
     </div>
   );
 });
+
+/**
+ * The text area of a card: centered while it fits, and only when it overflows does it scroll vertically under the
+ * finger (its own scroll never reaches the page), so short cards keep every gesture for the swipe.
+ */
+export function CardBody({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    return () => observer.disconnect();
+  });
+  return (
+    <div ref={ref} className={cx("flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain", overflows ? "touch-pan-y" : "touch-none", className)}>
+      <div className="m-auto w-full text-center">{children}</div>
+    </div>
+  );
+}
+
+/** The number of a card, padded to the width of the total (01, 001). */
+export function cardNumber(position: number, total: number): string {
+  return String(position).padStart(Math.max(2, String(total).length), "0");
+}
