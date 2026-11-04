@@ -98,7 +98,14 @@ async function pickCalendar(api: HeigApi, ref: string | undefined): Promise<Cale
 }
 
 async function calendar(api: HeigApi): Promise<void> {
-  const names = new Map((await api.calendars()).map((c) => [c.id, c.name]));
+  const names = new Map(
+    (
+      await api.calendars().catch((error: unknown) => {
+        if ((error as { status?: number }).status === 404) throw new Error("This server does not know calendars yet: update it (npm run server:update on the server).");
+        throw error;
+      })
+    ).map((c) => [c.id, c.name]),
+  );
   const fmt = (events: EventJson[]) =>
     events.length === 0
       ? "No events."
