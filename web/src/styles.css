@@ -1,0 +1,212 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* Design tokens: a neutral slate scale with one accent, defined for light and dark, exposed to Tailwind below. */
+:root {
+  --canvas: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eaeef3;
+  --line: #d7dde6;
+  --line-strong: #b9c3d1;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #8a9bb2;
+  --accent: #1d4ed8;
+  --accent-soft: #dbe6ff;
+  --accent-ink: #ffffff;
+  --ok: #047857;
+  --ok-soft: #d1fae5;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --info: #0369a1;
+  --info-soft: #e0f2fe;
+  --shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 4px 16px rgb(15 23 42 / 0.05);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0b1220;
+    --surface: #111a2b;
+    --surface-2: #192338;
+    --line: #243149;
+    --line-strong: #34456a;
+    --ink: #e6ebf2;
+    --ink-2: #a3b2c9;
+    --ink-3: #5f7190;
+    --accent: #60a5fa;
+    --accent-soft: #1e3a8a;
+    --accent-ink: #0b1220;
+    --ok: #34d399;
+    --ok-soft: #064e3b;
+    --warn: #fbbf24;
+    --warn-soft: #78350f;
+    --bad: #f87171;
+    --bad-soft: #7f1d1d;
+    --info: #38bdf8;
+    --info-soft: #0c4a6e;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --canvas: #0b1220;
+  --surface: #111a2b;
+  --surface-2: #192338;
+  --line: #243149;
+  --line-strong: #34456a;
+  --ink: #e6ebf2;
+  --ink-2: #a3b2c9;
+  --ink-3: #5f7190;
+  --accent: #60a5fa;
+  --accent-soft: #1e3a8a;
+  --accent-ink: #0b1220;
+  --ok: #34d399;
+  --ok-soft: #064e3b;
+  --warn: #fbbf24;
+  --warn-soft: #78350f;
+  --bad: #f87171;
+  --bad-soft: #7f1d1d;
+  --info: #38bdf8;
+  --info-soft: #0c4a6e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --shadow-card: var(--shadow);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-canvas text-ink font-sans antialiased;
+  font-feature-settings: "cv11", "ss01", "tnum";
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prose: Markdown of cards, corrections, documents. */
+.prose-kit {
+  @apply text-[15px] leading-relaxed;
+}
+.prose-kit > * + * {
+  margin-top: 0.6em;
+}
+.prose-kit h1,
+.prose-kit h2,
+.prose-kit h3 {
+  @apply font-semibold text-ink;
+}
+.prose-kit h1 {
+  @apply text-xl mt-4;
+}
+.prose-kit h2 {
+  @apply text-lg mt-4;
+}
+.prose-kit h3 {
+  @apply text-base mt-3;
+}
+.prose-kit ul {
+  @apply list-disc pl-5;
+}
+.prose-kit ol {
+  @apply list-decimal pl-5;
+}
+.prose-kit code {
+  @apply font-mono text-[0.9em] bg-surface-2 rounded px-1 py-0.5;
+}
+.prose-kit pre {
+  @apply font-mono text-[13px] bg-surface-2 rounded-lg p-3 overflow-x-auto;
+}
+.prose-kit pre code {
+  @apply bg-transparent p-0;
+}
+.prose-kit table {
+  @apply text-sm border-collapse w-full;
+}
+.prose-kit th,
+.prose-kit td {
+  @apply border border-line px-2 py-1 text-left align-top;
+}
+.prose-kit th {
+  @apply bg-surface-2 font-medium;
+}
+.prose-kit blockquote {
+  @apply border-l-2 border-line-strong pl-3 text-ink-2;
+}
+.prose-kit a {
+  @apply text-accent underline underline-offset-2;
+}
+.prose-kit .katex-display {
+  @apply overflow-x-auto overflow-y-hidden py-1;
+}
+.prose-kit img {
+  @apply max-w-full rounded;
+}
+
+/* Scrollbars that do not fight the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* The card flip of the study page. */
+.flip-scene {
+  perspective: 1600px;
+}
+.flip-card {
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.flip-card.is-flipped {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-card {
+    transition: none;
+  }
+}
+
+/* Safe areas on phones. */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
