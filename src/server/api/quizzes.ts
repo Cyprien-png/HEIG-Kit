@@ -62,7 +62,8 @@ export function registerQuizRoutes(router: Router, app: App): void {
     const body = await readJson(req);
     const mode = stringField(body, "mode", { optional: true }) ?? "web";
     if (!MODES.includes(mode as AttemptMode)) throw new HttpError(400, `mode must be one of ${MODES.join(", ")}`);
-    return domain(() => startAttempt(app.db, intParam(params.id, "id"), mode as AttemptMode));
+    if (body.shuffle !== undefined && typeof body.shuffle !== "boolean") throw new HttpError(400, "shuffle must be true or false");
+    return domain(() => startAttempt(app.db, intParam(params.id, "id"), mode as AttemptMode, { shuffle: body.shuffle === true }));
   });
 
   router.get("/api/quiz-attempts/:id", async ({ params }) => {

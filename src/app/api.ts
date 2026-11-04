@@ -73,7 +73,7 @@ export interface HeigApi {
   quiz(id: number): Promise<Quiz | undefined>;
   createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]): Promise<Quiz>;
   deleteQuiz(id: number): Promise<boolean>;
-  startQuiz(quizId: number, mode?: quizzes.AttemptMode): Promise<QuizProgress>;
+  startQuiz(quizId: number, mode?: quizzes.AttemptMode, shuffle?: boolean): Promise<QuizProgress>;
   answerQuiz(attemptId: number, answer: boolean, questionId?: number): Promise<QuizAnswered>;
   finishQuiz(attemptId: number): Promise<QuizResult>;
   quizResult(attemptId: number): Promise<QuizResult | undefined>;
@@ -229,8 +229,8 @@ export class LocalApi implements HeigApi {
   deleteQuiz(id: number) {
     return quizzes.deleteQuiz(this.db, id);
   }
-  async startQuiz(quizId: number, mode: quizzes.AttemptMode = "web") {
-    return json(await quizzes.startAttempt(this.db, quizId, mode));
+  async startQuiz(quizId: number, mode: quizzes.AttemptMode = "web", shuffle = false) {
+    return json(await quizzes.startAttempt(this.db, quizId, mode, { shuffle }));
   }
   async answerQuiz(attemptId: number, answer: boolean, questionId?: number) {
     return json(await quizzes.answerQuestion(this.db, attemptId, answer, questionId));
@@ -379,8 +379,8 @@ export class RemoteApi implements HeigApi {
   async deleteQuiz(id: number) {
     return this.client.delete(`/api/quizzes/${id}`).then(() => true, (e) => (notFound(e) ? false : Promise.reject(e)));
   }
-  startQuiz(quizId: number, mode: quizzes.AttemptMode = "web") {
-    return this.client.post<QuizProgress>(`/api/quizzes/${quizId}/attempts`, { mode });
+  startQuiz(quizId: number, mode: quizzes.AttemptMode = "web", shuffle = false) {
+    return this.client.post<QuizProgress>(`/api/quizzes/${quizId}/attempts`, { mode, shuffle });
   }
   answerQuiz(attemptId: number, answer: boolean, questionId?: number) {
     return this.client.post<QuizAnswered>(`/api/quiz-attempts/${attemptId}/answers`, { answer, questionId });

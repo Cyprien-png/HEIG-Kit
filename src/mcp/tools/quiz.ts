@@ -83,11 +83,15 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
     {
       title: "Start a quiz",
       description: `Starts an attempt of a quiz and returns its first question. ${VOICE_RULES}`,
-      inputSchema: { quiz_id: z.number().int(), mode: z.enum(["voice", "cli", "web"]).optional().describe("How the student answers; default voice") },
+      inputSchema: {
+        quiz_id: z.number().int(),
+        mode: z.enum(["voice", "cli", "web"]).optional().describe("How the student answers; default voice"),
+        shuffle: z.boolean().optional().describe("Ask the questions in a random order (for a quiz already done once)"),
+      },
     },
     async (a) =>
       respond(async () => {
-        const progress = await api.startQuiz(a.quiz_id, a.mode ?? "voice");
+        const progress = await api.startQuiz(a.quiz_id, a.mode ?? "voice", a.shuffle ?? false);
         if (!progress.next) return `Attempt ${progress.attempt.id} started, but the quiz has no question.`;
         return `Attempt ${progress.attempt.id} started (${progress.attempt.total} questions). Answer each one with answer_quiz.\n${question(progress.next, progress.attempt.total)}`;
       }),

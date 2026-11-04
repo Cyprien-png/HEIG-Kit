@@ -29,7 +29,8 @@ the MCP tools when available (`list_quizzes`, `create_quiz`, `start_quiz`, `answ
 
 ## Running it aloud (voice mode, or any chat)
 
-- `start_quiz` gives the attempt id and the first question. **Read the statement exactly as returned**, then wait
+- `start_quiz` gives the attempt id and the first question (`shuffle: true` asks them in a random order, good for a
+  quiz already done once). **Read the statement exactly as returned**, then wait
   for the answer (vrai/faux, oui/non). Record it with `answer_quiz`, which returns the next question: read it at once,
   without commenting on the previous answer. Never reveal or hint at an answer before the end.
 - The last `answer_quiz` returns the result: read the score, then every mistake one by one (the statement, the right

@@ -82,10 +82,13 @@ const toSummary = (r: Record<string, unknown>): QuizSummary => ({
   best: r.best_score === null || r.best_score === undefined ? undefined : { score: Number(r.best_score), total: Number(r.best_total) },
 });
 
+/** The rank of a question in an attempt: its place in the shuffled order of the attempt, else its place in the quiz. */
+const ASKED_POSITION = "coalesce(array_position(a.question_order, q.id), q.position)";
+
 const toQuestion = (r: Record<string, unknown>): Question => ({
   id: Number(r.id),
   quizId: Number(r.quiz_id),
-  position: Number(r.position),
+  position: Number(r.asked_position ?? r.position),
   statement: r.statement as string,
   answer: Boolean(r.answer),
   explanation: (r.explanation as string | null) ?? undefined,
@@ -159,12 +162,12 @@ export async function getAttempt(db: Db, id: number): Promise<Attempt | undefine
   return rows[0] ? toAttempt(rows[0]) : undefined;
 }
 
-/** The first question of the attempt's quiz not answered yet. */
+/** The first question of the attempt not answered yet, in the order of the attempt. */
 async function nextQuestion(db: Db, attemptId: number): Promise<Question | undefined> {
   const { rows } = await db.query(
-    `SELECT q.* FROM quiz_questions q JOIN quiz_attempts a ON a.quiz_id = q.quiz_id
+    `SELECT q.*, ${ASKED_POSITION} AS asked_position FROM quiz_questions q JOIN quiz_attempts a ON a.quiz_id = q.quiz_id
      WHERE a.id = $1 AND NOT EXISTS (SELECT 1 FROM quiz_answers x WHERE x.attempt_id = a.id AND x.question_id = q.id)
-     ORDER BY q.position, q.id LIMIT 1`,
+     ORDER BY ${ASKED_POSITION}, q.id LIMIT 1`,
     [attemptId],
   );
   return rows[0] ? toQuestion(rows[0]) : undefined;
@@ -177,12 +180,29 @@ export interface Progress {
   result?: AttemptResult;
 }
 
-export async function startAttempt(db: Db, quizId: number, mode: AttemptMode = "web"): Promise<Progress> {
+/** A copy of the list in a random order (Fisher-Yates). */
+function shuffled<T>(list: T[]): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Starts an attempt, asking the questions in the quiz order or, with `shuffle`, in a random order kept for the attempt. */
+export async function startAttempt(db: Db, quizId: number, mode: AttemptMode = "web", options: { shuffle?: boolean } = {}): Promise<Progress> {
   const quiz = await getQuiz(db, quizId);
   if (!quiz) throw new Error(`No quiz ${quizId}`);
-  const { rows } = await db.query("INSERT INTO quiz_attempts (quiz_id, mode, total) VALUES ($1, $2, $3) RETURNING id", [quizId, mode, quiz.questionList.length]);
+  const questions = options.shuffle ? shuffled(quiz.questionList) : quiz.questionList;
+  const { rows } = await db.query("INSERT INTO quiz_attempts (quiz_id, mode, total, question_order) VALUES ($1, $2, $3, $4) RETURNING id", [
+    quizId,
+    mode,
+    questions.length,
+    options.shuffle ? questions.map((q) => q.id) : null,
+  ]);
   const attempt = (await getAttempt(db, Number(rows[0].id)))!;
-  return { attempt, next: asked(quiz.questionList[0]) };
+  return { attempt, next: asked({ ...questions[0], position: 1 }) };
 }
 
 /** Records an answer; `questionId` defaults to the next unanswered question (the voice flow never repeats ids). */
@@ -193,7 +213,7 @@ export async function answerQuestion(db: Db, attemptId: number, answer: boolean,
   let question: Question | undefined;
   if (questionId === undefined) question = await nextQuestion(db, attemptId);
   else {
-    const { rows } = await db.query("SELECT q.* FROM quiz_questions q JOIN quiz_attempts a ON a.quiz_id = q.quiz_id WHERE a.id = $1 AND q.id = $2", [attemptId, questionId]);
+    const { rows } = await db.query(`SELECT q.*, ${ASKED_POSITION} AS asked_position FROM quiz_questions q JOIN quiz_attempts a ON a.quiz_id = q.quiz_id WHERE a.id = $1 AND q.id = $2`, [attemptId, questionId]);
     question = rows[0] ? toQuestion(rows[0]) : undefined;
   }
   if (!question) throw new Error(questionId === undefined ? "Every question is answered" : `No question ${questionId} in this quiz`);
@@ -222,10 +242,10 @@ export async function attemptResult(db: Db, attemptId: number): Promise<AttemptR
   if (!attempt) return undefined;
   const { rows: quizRows } = await db.query("SELECT id, title, course FROM quizzes WHERE id = $1", [attempt.quizId]);
   const { rows } = await db.query(
-    `SELECT q.id, q.position, q.statement, q.answer AS expected, q.explanation, q.source, q.topic, x.answer, x.correct
-     FROM quiz_questions q LEFT JOIN quiz_answers x ON x.question_id = q.id AND x.attempt_id = $1
-     WHERE q.quiz_id = $2 ORDER BY q.position, q.id`,
-    [attemptId, attempt.quizId],
+    `SELECT q.id, ${ASKED_POSITION} AS position, q.statement, q.answer AS expected, q.explanation, q.source, q.topic, x.answer, x.correct
+     FROM quiz_questions q JOIN quiz_attempts a ON a.id = $1 LEFT JOIN quiz_answers x ON x.question_id = q.id AND x.attempt_id = a.id
+     WHERE q.quiz_id = a.quiz_id ORDER BY ${ASKED_POSITION}, q.id`,
+    [attemptId],
   );
   const answers: AnswerRecord[] = rows.map((r) => ({
     questionId: Number(r.id),

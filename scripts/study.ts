@@ -15,7 +15,7 @@
  *   npm run correction -- new "Série 3 MAD" [--course MAD] [--topic …] [--notes …]   creates it and prints the QR code
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
- *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> | result <attempt id> | delete <id>
+ *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -54,6 +54,7 @@ const { values, positionals } = parseArgs({
     limit: { type: "string" },
     json: { type: "boolean", default: false },
     "all-day": { type: "boolean", default: false },
+    shuffle: { type: "boolean", default: false },
   },
 });
 
@@ -331,8 +332,8 @@ async function quiz(api: HeigApi): Promise<void> {
       return out(`Quiz ${q.id} "${q.title}" created with ${q.questionList.length} questions.`);
     }
     case "play": {
-      if (!rest[0]) throw new Error("Usage: npm run quiz -- play <id>");
-      let progress = await api.startQuiz(Number(rest[0]), "cli");
+      if (!rest[0]) throw new Error("Usage: npm run quiz -- play <id> [--shuffle]");
+      let progress = await api.startQuiz(Number(rest[0]), "cli", values.shuffle);
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       try {
         while (progress.next) {
@@ -357,7 +358,7 @@ async function quiz(api: HeigApi): Promise<void> {
     case "delete":
       return out((await api.deleteQuiz(Number(rest[0]))) ? "Quiz deleted." : "No such quiz.");
     default:
-      throw new Error("Usage: npm run quiz -- [list] | show <id> | create --file quiz.json | play <id> | result <attempt id> | delete <id>");
+      throw new Error("Usage: npm run quiz -- [list] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>");
   }
 }
 

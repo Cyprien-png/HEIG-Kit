@@ -48,6 +48,22 @@ test("a quiz is answered one question at a time and finishes with a score and th
   assert.deepEqual(summary.best, { score: 2, total: 3 });
   assert.equal(summary.last?.score, 0);
 
+  // A shuffled attempt keeps its own order: numbered from one, every question once, the result in the same order.
+  const shuffled = await startAttempt(db!, quiz.id, "web", { shuffle: true });
+  assert.equal(shuffled.next?.position, 1);
+  const seen = [shuffled.next!.id];
+  let step = await answerQuestion(db!, shuffled.attempt.id, true, shuffled.next!.id);
+  assert.equal(step.next?.position, 2);
+  seen.push(step.next!.id);
+  step = await answerQuestion(db!, shuffled.attempt.id, true);
+  assert.equal(step.next?.position, 3);
+  seen.push(step.next!.id);
+  step = await answerQuestion(db!, shuffled.attempt.id, true);
+  assert.deepEqual([...seen].sort(), quiz.questionList.map((q) => q.id).sort());
+  assert.deepEqual(step.result!.answers.map((a) => a.questionId), seen);
+  assert.deepEqual(step.result!.answers.map((a) => a.position), [1, 2, 3]);
+  assert.deepEqual((await attemptResult(db!, started.attempt.id))!.answers.map((a) => a.position), [1, 2, 3]);
+
   assert.equal(await deleteQuiz(db!, quiz.id), true);
   assert.equal(await attemptResult(db!, again.attempt.id), undefined);
 });
