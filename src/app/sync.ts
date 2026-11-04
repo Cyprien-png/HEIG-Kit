@@ -167,8 +167,8 @@ export class Syncer {
     const savedContents = await saveSnapshot(this.db, "contents", contents);
     const savedDeadlines = await saveSnapshot(this.db, "deadlines", deadlines);
     const calendar = await syncSourceEvents(this.db, "cyberlearn", deadlinesToEvents(deadlines, scheduleCodes), from);
-    // The course pages may announce the programme or an evaluation of a lesson: refresh the lessons from the saved schedule.
-    const schedule = savedContents.changed && lessons.length > 0 ? await this.scheduleEvents(lessons) : undefined;
+    // The course pages announce the programme or an evaluation of a lesson: refresh the lessons from the saved schedule.
+    const schedule = lessons.length > 0 ? await this.scheduleEvents(lessons) : undefined;
     return { courses: courses.length, deadlines: deadlines.length, calendar, schedule, changed: { courses: savedCourses.changed, contents: savedContents.changed, deadlines: savedDeadlines.changed } };
   }
 

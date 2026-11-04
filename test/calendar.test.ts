@@ -94,12 +94,17 @@ test("calendars: the built-in ones receive the source events, the user's own hol
   assert.equal((await listEvents(db!, from, to)).length, 2);
   const moved = await updateEvent(db!, te.key, { calendarId: revision.id }, "user");
   assert.equal(moved.calendarId, revision.id);
+  // A source lesson turned into an exam by hand follows its kind into Examens; one placed by hand stays where it is.
+  const [lesson] = lessonsToEvents([{ summary: "PRG-D-C2", start: "2027-01-12T12:00:00.000Z", end: "2027-01-12T13:30:00.000Z", location: "C23", description: "" }]);
+  await syncSourceEvents(db!, "gaps", [lesson], from);
+  assert.equal((await updateEvent(db!, lesson.key, { kind: "exam", title: "TE 1 PRG" }, "user")).calendarId, exams.id);
+  assert.equal((await updateEvent(db!, te.key, { kind: "event" }, "user")).calendarId, revision.id);
 
   await assert.rejects(deleteCalendar(db!, exams.id), /built in/);
   await deleteCalendar(db!, revision.id);
   assert.equal(await findCalendar(db!, revision.id), undefined);
   // Its own events are gone; the exam moved into it falls back to its earlier version, in Examens.
-  assert.deepEqual((await listEvents(db!, from, to)).map((e) => [e.key, e.calendarId]), [[te.key, exams.id]]);
+  assert.deepEqual((await listEvents(db!, from, to)).map((e) => [e.key, e.calendarId]), [[te.key, exams.id], [lesson.key, exams.id]]);
 });
 
 test("snapshots only store a new state when the data changed", { skip: !db && "no local database" }, async () => {

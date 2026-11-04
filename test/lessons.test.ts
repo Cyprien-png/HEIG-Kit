@@ -31,13 +31,13 @@ test("a course page's planning gives the programme of each lesson day", () => {
 
 test("lessons carry their announced programme, and an announced evaluation becomes an exam", () => {
   const notes = lessonNotes({ MAD: sections });
-  const lesson = (summary: string, start: string) => ({ summary, start, end: start.replace("T09:30", "T11:00"), location: "F01", description: "" });
+  const lesson = (summary: string, start: string) => ({ summary, start, end: start.replace("T09:30", "T11:00"), location: "F01", description: "https://gaps.heig-vd.ch/consultation/horaires" });
   const [course, exam, other] = lessonsToEvents([lesson("MAD-E-C1", "2026-11-02T09:30:00.000Z"), lesson("MAD-E-C1", "2026-11-09T09:30:00.000Z"), lesson("PRG-D-C1", "2026-11-02T09:30:00.000Z")], notes);
   assert.equal(course.kind, "lesson");
   assert.equal(course.title, "MAD-E-C1");
   assert.match(course.details ?? "", /^Cours : Compositions/);
   assert.equal(exam.kind, "exam");
-  assert.equal(exam.title, "Évaluation sur les chapitres 1 à 3 (MAD-E-C1)");
+  assert.equal(exam.title, "Évaluation sur les chapitres 1 à 3");
   assert.equal(exam.key, "gaps:MAD-E-C1|2026-11-09T09:30:00.000Z");
   assert.equal(other.details, undefined);
 });

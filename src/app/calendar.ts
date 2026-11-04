@@ -96,6 +96,9 @@ export function courseOfSummary(summary: string): string {
   return parts.length >= 3 && /^[A-Z]\d+$/.test(parts.at(-1) ?? "") ? parts[0] : summary;
 }
 
+/** GAPS puts the address of the timetable in every lesson's description: not worth showing. */
+const lessonDescription = (lesson: Lesson) => lesson.description.split("\n").filter((line) => !/^\s*https?:\/\/gaps\.heig-vd\.ch\S*\s*$/.test(line)).join("\n").trim();
+
 const isAllDay = (lesson: Lesson) => /T00:00:00/.test(lesson.start) && /T00:00:00/.test(lesson.end) && Date.parse(lesson.end) - Date.parse(lesson.start) >= 86_400_000;
 
 /** What the course page says about a lesson day (the Cyberlearn planning), by course code and local day. */
@@ -115,13 +118,13 @@ export function lessonsToEvents(lessons: Lesson[], notes?: LessonNotes): (EventI
     return {
       key: `gaps:${lesson.summary}|${lesson.start}`,
       kind: exam ? "exam" : "lesson",
-      title: announced ? `${announced.replace(/^[-•*]\s*/, "")} (${lesson.summary})` : lesson.summary,
+      title: announced ? announced.replace(/^[-•*]\s*/, "") : lesson.summary,
       course,
       startsAt: new Date(lesson.start),
       endsAt: new Date(lesson.end),
       allDay: isAllDay(lesson),
       location: lesson.location || undefined,
-      details: [lesson.description, note].filter(Boolean).join("\n\n") || undefined,
+      details: [lessonDescription(lesson), note].filter(Boolean).join("\n\n") || undefined,
     };
   });
 }
@@ -398,6 +401,10 @@ export async function addEvent(db: Db, event: EventInput, author: Author): Promi
 export async function updateEvent(db: Db, key: string, patch: EventPatch, author: Author): Promise<CalendarEvent> {
   const current = await getEvent(db, key);
   if (!current || current.deleted) throw new Error(`No event ${key}`);
+  // An event that changes kind while sitting in the built-in calendar of its old kind follows its new kind (a lesson
+  // turned into an exam moves to Examens); one placed elsewhere by hand stays where it is.
+  const builtin = await builtinIds(db);
+  const follows = patch.kind !== undefined && patch.kind !== current.kind && current.calendarId === builtin[defaultCalendarOf(current.kind)];
   const next: EventInput & { calendarId: number } = {
     kind: patch.kind ?? current.kind,
     title: patch.title ?? current.title,
@@ -408,7 +415,7 @@ export async function updateEvent(db: Db, key: string, patch: EventPatch, author
     location: patch.location === null ? undefined : (patch.location ?? current.location),
     url: patch.url === null ? undefined : (patch.url ?? current.url),
     details: patch.details === null ? undefined : (patch.details ?? current.details),
-    calendarId: patch.calendarId === undefined ? current.calendarId : await resolveCalendarId(db, { ...current, calendarId: patch.calendarId }),
+    calendarId: patch.calendarId !== undefined ? await resolveCalendarId(db, { ...current, calendarId: patch.calendarId }) : follows ? builtin[defaultCalendarOf(patch.kind!)] : current.calendarId,
   };
   if (next.endsAt && next.endsAt < next.startsAt) throw new Error("The event ends before it starts");
   await insert(db, key, "manual", next, author);
