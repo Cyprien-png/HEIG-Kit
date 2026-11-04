@@ -1,6 +1,6 @@
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, ErrorBox, IconButton, Loading, Modal, Segmented } from "../components/ui";
+import { Button, ErrorBox, IconButton, Loading, Modal, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { F, addDays, day, mondayOf, today } from "../lib/format";
 import type { Calendar as CalendarLayer, CalendarEvent } from "../lib/types";
@@ -40,6 +40,8 @@ export function Calendar() {
   const [editing, setEditing] = useState<CalendarEvent | "new">();
   const [editingCalendar, setEditingCalendar] = useState<CalendarLayer | "new">();
   const [layersOpen, setLayersOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string>();
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -93,6 +95,23 @@ export function Calendar() {
     void layers.reload();
     void events.reload();
   };
+  /** Fetches GAPS and Cyberlearn again on the server, then shows the fresh events: the page never shows a stale copy by mistake. */
+  const refresh = async () => {
+    setSyncing(true);
+    setSyncError(undefined);
+    try {
+      for (const kind of ["gaps", "cyberlearn"]) {
+        const { run } = await api<{ run: { ok: boolean; message?: string } }>("/api/status/sync", { method: "POST", json: { kind } });
+        if (!run.ok) throw new Error(run.message ?? `La synchronisation ${kind} a échoué`);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setSyncError(/two-step|code/i.test(message) ? "edu-ID demande un code de connexion : reconnectez-vous depuis la page Statut." : message);
+    } finally {
+      setSyncing(false);
+      reloadAll();
+    }
+  };
   const onSaved = () => {
     setEditing(undefined);
     setSelected(undefined);
@@ -144,6 +163,9 @@ export function Calendar() {
         </div>
         <div className="flex items-center gap-2">
           <Segmented value={view} onChange={setView} options={[{ value: "week", label: "Semaine" }, { value: "month", label: "Mois" }, { value: "agenda", label: "Agenda" }]} />
+          <IconButton label={syncing ? "Synchronisation en cours" : "Actualiser depuis GAPS et Cyberlearn"} onClick={() => void refresh()} disabled={syncing}>
+            <ArrowPathIcon className={cx("h-5 w-5", syncing && "animate-spin")} />
+          </IconButton>
           <IconButton label="Calendriers" className="lg:hidden" onClick={() => setLayersOpen(true)}>
             <Squares2X2Icon className="h-5 w-5" />
           </IconButton>
@@ -154,6 +176,7 @@ export function Calendar() {
       </div>
 
       {(events.error || layers.error) && <ErrorBox error={events.error ?? layers.error ?? ""} retry={reloadAll} />}
+      {syncError && <ErrorBox error={syncError} retry={() => void refresh()} />}
 
       <div className="flex-1 min-h-0 flex gap-4">
         <aside className="hidden lg:flex w-52 xl:w-56 shrink-0 flex-col min-h-0 pt-1">
