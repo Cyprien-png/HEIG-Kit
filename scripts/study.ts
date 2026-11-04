@@ -160,13 +160,15 @@ async function calendar(api: HeigApi): Promise<void> {
       if (!sub) return out(values.json ? await api.calendars() : fmtCalendars(await api.calendars()));
       if (sub === "add") {
         if (!args[0]) throw new Error('Usage: npm run calendar -- calendars add "Name" [--color #7c3aed] [--description …]');
-        return out(fmtCalendars([await api.calendarCreate({ name: args[0], color: values.color, description: values.description })]));
+        const created = await api.calendarCreate({ name: args[0], color: values.color, description: values.description });
+        return out(values.json ? created : fmtCalendars([created]));
       }
       const target = await pickCalendar(api, args[0]);
       if (!target) throw new Error("Usage: npm run calendar -- calendars [add | set <id> | remove <id>]");
       if (sub === "set") {
         const visible = values.visible === undefined ? undefined : values.visible !== "false";
-        return out(fmtCalendars([await api.calendarEdit(target.id, { name: values.name, color: values.color, description: values.description, visible })]));
+        const edited = await api.calendarEdit(target.id, { name: values.name, color: values.color, description: values.description, visible });
+        return out(values.json ? edited : fmtCalendars([edited]));
       }
       if (sub === "remove") {
         await api.calendarDelete(target.id);
