@@ -110,8 +110,9 @@ and source; an attempt stopped early counts the rest as wrong.
 
 ## Corrections
 
-1. The agent creates a correction (`create_correction`), which gives a capture link; the `heig:correct` skill prints it
-   as a QR code in the terminal.
+1. The agent creates a correction (`create_correction`, no arguments needed), which gives the capture link and its QR
+   code at once; it names and describes the correction afterwards (`update_correction`, `PATCH /api/corrections/<id>`)
+   while the student photographs, so that neither waits for the other. The capture page refreshes the title by itself.
 2. The phone opens the capture page: camera or gallery, rotate, crop, reorder, delete, then **send**. Photos are
    stored under `data/corrections/<id>/`.
 3. The agent reads the photos (`get_correction` returns them as images), transcribes each exercise and corrects it

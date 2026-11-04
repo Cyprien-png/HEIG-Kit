@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, validateResult, verdictStats } from "../src/app/corrections.js";
+import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
 import { addNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
@@ -59,6 +59,10 @@ test("decks and cards: create, study queue, review and stats", { skip: !db && "n
 test("corrections: photos are checked, kept in order, then corrected with a validated result", { skip: !db && "no local database" }, async () => {
   assert.equal(sniffImage(JPEG), "image/jpeg");
   assert.equal(sniffImage(Buffer.from("not an image")), undefined);
+  const pending = await createCorrection(db!);
+  assert.equal(pending.title, "Correction en cours", "a correction can be created before it is named, so the QR code comes out at once");
+  assert.equal((await updateCorrection(db!, pending.id, { title: "Série 2 MAD", course: "MAD" }))?.title, "Série 2 MAD");
+  await deleteCorrection(db!, pending.id);
   const c = await createCorrection(db!, { title: "Série 3 MAD", course: "MAD", topic: "Relations" });
   assert.equal(c.state, "capture");
   await assert.rejects(markSent(db!, c.id), /at least one photo/);

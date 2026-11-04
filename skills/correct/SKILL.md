@@ -9,16 +9,29 @@ description: Corrects the user's handwritten exercises, tests or practice exams 
 skill needs a remote HEIG-Kit server (`HEIG_REMOTE_URL` in `.env`, `npm --prefix <root> run remote -- login`): the
 phone sends its photos there. If the command says so, tell the user and stop.
 
-## 1. Create the correction and show the QR code
+## 1. QR code first, name it after
 
-```sh
-cd <root> && npm run -s correction -- new "<title>" --course <CODE> [--topic "<topic>"] [--notes "<what to photograph>"]
-```
+The student must never wait for you, nor you for them. Two steps, in this order:
 
-The title names the work ("Série 3 MAD", "TE blanc ANA1 problème 2"). The command prints a QR code and a link: show
-them **as printed** (the QR code must stay in a code block, every line intact) and tell the user to scan it with their
-phone, photograph each page (camera or gallery, they can rotate, crop, reorder and delete), then press **Envoyer**.
-Note the correction id.
+1. **Get the QR code at once**, before anything else (no search, no title to think about):
+
+   ```sh
+   cd <root> && npm run -s correction -- new
+   ```
+
+   (or the `create_correction` MCP tool with no arguments). Show the QR code and the link **as printed** (the QR code
+   in a code block, every line intact) and tell the user to scan it, photograph each page (camera or gallery; they can
+   rotate, crop, reorder and delete), then press **Envoyer**. Note the correction id.
+
+2. **While they photograph**, name and describe the correction:
+
+   ```sh
+   npm run -s correction -- set <id> --title "<title>" --course <CODE> [--topic "<topic>"] [--notes "<what to photograph>"]
+   ```
+
+   (or `update_correction`). The title names the work ("Série 3 MAD", "TE blanc ANA1 problème 2"); the capture page
+   on the phone picks the new title up by itself. Use this time to also look up the statements and the reference
+   solutions in the course material (step 3.2), so that the correction starts as soon as the photos arrive.
 
 ## 2. Wait for the photos, then read them
 

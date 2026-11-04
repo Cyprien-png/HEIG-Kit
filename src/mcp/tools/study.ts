@@ -2,6 +2,7 @@
  * Calendar, flashcards, corrections and profile tools (docs/app.md), over the local database or a remote server.
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import QRCode from "qrcode";
 import { z } from "zod";
 import type { HeigApi } from "../../app/api.js";
 import { formatProfile } from "../../app/profile.js";
@@ -295,21 +296,55 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
   server.registerTool(
     "create_correction",
     {
-      title: "Start a correction of handwritten work",
+      title: "Start a correction of handwritten work: capture link and QR code at once",
       description:
-        "Creates a correction and returns the capture link the student opens on their phone to photograph their work " +
-        "(the heig:correct skill shows it as a QR code). Then wait for the student, and call get_correction to read the photos.",
+        "Creates a correction and returns, immediately, the link and the QR code the student scans to photograph their work. " +
+        "Call it FIRST with no arguments and show the QR code right away (the text block as is, every line intact); only then " +
+        "name the correction with update_correction (title, course, topic, notes) while the student is taking the photos, " +
+        "so that neither waits for the other. Then call get_correction once they have sent their photos.",
       inputSchema: {
-        title: z.string().describe("e.g. 'Série 3 MAD' or 'TE blanc ANA1'"),
+        title: z.string().optional().describe("Can be set later with update_correction, e.g. 'Série 3 MAD'"),
         course: z.string().optional(),
         topic: z.string().optional(),
         notes: z.string().optional().describe("What the student should photograph, shown on the capture page"),
       },
     },
+    async (a) => {
+      try {
+        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes });
+        const qr = await QRCode.toString(c.captureUrl, { type: "terminal", small: true });
+        const png = (await QRCode.toDataURL(c.captureUrl, { margin: 1, width: 360 })).split(",")[1];
+        const text =
+          `Correction ${c.id} created. Show this QR code to the student now, in a code block, every line intact:\n\n${qr}\n` +
+          `Link (valid 6 hours): ${c.captureUrl}\n` +
+          (a.title ? "" : `Then, while they photograph, call update_correction with the title, course, topic and notes. `) +
+          `Call get_correction once they say the photos are sent.`;
+        return { content: [{ type: "text" as const, text }, { type: "image" as const, data: png, mimeType: "image/png" }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }], isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "update_correction",
+    {
+      title: "Name and describe a correction",
+      description:
+        "Sets the title, course, topic and notes of a correction created with create_correction, typically right after showing " +
+        "the QR code, while the student photographs their work. Pass null to clear a field.",
+      inputSchema: {
+        id: z.string(),
+        title: z.string().optional().describe("e.g. 'Série 3 MAD' or 'TE blanc ANA1'"),
+        course: z.string().nullable().optional(),
+        topic: z.string().nullable().optional(),
+        notes: z.string().nullable().optional().describe("What the student should photograph, shown on the capture page"),
+      },
+    },
     async (a) =>
       respond(async () => {
-        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes });
-        return `Correction ${c.id} created.\nCapture link (valid 6 hours): ${c.captureUrl}\nShow it to the student (QR code), then call get_correction once they have sent their photos.`;
+        const c = await api.updateCorrection(a.id, { title: a.title, course: a.course, topic: a.topic, notes: a.notes });
+        return `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course}${c.topic ? `, ${c.topic}` : ""})` : ""}, state ${c.state}.`;
       }),
   );
 

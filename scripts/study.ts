@@ -12,7 +12,8 @@
  *   npm run calendar -- import plan.json      a calendar with its events: {"calendar": {"name", "color", "description"} | "<id|name>", "events": [...]}
  *   npm run cards -- [list [--course MAD]] | show <deck id> | create "Title" --course MAD --file cards.json
  *   npm run cards -- add <deck id> --file cards.json | study [<deck id>] | delete-deck <id> | delete-card <id>
- *   npm run correction -- new "Série 3 MAD" [--course MAD] [--topic …] [--notes …]   creates it and prints the QR code
+ *   npm run correction -- new ["Série 3 MAD"] [--course MAD] [--topic …] [--notes …]   creates it and prints the QR code at once
+ *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …]      names it while the student photographs
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
  *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>
@@ -237,13 +238,19 @@ async function cards(api: HeigApi): Promise<void> {
 async function correction(api: HeigApi): Promise<void> {
   switch (action) {
     case "new": {
-      if (!rest[0]) throw new Error('Usage: npm run correction -- new "Série 3 MAD" [--course MAD] [--topic …] [--notes …]');
-      const c = await api.createCorrection({ title: rest[0], course: values.course, topic: values.topic, notes: values.notes });
+      // No title needed: the QR code comes out at once, `set` names the correction while the student photographs.
+      const c = await api.createCorrection({ title: rest[0] ?? values.title, course: values.course, topic: values.topic, notes: values.notes });
       if (values.json) return out(c);
       console.log(`Correction ${c.id} created. Scan this code with your phone to photograph your work:\n`);
       console.log(await QRCode.toString(c.captureUrl, { type: "terminal", small: true }));
       console.log(`Link (valid 6 hours): ${c.captureUrl}`);
+      if (!rest[0] && !values.title) console.log(`\nName it meanwhile: npm run correction -- set ${c.id} --title "…" --course <CODE> [--topic …] [--notes …]`);
       return;
+    }
+    case "set": {
+      if (!rest[0] || (values.title === undefined && values.course === undefined && values.topic === undefined && values.notes === undefined)) throw new Error("Usage: npm run correction -- set <id> [--title …] [--course CODE] [--topic …] [--notes …]");
+      const c = await api.updateCorrection(rest[0], { title: values.title, course: values.course, topic: values.topic, notes: values.notes });
+      return out(values.json ? c : `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course})` : ""}`);
     }
     case "link": {
       if (!rest[0]) throw new Error("Usage: npm run correction -- link <id>");
@@ -282,7 +289,7 @@ async function correction(api: HeigApi): Promise<void> {
     case "delete":
       return out((await api.deleteCorrection(rest[0] ?? "")) ? "Correction deleted." : "No such correction.");
     default:
-      throw new Error("Usage: npm run correction -- new | list | show | link | submit | delete");
+      throw new Error("Usage: npm run correction -- new | set | list | show | link | submit | delete");
   }
 }
 

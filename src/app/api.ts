@@ -60,7 +60,8 @@ export interface HeigApi {
 
   corrections(options?: { course?: string; state?: corrections.CorrectionState }): Promise<Correction[]>;
   correction(id: string): Promise<Correction | undefined>;
-  createCorrection(input: { title: string; course?: string; topic?: string; notes?: string }): Promise<Correction & { captureUrl: string }>;
+  createCorrection(input?: { title?: string; course?: string; topic?: string; notes?: string }): Promise<Correction & { captureUrl: string }>;
+  updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }): Promise<Correction>;
   captureLink(id: string): Promise<string>;
   correctionPhotos(id: string): Promise<{ id: number; contentType: string; data: Buffer }[]>;
   submitCorrection(id: string, result: corrections.CorrectionResult): Promise<Correction>;
@@ -185,10 +186,15 @@ export class LocalApi implements HeigApi {
   async correction(id: string) {
     return json(await corrections.getCorrection(this.db, id));
   }
-  async createCorrection(input: { title: string; course?: string; topic?: string; notes?: string }) {
+  async createCorrection(input: { title?: string; course?: string; topic?: string; notes?: string } = {}) {
     if (!this.options.captureUrl) throw new Error("Corrections need the remote server: the phone must reach it to send photos (HEIG_REMOTE_URL, docs/app.md)");
     const created = await corrections.createCorrection(this.db, input);
     return { ...json(created), captureUrl: await this.options.captureUrl(created.id) };
+  }
+  async updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }) {
+    const updated = await corrections.updateCorrection(this.db, id, patch);
+    if (!updated) throw new Error(`No correction ${id}`);
+    return json(updated);
   }
   async captureLink(id: string) {
     if (!this.options.captureUrl) throw new Error("Corrections need the remote server (docs/app.md)");
@@ -345,8 +351,11 @@ export class RemoteApi implements HeigApi {
   async correction(id: string) {
     return this.client.get<Correction>(`/api/corrections/${id}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
-  createCorrection(input: { title: string; course?: string; topic?: string; notes?: string }) {
+  createCorrection(input: { title?: string; course?: string; topic?: string; notes?: string } = {}) {
     return this.client.post<Correction & { captureUrl: string }>("/api/corrections", input);
+  }
+  updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }) {
+    return this.client.patch<Correction>(`/api/corrections/${id}`, patch);
   }
   async captureLink(id: string) {
     return (await this.client.post<{ captureUrl: string }>(`/api/corrections/${id}/capture-link`)).captureUrl;

@@ -97,9 +97,12 @@ async function photosOf(db: Db, id: string): Promise<PhotoMeta[]> {
   return rows.map((p) => ({ id: Number(p.id), position: p.position, contentType: p.content_type, bytes: p.bytes, createdAt: p.created_at }));
 }
 
-export async function createCorrection(db: Db, input: { title: string; course?: string; topic?: string; notes?: string }): Promise<Correction> {
+/** Title of a correction created before the agent has named it (it names it while the student photographs). */
+export const PENDING_TITLE = "Correction en cours";
+
+export async function createCorrection(db: Db, input: { title?: string; course?: string; topic?: string; notes?: string } = {}): Promise<Correction> {
   const id = randomUUID();
-  await db.query("INSERT INTO corrections (id, title, course, topic, notes) VALUES ($1, $2, $3, $4, $5)", [id, input.title, input.course ?? null, input.topic ?? null, input.notes ?? null]);
+  await db.query("INSERT INTO corrections (id, title, course, topic, notes) VALUES ($1, $2, $3, $4, $5)", [id, input.title?.trim() || PENDING_TITLE, input.course ?? null, input.topic ?? null, input.notes ?? null]);
   return (await getCorrection(db, id))!;
 }
 

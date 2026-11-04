@@ -24,7 +24,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
   router.post("/api/corrections", async ({ req }) => {
     const body = await readJson(req);
     const correction = await createCorrection(app.db, {
-      title: stringField(body, "title", { max: 200 })!,
+      title: stringField(body, "title", { optional: true, max: 200 }),
       course: stringField(body, "course", { optional: true, max: 40 }),
       topic: stringField(body, "topic", { optional: true, max: 200 }),
       notes: stringField(body, "notes", { optional: true, max: 4000 }),

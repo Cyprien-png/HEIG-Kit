@@ -76,6 +76,17 @@ export function Capture() {
     void load();
   }, [load]);
 
+  // The agent names the correction while the photos are taken: refresh the heading until it is no longer pending.
+  useEffect(() => {
+    if (!meta || meta.state !== "capture") return;
+    const timer = setInterval(() => {
+      api<Meta>(`/api/corrections/${id}`, { capture: token })
+        .then((m) => setMeta((prev) => (prev ? { ...prev, title: m.title, course: m.course, topic: m.topic, notes: m.notes } : prev)))
+        .catch(() => undefined);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [meta?.state, id, token]);
+
   // Photos are fetched with the token and shown as blob URLs (an <img src> cannot send the header).
   useEffect(() => {
     if (!meta) return;
