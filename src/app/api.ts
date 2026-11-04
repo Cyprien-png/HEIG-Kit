@@ -8,6 +8,7 @@ import type { RemoteClient } from "../remote/client.js";
 import * as calendar from "./calendar.js";
 import * as corrections from "./corrections.js";
 import * as flashcards from "./flashcards.js";
+import * as library from "./library.js";
 import * as profile from "./profile.js";
 import * as quizzes from "./quizzes.js";
 
@@ -30,6 +31,8 @@ export type Quiz = Json<quizzes.QuizSummary & { questionList: quizzes.Question[]
 export type QuizProgress = Json<quizzes.Progress>;
 export type QuizAnswered = Json<Awaited<ReturnType<typeof quizzes.answerQuestion>>>;
 export type QuizResult = Json<quizzes.AttemptResult>;
+export type LibraryItem = library.LibraryItem;
+export type LibraryTagPatch = library.LibraryTagPatch;
 
 export interface HeigApi {
   calendars(): Promise<Calendar[]>;
@@ -77,6 +80,11 @@ export interface HeigApi {
   answerQuiz(attemptId: number, answer: boolean, questionId?: number): Promise<QuizAnswered>;
   finishQuiz(attemptId: number): Promise<QuizResult>;
   quizResult(attemptId: number): Promise<QuizResult | undefined>;
+
+  /** The generated documents and videos with their course and tags (on the server when remote). */
+  library(keywords?: string[]): Promise<LibraryItem[]>;
+  /** Sets the course and tags of an item named by a file, a key (document:name), a name or a title. */
+  tagLibraryItem(ref: string, patch: LibraryTagPatch): Promise<LibraryItem>;
 }
 
 const json = <T>(value: T): Json<T> => (value === undefined ? value : JSON.parse(JSON.stringify(value))) as Json<T>;
@@ -241,6 +249,15 @@ export class LocalApi implements HeigApi {
   async quizResult(attemptId: number) {
     return json(await quizzes.attemptResult(this.db, attemptId));
   }
+
+  async library(keywords: string[] = []) {
+    return library.annotatedLibrary(this.db, keywords);
+  }
+  async tagLibraryItem(ref: string, patch: LibraryTagPatch) {
+    const item = library.findLibraryItem(await library.annotatedLibrary(this.db), ref);
+    await library.setLibraryTags(this.db, library.libraryItemKey(item), patch);
+    return library.annotateLibrary([item], await library.listLibraryTags(this.db), await library.knownCourses(this.db))[0];
+  }
 }
 
 const qs = (params: Record<string, string | number | boolean | undefined>) => {
@@ -390,5 +407,13 @@ export class RemoteApi implements HeigApi {
   }
   async quizResult(attemptId: number) {
     return this.client.get<QuizResult>(`/api/quiz-attempts/${attemptId}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
+  }
+
+  async library(keywords: string[] = []) {
+    return (await this.client.get<{ items: LibraryItem[] }>(`/api/library${qs({ q: keywords.join(" ") })}`)).items;
+  }
+  async tagLibraryItem(ref: string, patch: LibraryTagPatch) {
+    const item = library.findLibraryItem(await this.library(), ref);
+    return this.client.patch<LibraryItem>(`/api/library/items/${item.kind}/${encodeURIComponent(item.name)}`, patch);
   }
 }

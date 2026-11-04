@@ -26,6 +26,7 @@ import { JobQueue } from "../server/jobs.js";
 import { serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
+import { registerLibraryTools } from "./tools/library.js";
 import { registerOutputTools } from "./tools/output.js";
 import { registerRemoteOutputTools } from "./tools/remote.js";
 import { registerRepoTools } from "./tools/repos.js";
@@ -48,6 +49,9 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).
+- The library (list_library) classifies every generated document and video by course and tags: a type among
+  explication, révision, exercices, corrigé, te blanc, vidéo, and topics such as « calcul matriciel ». Items not tagged
+  yet are guessed from their name: when the user asks to tag the library, set them with tag_library_item.
 - The calendar (get_calendar, set_calendar_event) merges GAPS, Cyberlearn and manual events; flashcards (create_deck) and
   corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
   the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;
@@ -67,6 +71,7 @@ async function buildServer(): Promise<McpServer> {
   registerOutputs(server);
   registerStudyTools(server, study);
   registerQuizTools(server, study);
+  registerLibraryTools(server, study);
   registerStudyPrompts(server);
   // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
   if (registerOutputs === registerOutputTools) registerRepoTools(server);

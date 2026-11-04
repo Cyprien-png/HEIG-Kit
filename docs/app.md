@@ -73,8 +73,14 @@ text, page by page with a filter; the Markdown view is the default on phones.
 
 Generated documents and videos are the files of the output folder, on the server (`outputs` volume, or the folder named by `HEIG_LIBRARY_DIR` in `rag/.env`). The API lists
 them, streams them (videos with HTTP range requests, so they seek in the browser) and accepts uploads. A local
-installation syncs with `npm run library -- push|pull` (or the `sync_library` MCP tool): the server is the place where
-everything ends up, whether the agent rendered it there or on the user's computer.
+installation syncs with `npm run library -- push|pull`: the server is the place where everything ends up, whether the
+agent rendered it there or on the user's computer.
+
+Each item carries a course code and tags (`library_tags`): a type among `explication`, `révision`, `exercices`,
+`corrigé`, `te blanc`, `vidéo`, and free topics such as `calcul matriciel`. The agent sets them with the
+`tag_library_item` MCP tool (`npm run library -- tag <item> --course MAD --tags "exercices,calcul matriciel"`); an item
+without saved tags is classified from its name and title (the course codes come from the GAPS snapshots). The web app
+lists the library by course then by type, and filters it by course, type and tags; `list_library` gives the same view.
 
 ## Flashcards
 
