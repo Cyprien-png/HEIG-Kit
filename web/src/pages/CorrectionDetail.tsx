@@ -78,8 +78,9 @@ export function CorrectionDetail() {
               <div className="flex-1 min-w-[12rem]">
                 {level >= 1 ? (
                   <>
-                    <div className="text-3xl font-semibold tabular-nums">{v.correct}<span className="text-ink-3 text-lg font-normal"> / {v.total} justes</span></div>
+                    <div className="text-3xl font-semibold tabular-nums">{v.percent} %<span className="text-ink-3 text-lg font-normal"> de réussite</span></div>
                     <div className="mt-2"><VerdictBar c={c} /></div>
+                    <div className="mt-1.5 text-xs text-ink-2 tabular-nums">{v.correct} juste{v.correct > 1 ? "s" : ""}{v.partial ? ` · ${v.partial} partiel${v.partial > 1 ? "s" : ""}` : ""}{v.wrong ? ` · ${v.wrong} faux` : ""} · {v.total} exercice{v.total > 1 ? "s" : ""}</div>
                   </>
                 ) : (
                   <div className="text-3xl font-semibold tabular-nums">{v.total}<span className="text-ink-3 text-lg font-normal"> exercice{v.total > 1 ? "s" : ""}</span></div>
@@ -88,7 +89,7 @@ export function CorrectionDetail() {
               {level >= 2 ? <Markdown source={c.result.summary} className="flex-[2] min-w-[16rem]" /> : <p className="flex-[2] min-w-[16rem] text-sm text-ink-2">{level === 0 ? "Les verdicts sont masqués : relisez vos réponses et cherchez vos erreurs, puis affichez les verdicts." : "Essayez de trouver vos erreurs sur les exercices faux ou partiels avant d'afficher les détails."}</p>}
             </div>
             {level >= 2 && c.result.toRevise && c.result.toRevise.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs"><span className="text-ink-3 uppercase tracking-wide">À réviser :</span>{c.result.toRevise.map((t) => <Badge key={t} tone="warn">{t}</Badge>)}</div>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs min-w-0"><span className="text-ink-3 uppercase tracking-wide">À réviser :</span>{c.result.toRevise.map((t) => <Badge key={t} tone="warn" wrap>{t}</Badge>)}</div>
             )}
           </Card>
           <div className="space-y-3">
@@ -141,7 +142,7 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
         <span className="font-mono text-sm font-semibold min-w-[2.5rem] shrink-0 whitespace-nowrap">{e.number}</span>
         <span className="flex-1 min-w-0 font-medium truncate">{e.title ?? (e.topics[0] ? e.topics[0] : "Exercice")}</span>
         {level >= 1 ? (
-          <Badge tone={info.tone} className="inline-flex items-center gap-1"><Icon className="h-3.5 w-3.5" /> {info.label}{e.points ? ` · ${e.points.obtained}/${e.points.total}` : ""}</Badge>
+          <Badge tone={info.tone} className="inline-flex items-center gap-1 shrink-0"><Icon className="h-3.5 w-3.5" /> {info.label}{e.points ? ` · ${e.points.obtained}/${e.points.total}` : ""}</Badge>
         ) : (
           <Badge>?</Badge>
         )}
@@ -171,7 +172,7 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
                   <div className="rounded-lg border border-line p-3"><Markdown source={e.solution} /></div>
                 </section>
               )}
-              {e.topics.length > 0 && <div className="flex flex-wrap gap-1">{e.topics.map((t) => <Badge key={t}>{t}</Badge>)}</div>}
+              {e.topics.length > 0 && <div className="flex flex-wrap gap-1 min-w-0">{e.topics.map((t) => <Badge key={t} wrap>{t}</Badge>)}</div>}
             </>
           )}
         </div>

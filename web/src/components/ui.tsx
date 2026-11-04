@@ -68,9 +68,10 @@ const TONES: Record<Tone, string> = {
   info: "bg-info-soft text-info",
 };
 
-export function Badge({ tone = "neutral", className, children, style }: { tone?: Tone; className?: string; children: ReactNode; style?: React.CSSProperties }) {
+/** A small label; `wrap` lets a long one (a topic phrase) break over several lines instead of leaving the screen. */
+export function Badge({ tone = "neutral", className, children, style, wrap }: { tone?: Tone; className?: string; children: ReactNode; style?: React.CSSProperties; wrap?: boolean }) {
   return (
-    <span style={style} className={cx("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide leading-4 whitespace-nowrap", TONES[tone], className)}>
+    <span style={style} className={cx("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide leading-4", wrap ? "whitespace-normal break-words text-left max-w-full" : "whitespace-nowrap", TONES[tone], className)}>
       {children}
     </span>
   );
