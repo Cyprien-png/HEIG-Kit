@@ -26,6 +26,7 @@
     "doc": "tsx modules/documents/render.ts",
     "video": "tsx modules/visuals/render.ts",
     "generated": "tsx scripts/generated.ts",
+    "remote": "tsx scripts/remote.ts",
     "typecheck": "tsc --noEmit",
     "aliases": "tsx scripts/aliases.ts",
     "rag:start": "tsx scripts/mcp-token.ts && docker compose -f rag/compose.yml up -d --build --wait",
