@@ -29,8 +29,9 @@ export class Auth {
     return user && pass;
   }
 
-  async issueToken(): Promise<{ token: string; expiresAt: Date }> {
-    const expiresAt = new Date(Date.now() + this.config.tokenDays * 86_400_000);
+  /** An access token for `days` (default HEIG_JWT_DAYS; OAuth connectors get shorter ones and refresh them). */
+  async issueToken(days = this.config.tokenDays): Promise<{ token: string; expiresAt: Date }> {
+    const expiresAt = new Date(Date.now() + Math.min(days, this.config.tokenDays) * 86_400_000);
     const token = await new SignJWT({ ver: this.config.tokenVersion })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(this.config.username)

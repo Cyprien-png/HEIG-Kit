@@ -8,6 +8,7 @@ import { serveWeb } from "./api/static.js";
 import { CONTENT_TYPES, HttpError, TooLarge, clientOf, json, parseCookies, readBody, readJson, sendFile } from "./api/util.js";
 import type { App } from "./app.js";
 import { resolveGenerated } from "./files.js";
+import { OAuth, challengeHeader } from "./oauth.js";
 
 const MAX_MCP_BYTES = 32 * 1024 ** 2;
 export const SESSION_COOKIE = "heig_session";
@@ -140,6 +141,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL, app: App
  */
 export function createRemoteServer(app: App, buildServer: () => Promise<McpServer>): Server {
   const router = createApi(app);
+  const oauth = new OAuth(app);
   return createServer(async (req, res) => {
     const started = performance.now();
     const client = clientOf(req, app.config.trustProxy);
@@ -158,10 +160,18 @@ export function createRemoteServer(app: App, buildServer: () => Promise<McpServe
       if (url.pathname === "/auth/login") return await login(req, res, app, client, false);
       if (url.pathname === "/api/auth/login") return await login(req, res, app, client, true);
       if (url.pathname === "/files") return await download(req, res, url, app);
+      if (url.pathname.startsWith("/oauth/") || url.pathname.startsWith("/.well-known/oauth-")) {
+        const result = await oauth.handle(req, res, url, client);
+        if (result.handled) {
+          note = result.note;
+          return;
+        }
+      }
       if (url.pathname === "/mcp") {
         if (!(await app.auth.verifyHeader(req.headers.authorization))) {
           note = req.headers.authorization ? "invalid token" : "no token";
-          return json(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
+          // Clients that speak OAuth find the authorization server from here (src/server/oauth.ts).
+          return json(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": challengeHeader(app.config.publicUrl) });
         }
         tool = await mcp(req, res, buildServer);
         return;
