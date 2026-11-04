@@ -112,10 +112,14 @@ html {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+  /* Read by lib/viewport.ts (env() cannot be read from a script directly). */
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 body {
   height: 100vh;
   height: 100dvh;
+  /* Set by lib/viewport.ts on iPhone home-screen apps, whose viewport is a status bar short of the screen. */
+  height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
   @apply bg-canvas text-ink font-sans antialiased;
