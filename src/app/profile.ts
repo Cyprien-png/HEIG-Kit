@@ -117,7 +117,8 @@ export interface TopicSummary {
   /** Open notes of this kind on the topic. */
   count: number;
   severity: number;
-  lastAt: Date;
+  /** A Date in the server, an ISO string once it went through JSON. */
+  lastAt: Date | string;
   examples: string[];
 }
 

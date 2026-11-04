@@ -1,0 +1,425 @@
+/**
+ * Calendar, flashcards, corrections and profile tools (docs/app.md), over the local database or a remote server.
+ */
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { HeigApi } from "../../app/api.js";
+import { formatProfile } from "../../app/profile.js";
+import { TIME_ZONE } from "../../dates.js";
+import { respond } from "../common.js";
+
+const EVENT_KINDS = ["lesson", "deadline", "exam", "event"] as const;
+const NOTE_KINDS = ["weakness", "strength", "mistake", "note"] as const;
+const VERDICTS = ["correct", "partial", "wrong", "missing"] as const;
+
+const when = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function formatEvents(events: { key: string; kind: string; title: string; course?: string; startsAt: string; endsAt?: string; location?: string; overridden: boolean; source: string }[]): string {
+  if (events.length === 0) return "No events in this period.";
+  return events
+    .map((e) => {
+      const end = e.endsAt ? `–${new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" }).format(new Date(e.endsAt))}` : "";
+      const flags = [e.overridden ? "modified by hand" : "", e.source === "manual" ? "manual" : ""].filter(Boolean).join(", ");
+      return `${when.format(new Date(e.startsAt))}${end} · ${e.kind} · ${e.course ? `${e.course} · ` : ""}${e.title}${e.location ? ` @ ${e.location}` : ""}${flags ? ` (${flags})` : ""}\n  key: ${e.key}`;
+    })
+    .join("\n");
+}
+
+const cardSchema = z.object({
+  front: z.string().describe("Question or notion (Markdown, LaTeX between $…$)"),
+  back: z.string().describe("Answer (Markdown, LaTeX)"),
+  hint: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  source: z.string().optional().describe("Where it comes from, e.g. 'Cours MAD ch. 1 p. 32'"),
+});
+
+const exerciseSchema = z.object({
+  number: z.string().describe("As numbered on the sheet, e.g. '2' or '3b'"),
+  title: z.string().optional(),
+  statement: z.string().optional().describe("The statement, when known from the course material (Markdown, LaTeX)"),
+  answer: z.string().describe("The student's answer transcribed as written, mistakes included (Markdown, LaTeX)"),
+  verdict: z.enum(VERDICTS),
+  points: z.object({ obtained: z.number(), total: z.number() }).optional(),
+  feedback: z.string().describe("What is wrong and how it should have been done, step by step; 'Juste.' with a short confirmation when correct"),
+  solution: z.string().optional().describe("The complete correct solution"),
+  cause: z.string().optional().describe("Probable cause of the mistake, e.g. 'confusion entre ⊆ et ∈'"),
+  topics: z.array(z.string()).describe("Course topics involved, short and reusable, e.g. 'inclusion-exclusion'"),
+});
+
+const noteSchema = z.object({
+  course: z.string().optional().describe("Course code, e.g. MAD"),
+  topic: z.string().describe("Short reusable topic, e.g. 'inclusion-exclusion'"),
+  kind: z.enum(NOTE_KINDS),
+  text: z.string().describe("The observation, one or two sentences"),
+  severity: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().describe("1 minor, 2 notable (default), 3 recurring or blocking"),
+  correctionId: z.string().optional(),
+  exercise: z.string().optional(),
+});
+
+export function registerStudyTools(server: McpServer, api: HeigApi): void {
+  // Calendar
+  server.registerTool(
+    "get_calendar",
+    {
+      title: "Calendar",
+      description:
+        "The student's calendar: GAPS lessons, Cyberlearn deadlines, exams and events added by hand, between two dates " +
+        "(default: the coming 14 days). Each event has a key, needed to change or remove it. Events changed by hand " +
+        "stay so until the source changes again.",
+      inputSchema: {
+        from: z.string().optional().describe("ISO date or date-time, default today"),
+        to: z.string().optional().describe("ISO date or date-time, default from + 14 days"),
+        kinds: z.array(z.enum(EVENT_KINDS)).optional(),
+        course: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        const from = a.from ? new Date(a.from) : new Date(new Date().setHours(0, 0, 0, 0));
+        const to = a.to ? new Date(a.to) : new Date(from.getTime() + 14 * 86_400_000);
+        if (a.to && !/T/.test(a.to)) to.setDate(to.getDate() + 1);
+        return formatEvents(await api.calendarList(from.toISOString(), to.toISOString(), { kinds: a.kinds, course: a.course }));
+      }),
+  );
+
+  server.registerTool(
+    "set_calendar_event",
+    {
+      title: "Add or change a calendar event",
+      description:
+        "Adds an exam, a deadline or any event the student asks for, or changes an existing one by its key (a deadline a " +
+        "teacher did not update on Cyberlearn, a moved exam…). A change of a GAPS or Cyberlearn event stays until that " +
+        "source changes again after it. Times are Europe/Zurich unless an offset is given.",
+      inputSchema: {
+        key: z.string().optional().describe("Key of the event to change (from get_calendar); omit to add a new event"),
+        kind: z.enum(EVENT_KINDS).optional().describe("Default: event (exam for tests and exams)"),
+        title: z.string().optional(),
+        course: z.string().optional(),
+        starts_at: z.string().optional().describe("ISO date-time, e.g. 2026-11-14T08:30:00+01:00"),
+        ends_at: z.string().optional(),
+        all_day: z.boolean().optional(),
+        location: z.string().optional(),
+        url: z.string().optional(),
+        details: z.string().optional(),
+      },
+    },
+    async (a) =>
+      respond(async () => {
+        const patch = { kind: a.kind, title: a.title, course: a.course, startsAt: a.starts_at, endsAt: a.ends_at, allDay: a.all_day, location: a.location, url: a.url, details: a.details };
+        if (a.key) return `Updated:\n${formatEvents([await api.calendarUpdate(a.key, patch)])}`;
+        if (!a.title || !a.starts_at) throw new Error("A new event needs at least title and starts_at");
+        return `Added:\n${formatEvents([await api.calendarAdd({ ...patch, kind: a.kind ?? "event", title: a.title, startsAt: a.starts_at })])}`;
+      }),
+  );
+
+  server.registerTool(
+    "remove_calendar_event",
+    {
+      title: "Remove a calendar event",
+      description: "Removes an event by its key (hidden until its source changes again, for GAPS and Cyberlearn events). With reset, forgets the manual changes of a source event instead, so its source version shows again.",
+      inputSchema: { key: z.string(), reset: z.boolean().optional().describe("Go back to the GAPS or Cyberlearn version instead of removing") },
+      annotations: { destructiveHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.reset) {
+          const event = await api.calendarReset(a.key);
+          return event ? `Back to the source version:\n${formatEvents([event])}` : "Manual changes forgotten.";
+        }
+        await api.calendarRemove(a.key);
+        return `Removed ${a.key}.`;
+      }),
+  );
+
+  server.registerTool(
+    "get_calendar_event_history",
+    {
+      title: "History of a calendar event",
+      description: "Every version of an event (source changes and manual changes), most recent first, with who made it and when.",
+      inputSchema: { key: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        const versions = await api.calendarHistory(a.key);
+        if (versions.length === 0) return `No event ${a.key}`;
+        return versions.map((v) => `${v.fetchedAt} · ${v.source}/${v.author}${v.deleted ? " · deleted" : ""} · ${v.title} · ${v.startsAt}${v.endsAt ? ` → ${v.endsAt}` : ""}${v.location ? ` @ ${v.location}` : ""}`).join("\n");
+      }),
+  );
+
+  // Flashcards
+  server.registerTool(
+    "list_decks",
+    {
+      title: "Flashcard decks",
+      description: "The student's flashcard decks with their number of cards, cards due and new cards; with deck_id, the deck's cards.",
+      inputSchema: { course: z.string().optional(), deck_id: z.number().int().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.deck_id) {
+          const deck = await api.deck(a.deck_id);
+          if (!deck) return `No deck ${a.deck_id}`;
+          return [`# ${deck.title} (${deck.course ?? "no course"}, deck ${deck.id})`, deck.description ?? "", ...deck.cardList.map((c) => `- [${c.id}] ${c.front} → ${c.back}${c.tags?.length ? ` (${c.tags.join(", ")})` : ""}`)].join("\n");
+        }
+        const decks = await api.decks(a.course);
+        return decks.length === 0 ? "No decks yet." : decks.map((d) => `[${d.id}] ${d.course ? `${d.course} · ` : ""}${d.title}: ${d.cards} cards, ${d.due} due, ${d.fresh} new`).join("\n");
+      }),
+  );
+
+  server.registerTool(
+    "create_deck",
+    {
+      title: "Create a flashcard deck",
+      description:
+        "Creates a deck of flashcards for a course, with its cards. Make cards from the course material (search it first): " +
+        "one notion per card, a precise question on the front, a short exact answer on the back, in French, LaTeX for " +
+        "formulas, the source of each card. The student studies them on the web app.",
+      inputSchema: { title: z.string(), course: z.string().optional(), description: z.string().optional(), cards: z.array(cardSchema).min(1).max(200) },
+    },
+    async (a) =>
+      respond(async () => {
+        const deck = await api.createDeck({ title: a.title, course: a.course, description: a.description }, a.cards);
+        return `Deck ${deck.id} "${deck.title}" created with ${deck.cards} cards.`;
+      }),
+  );
+
+  server.registerTool(
+    "add_flashcards",
+    {
+      title: "Add flashcards to a deck",
+      description: "Appends cards to an existing deck (see list_decks).",
+      inputSchema: { deck_id: z.number().int(), cards: z.array(cardSchema).min(1).max(200) },
+    },
+    async (a) => respond(async () => `${(await api.addCards(a.deck_id, a.cards)).length} cards added to deck ${a.deck_id}.`),
+  );
+
+  server.registerTool(
+    "delete_flashcards",
+    {
+      title: "Delete flashcards or a deck",
+      description: "Deletes cards by id, or a whole deck with its cards.",
+      inputSchema: { card_ids: z.array(z.number().int()).optional(), deck_id: z.number().int().optional().describe("Deletes the whole deck") },
+      annotations: { destructiveHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.deck_id) return (await api.deleteDeck(a.deck_id)) ? `Deck ${a.deck_id} deleted.` : `No deck ${a.deck_id}`;
+        let count = 0;
+        for (const id of a.card_ids ?? []) if (await api.deleteCard(id)) count++;
+        return `${count} cards deleted.`;
+      }),
+  );
+
+  // Corrections
+  server.registerTool(
+    "create_correction",
+    {
+      title: "Start a correction of handwritten work",
+      description:
+        "Creates a correction and returns the capture link the student opens on their phone to photograph their work " +
+        "(the heig:correct skill shows it as a QR code). Then wait for the student, and call get_correction to read the photos.",
+      inputSchema: {
+        title: z.string().describe("e.g. 'Série 3 MAD' or 'TE blanc ANA1'"),
+        course: z.string().optional(),
+        topic: z.string().optional(),
+        notes: z.string().optional().describe("What the student should photograph, shown on the capture page"),
+      },
+    },
+    async (a) =>
+      respond(async () => {
+        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes });
+        return `Correction ${c.id} created.\nCapture link (valid 6 hours): ${c.captureUrl}\nShow it to the student (QR code), then call get_correction once they have sent their photos.`;
+      }),
+  );
+
+  server.registerTool(
+    "get_correction",
+    {
+      title: "Read a correction and its photos",
+      description:
+        "State of a correction. Once the student sent their photos (state received), returns them as images to transcribe " +
+        "and correct, following the correct_exercises prompt; then call submit_correction. Without id, lists the corrections.",
+      inputSchema: { id: z.string().optional(), course: z.string().optional(), with_photos: z.boolean().optional().describe("Include the photos (default true when the state is received or corrected)") },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) => {
+      if (!a.id) {
+        return respond(async () => {
+          const list = await api.corrections({ course: a.course });
+          return list.length === 0 ? "No corrections yet." : list.map((c) => `${c.id} · ${c.state} · ${c.course ?? ""} ${c.title} · ${c.photos.length} photos · ${c.createdAt}`).join("\n");
+        });
+      }
+      try {
+        const c = await api.correction(a.id);
+        if (!c) return { content: [{ type: "text" as const, text: `No correction ${a.id}` }], isError: true };
+        const header = `Correction ${c.id}: ${c.title} (${c.course ?? "no course"}${c.topic ? `, ${c.topic}` : ""}), state ${c.state}, ${c.photos.length} photos${c.sentAt ? `, sent ${c.sentAt}` : ""}.${c.notes ? `\nNotes: ${c.notes}` : ""}`;
+        if (c.state === "capture") return { content: [{ type: "text" as const, text: `${header}\nThe student has not sent the photos yet: ask them to open the capture link and press Envoyer, then call again.` }] };
+        const content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] = [{ type: "text", text: header }];
+        if (a.with_photos !== false) {
+          for (const [i, p] of (await api.correctionPhotos(c.id)).entries()) {
+            content.push({ type: "text", text: `Photo ${i + 1}/${c.photos.length} (id ${p.id})` });
+            content.push({ type: "image", data: p.data.toString("base64"), mimeType: p.contentType });
+          }
+        }
+        if (c.result) content.push({ type: "text", text: `Result already submitted:\n${JSON.stringify(c.result, null, 2)}` });
+        return { content };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }], isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "submit_correction",
+    {
+      title: "Submit a correction",
+      description:
+        "Stores the correction of photographed work (see correct_exercises): every exercise with the student's answer as written, " +
+        "a verdict, the feedback, the solution, the probable cause and topics. Shown on the web with two levels (verdicts only, " +
+        "then the details). Also record the observations in the profile with add_profile_notes.",
+      inputSchema: {
+        id: z.string(),
+        summary: z.string().describe("Two or three sentences: overall result, main strengths and the main thing to work on"),
+        exercises: z.array(exerciseSchema).min(1),
+        to_revise: z.array(z.string()).optional().describe("Topics to revise, most urgent first"),
+      },
+    },
+    async (a) =>
+      respond(async () => {
+        const c = await api.submitCorrection(a.id, { summary: a.summary, exercises: a.exercises, toRevise: a.to_revise });
+        const counts = VERDICTS.map((v) => `${c.result?.exercises.filter((e) => e.verdict === v).length ?? 0} ${v}`).join(", ");
+        return `Correction ${c.id} stored (${counts}). The student sees it on the web app under Corrections.`;
+      }),
+  );
+
+  // Profile
+  server.registerTool(
+    "get_profile",
+    {
+      title: "Student profile",
+      description:
+        "What the student does well and badly, per course and topic, from past corrections and notes: weaknesses, frequent " +
+        "mistakes, strengths and the topics to revise first. Use it before preparing revisions, exercises or a practice exam. " +
+        "With query, the notes closest in meaning.",
+      inputSchema: { course: z.string().optional(), query: z.string().optional().describe("Find notes about a topic, e.g. 'cardinal et inclusion-exclusion'") },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.query) {
+          const notes = await api.searchNotes(a.query, a.course);
+          return notes.length === 0 ? "No matching notes." : notes.map((n) => `[${n.id}] ${n.course ?? ""} · ${n.topic} · ${n.kind} (severity ${n.severity}) · ${n.text}`).join("\n");
+        }
+        return formatProfile(await api.profile(a.course));
+      }),
+  );
+
+  server.registerTool(
+    "add_profile_notes",
+    {
+      title: "Record observations about the student",
+      description:
+        "Records what a correction or a conversation showed: a mistake (what went wrong and why), a weakness (a topic not " +
+        "mastered), a strength, or a note the student asked to keep. Short reusable topics, so they aggregate across time.",
+      inputSchema: { notes: z.array(noteSchema).min(1).max(50) },
+    },
+    async (a) => respond(async () => `${(await api.addNotes(a.notes)).length} notes recorded.`),
+  );
+
+  server.registerTool(
+    "resolve_profile_note",
+    {
+      title: "Mark a weakness as overcome",
+      description: "Resolves a note (it no longer counts in the profile), e.g. when a later correction shows the topic is mastered.",
+      inputSchema: { id: z.number().int(), resolved: z.boolean().optional().describe("false to reopen") },
+    },
+    async (a) => respond(async () => ((await api.resolveNote(a.id, a.resolved ?? true)) ? `Note ${a.id} ${a.resolved === false ? "reopened" : "resolved"}.` : `No note ${a.id}`)),
+  );
+}
+
+/** Prompts guiding the agent so that corrections and revisions always follow the same method. */
+export function registerStudyPrompts(server: McpServer): void {
+  server.registerPrompt(
+    "correct_exercises",
+    {
+      title: "Correct photographed work",
+      description: "Transcribes and corrects the student's handwritten exercises from a correction's photos, the same way every time",
+      argsSchema: { correction_id: z.string() },
+    },
+    ({ correction_id }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: CORRECTION_METHOD.replace("{id}", correction_id),
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "revise_weaknesses",
+    {
+      title: "Revision session on weak points",
+      description: "Builds a revision from the student's profile: explanations and exercises on the topics they struggle with",
+      argsSchema: { course: z.string().optional() },
+    },
+    ({ course }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Prépare-moi une séance de révision${course ? ` de ${course}` : ""} ciblée sur mes points faibles. Lis d'abord mon profil (get_profile` +
+              `${course ? ` course=${course}` : ""}) et mes dernières corrections (get_correction), puis le cours (search_course_material) sur les 2 ou 3 ` +
+              "thèmes les plus urgents de « À réviser en priorité ». Pour chaque thème : pourquoi je me trompe (d'après les causes notées), la bonne " +
+              "méthode en quelques étapes avec un exemple du cours, puis 2 exercices nouveaux du même type avec corrigé détaillé. Termine par un " +
+              "paquet de cartes (create_deck) reprenant les points clés, et propose une fiche PDF (render_document) si j'en veux une.",
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "make_flashcards",
+    {
+      title: "Flashcards from the course",
+      description: "Creates a deck of flashcards on a chapter or topic from the student's course material",
+      argsSchema: { course: z.string(), topic: z.string().optional() },
+    },
+    ({ course, topic }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Crée-moi un paquet de cartes de révision de ${course}${topic ? ` sur ${topic}` : ""}. Regarde d'abord list_decks pour ne pas refaire un paquet existant, ` +
+              "puis lis le cours (search_course_material, get_document) et écris 20 à 40 cartes : une notion par carte, question précise au recto, " +
+              "réponse courte et exacte au verso (définitions, formules en LaTeX, méthodes en 2-3 étapes, pièges fréquents), la source de chaque carte " +
+              "(document, page). Crée le paquet avec create_deck.",
+          },
+        },
+      ],
+    }),
+  );
+}
+
+export const CORRECTION_METHOD = `Corrige mon travail photographié (correction {id}) toujours de la même manière :
+
+1. Lis la correction avec get_correction (les photos y sont). Si l'état est encore "capture", dis-moi d'envoyer les photos et attends.
+2. Pour chaque exercice visible, transcris EXACTEMENT ce que j'ai écrit (champ answer, Markdown et LaTeX), erreurs comprises, sans corriger en transcrivant. Si une partie est illisible, écris [illisible] et dis-le dans le feedback.
+3. Retrouve l'énoncé et la solution de référence dans mes supports de cours (get_exercise, search_course_material) quand l'exercice vient du cours ; sinon résous-le toi-même en suivant la méthode du cours.
+4. Juge chaque exercice : correct (résultat et démarche justes), partial (démarche juste mais erreur de calcul, étape manquante ou justification insuffisante), wrong (méthode fausse ou résultat faux), missing (non traité).
+5. Pour chaque exercice non correct : dans feedback, montre précisément où est l'erreur (cite ma ligne fautive) et comment il fallait faire, étape par étape ; dans solution, la solution complète ; dans cause, la cause probable en quelques mots (confusion de notions, oubli d'un cas, erreur de calcul, lecture d'énoncé, méthode non maîtrisée…). Pour les exercices corrects, confirme en une phrase et signale une amélioration possible de rédaction s'il y en a.
+6. Donne à chaque exercice ses topics (thèmes courts et réutilisables, en français, p. ex. "inclusion-exclusion", "diagramme de Hasse").
+7. Appelle submit_correction avec le résumé (résultat global, points forts, LA chose à travailler), les exercices et to_revise.
+8. Enregistre dans mon profil (add_profile_notes, avec correctionId et exercise) : une note "mistake" par erreur (topic, cause, sévérité), une note "weakness" par thème non maîtrisé, une note "strength" par thème clairement maîtrisé. Si une faiblesse déjà notée est maintenant maîtrisée, résous-la (resolve_profile_note).
+9. Réponds-moi en deux niveaux : d'abord seulement la liste des exercices avec juste/partiel/faux (pour que je cherche mes erreurs moi-même), puis, séparé par un titre « Détails », la correction complète.`;

@@ -14,6 +14,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
+import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
+import { captureUrl } from "../app/corrections.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
 import { migrate, openDb } from "../rag/db.js";
 import { RemoteClient } from "../remote/client.js";
@@ -27,6 +29,7 @@ import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerOutputTools } from "./tools/output.js";
 import { registerRemoteOutputTools } from "./tools/remote.js";
 import { registerRepoTools } from "./tools/repos.js";
+import { registerStudyPrompts, registerStudyTools } from "./tools/study.js";
 
 // With stdio, stdout carries the protocol: everything the services log goes to stderr.
 console.log = console.error;
@@ -43,7 +46,10 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
   update_course_repos refreshes it; it is then searched like any other course material.
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
-  ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).`;
+  ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).
+- The calendar (get_calendar, set_calendar_event) merges GAPS, Cyberlearn and manual events; flashcards (create_deck) and
+  corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
+  the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;
 
 const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace(/- Some courses keep[\s\S]*?course material\.\n/, "").replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
 - This server is remote: render_document and render_animation queue a job, followed with get_job, which gives download
@@ -58,6 +64,8 @@ async function buildServer(): Promise<McpServer> {
   registerCampusTools(server);
   await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
+  registerStudyTools(server, study);
+  registerStudyPrompts(server);
   // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
   if (registerOutputs === registerOutputTools) registerRepoTools(server);
 
@@ -117,6 +125,9 @@ const remote = await RemoteClient.fromEnv().catch((error: unknown) => {
   return undefined;
 });
 let knowledge: KnowledgeBase = remote ? new RemoteKnowledge(remote) : new LocalKnowledge(db);
+let study: HeigApi = remote ? new RemoteApi(remote) : new LocalApi(db);
+// The study tables, for a stand-alone computer; a database that is down only disables the knowledge and study tools.
+if (!remote) await migrate(db).catch(() => undefined);
 const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, server: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
 
 if (values.server) {
@@ -128,6 +139,7 @@ if (values.server) {
   if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
   const app = createApp(config, db, queue);
   knowledge = new LocalKnowledge(db);
+  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
   if (process.env.HEIG_SYNC_MINUTES !== "0") app.syncer.start();
   instructions = REMOTE_INSTRUCTIONS;
   registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
