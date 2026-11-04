@@ -15,6 +15,10 @@ type Json<T> = T extends Date ? string : T extends Buffer ? Buffer : T extends (
 export type CalendarEvent = Json<calendar.CalendarEvent>;
 export type EventInput = Json<calendar.EventInput>;
 export type EventPatch = Json<calendar.EventPatch>;
+export type Calendar = Json<calendar.Calendar>;
+export type CalendarInput = calendar.CalendarInput;
+export type CalendarPatch = calendar.CalendarPatch;
+export type ListOptions = calendar.ListOptions;
 export type Deck = Json<flashcards.Deck>;
 export type Card = Json<flashcards.Card>;
 export type Correction = Json<corrections.Correction>;
@@ -22,7 +26,11 @@ export type ProfileNote = Json<profile.ProfileNote>;
 export type ProfileSummary = Json<profile.ProfileSummary>;
 
 export interface HeigApi {
-  calendarList(from: string, to: string, options?: { kinds?: calendar.EventKind[]; course?: string }): Promise<CalendarEvent[]>;
+  calendars(): Promise<Calendar[]>;
+  calendarCreate(input: CalendarInput): Promise<Calendar>;
+  calendarEdit(id: number, patch: CalendarPatch): Promise<Calendar>;
+  calendarDelete(id: number): Promise<void>;
+  calendarList(from: string, to: string, options?: ListOptions): Promise<CalendarEvent[]>;
   calendarAdd(input: EventInput): Promise<CalendarEvent>;
   calendarUpdate(key: string, patch: EventPatch): Promise<CalendarEvent>;
   calendarRemove(key: string): Promise<void>;
@@ -80,7 +88,19 @@ export class LocalApi implements HeigApi {
     return this.options.author ?? "agent";
   }
 
-  async calendarList(from: string, to: string, options: { kinds?: calendar.EventKind[]; course?: string } = {}) {
+  async calendars() {
+    return json(await calendar.listCalendars(this.db));
+  }
+  async calendarCreate(input: CalendarInput) {
+    return json(await calendar.createCalendar(this.db, input));
+  }
+  async calendarEdit(id: number, patch: CalendarPatch) {
+    return json(await calendar.updateCalendar(this.db, id, patch));
+  }
+  calendarDelete(id: number) {
+    return calendar.deleteCalendar(this.db, id);
+  }
+  async calendarList(from: string, to: string, options: ListOptions = {}) {
     return json(await calendar.listEvents(this.db, date(from, "from"), date(to, "to"), options));
   }
   async calendarAdd(input: EventInput) {
@@ -195,8 +215,21 @@ const notFound = (error: unknown) => (error as { status?: number }).status === 4
 export class RemoteApi implements HeigApi {
   constructor(private readonly client: RemoteClient) {}
 
-  async calendarList(from: string, to: string, options: { kinds?: calendar.EventKind[]; course?: string } = {}) {
-    return (await this.client.get<{ events: CalendarEvent[] }>(`/api/calendar${qs({ from, to, kinds: options.kinds?.join(","), course: options.course })}`)).events;
+  async calendars() {
+    return (await this.client.get<{ calendars: Calendar[] }>("/api/calendars")).calendars;
+  }
+  calendarCreate(input: CalendarInput) {
+    return this.client.post<Calendar>("/api/calendars", input);
+  }
+  calendarEdit(id: number, patch: CalendarPatch) {
+    return this.client.patch<Calendar>(`/api/calendars/${id}`, patch);
+  }
+  calendarDelete(id: number) {
+    return this.client.delete(`/api/calendars/${id}`);
+  }
+  async calendarList(from: string, to: string, options: ListOptions = {}) {
+    const query = qs({ from, to, kinds: options.kinds?.join(","), course: options.course, calendars: options.calendars?.join(","), visible: options.visibleOnly ? "true" : undefined });
+    return (await this.client.get<{ events: CalendarEvent[] }>(`/api/calendar${query}`)).events;
   }
   calendarAdd(input: EventInput) {
     return this.client.post<CalendarEvent>("/api/calendar/events", input);
