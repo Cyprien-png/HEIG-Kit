@@ -8,6 +8,7 @@ import { after, before, test } from "node:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SignJWT } from "jose";
 import { Auth, LoginLimiter } from "../src/server/auth.js";
+import { type App, createApp } from "../src/server/app.js";
 import { type ServerConfig, loadServerConfig } from "../src/server/config.js";
 import { resolveGenerated } from "../src/server/files.js";
 import { createRemoteServer } from "../src/server/http.js";
@@ -92,15 +93,21 @@ test("only regular generated files of the output folders can be resolved", () =>
 let server: Server;
 let origin: string;
 const auth = new Auth(config);
+/** A database that accepts the request log writes and nothing else. */
+const fakeDb = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as App["db"];
+const appFor = (publicUrl: URL, limiter?: LoginLimiter): App => {
+  const app = createApp({ ...config, publicUrl }, fakeDb, undefined, auth);
+  return limiter ? { ...app, limiter } : app;
+};
 
 before(async () => {
-  server = createRemoteServer({ ...config, publicUrl: new URL("http://127.0.0.1") }, async () => new McpServer({ name: "test", version: "1" }), auth);
+  server = createRemoteServer(appFor(new URL("http://127.0.0.1")), async () => new McpServer({ name: "test", version: "1" }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
   origin = `http://127.0.0.1:${port}`;
   // The host check needs the real port.
   server.close();
-  server = createRemoteServer({ ...config, publicUrl: new URL(origin) }, async () => new McpServer({ name: "test", version: "1" }), auth);
+  server = createRemoteServer(appFor(new URL(origin)), async () => new McpServer({ name: "test", version: "1" }));
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 });
 
@@ -123,7 +130,7 @@ test("the HTTP API: login, protected MCP, signed downloads", async () => {
   assert.equal((await fetch(`${origin}/nope`)).status, 404);
   assert.equal((await fetch(`${origin}/auth/login`)).status, 405);
   assert.equal((await login("not json")).status, 400);
-  assert.equal((await login([1])).status, 401);
+  assert.equal((await login([1])).status, 400);
   assert.equal((await login({ username: "me", password: "wrong" })).status, 401);
 
   const ok = await login({ username: "me", password: ENV.HEIG_AUTH_PASSWORD });
@@ -164,7 +171,7 @@ test("requests for another host name are refused, and large logins too", async (
 });
 
 test("login is blocked after repeated failures, even with the right password", async () => {
-  const limited = createRemoteServer({ ...config, publicUrl: new URL("http://127.0.0.1:18766") }, async () => new McpServer({ name: "t", version: "1" }), auth, new LoginLimiter(2));
+  const limited = createRemoteServer(appFor(new URL("http://127.0.0.1:18766"), new LoginLimiter(2)), async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => limited.listen(18766, "127.0.0.1", resolve));
   try {
     const attempt = (password: string) => fetch("http://127.0.0.1:18766/auth/login", { method: "POST", body: JSON.stringify({ username: "me", password }) });
