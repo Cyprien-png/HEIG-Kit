@@ -43,13 +43,18 @@ In `.env`: `HEIG_AUTH_USERNAME`, `HEIG_AUTH_PASSWORD` (12 characters at least), 
 Check first, from the machine, that GAPS and edu-ID accept its address: `npm run schedule`. The first login may ask for a
 two-step code: `npm run schedule -- --mfa-code 123456`.
 
-Then HTTPS, for instance with [Caddy](https://caddyserver.com):
+Then HTTPS in front of it. The server is published on `127.0.0.1:8766` for a reverse proxy on the same machine, for
+instance [Caddy](https://caddyserver.com):
 
 ```
 heig.example.org {
   reverse_proxy 127.0.0.1:8766
 }
 ```
+
+With a reverse proxy elsewhere on your network (which already holds the certificate), publish the server on the
+network instead: `echo HEIG_BIND=0.0.0.0 > rag/.env`, then `npm run server:start` again, and point the proxy to
+`http://<machine>:8766`, forwarding the `Host` header unchanged (the server refuses other host names).
 
 ## The web application
 
