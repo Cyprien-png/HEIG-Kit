@@ -113,3 +113,10 @@ test("library files: bearer upload with kept modification time, range streaming,
   assert.equal((await fetch(`${origin}/api/library/files/documents/notes.md`, { method: "DELETE", headers: auth })).status, 204);
   assert.equal((await fetch(`${origin}/api/library/files/documents/notes.md`, { headers: auth })).status, 404);
 });
+
+test("the remote client never doubles the slash of the server address", async () => {
+  const { RemoteClient } = await import("../src/remote/client.js");
+  for (const given of ["http://127.0.0.1:8766", "http://127.0.0.1:8766/", "http://127.0.0.1:8766//"]) {
+    assert.equal(new RemoteClient(new URL(given), "t").href("/api/auth/me"), "http://127.0.0.1:8766/api/auth/me");
+  }
+});

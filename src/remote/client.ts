@@ -26,6 +26,9 @@ export function remoteUrl(env: NodeJS.ProcessEnv = process.env): URL | undefined
   return url;
 }
 
+/** The server's address without a trailing slash, so that paths never get a double slash. */
+const base = (url: URL) => url.href.replace(/\/+$/, "");
+
 interface SavedToken {
   url: string;
   token: string;
@@ -42,7 +45,7 @@ export async function readRemoteToken(): Promise<SavedToken | undefined> {
 
 /** Logs in to the server and keeps the token (readable by the current user only: it opens the whole account). */
 export async function remoteLogin(url: URL, username: string, password: string): Promise<SavedToken> {
-  const res = await fetch(new URL("auth/login", `${url.href}/`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+  const res = await fetch(`${base(url)}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
   if (!res.ok) throw new RemoteError(res.status, res.status === 401 ? "invalid username or password" : `login failed (${res.status})`);
   const { access_token, expires_at } = (await res.json()) as { access_token: string; expires_at: string };
   const saved = { url: url.href, token: access_token, expiresAt: expires_at };
@@ -69,7 +72,7 @@ export class RemoteClient {
 
   /** Absolute URL of an API path such as `/api/calendar`. */
   href(path: string): string {
-    return `${this.url.href}${path.startsWith("/") ? "" : "/"}${path}`;
+    return `${base(this.url)}${path.startsWith("/") ? "" : "/"}${path}`;
   }
 
   async request(method: string, path: string, options: { json?: unknown; body?: BodyInit; headers?: Record<string, string> } = {}): Promise<Response> {
