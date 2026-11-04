@@ -1,9 +1,10 @@
 import { PlayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, Toggle, cx } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { ShuffleToggle } from "../components/ShuffleToggle";
 import { useShuffle } from "../lib/shuffle";
 import type { QuizSummary } from "../lib/types";
 
@@ -30,7 +31,7 @@ export function Quizzes() {
 
   return (
     <div>
-      <PageHeader title="Quiz" actions={<Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />} />
+      <PageHeader title="Quiz" actions={<ShuffleToggle on={shuffle} onChange={setShuffle} />} />
       {quizzes.error && <ErrorBox error={quizzes.error} retry={quizzes.reload} />}
       {quizzes.loading && !quizzes.data ? (
         <Loading />

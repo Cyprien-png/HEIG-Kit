@@ -3,9 +3,10 @@ import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { ReviewButton } from "../components/ReviewButton";
-import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea, Toggle } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { ShuffleToggle } from "../components/ShuffleToggle";
 import { useShuffle } from "../lib/shuffle";
 import type { Deck, StudyStats } from "../lib/types";
 
@@ -24,7 +25,7 @@ export function Decks() {
         title="Cartes"
         actions={
           <>
-            <Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />
+            <ShuffleToggle on={shuffle} onChange={setShuffle} />
             <Button onClick={() => setCreating(true)}>
               <PlusIcon className="h-4 w-4" /> Paquet
             </Button>

@@ -4,9 +4,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
 import { ReviewButton } from "../components/ReviewButton";
-import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Textarea, Toggle, cx } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Textarea, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { ShuffleToggle } from "../components/ShuffleToggle";
 import { useShuffle } from "../lib/shuffle";
 import type { Card as CardT, Deck } from "../lib/types";
 
@@ -48,7 +49,7 @@ export function DeckDetail() {
         subtitle={<>{d.cards} cartes · {d.due} à réviser · {d.fresh} nouvelles{d.description ? ` · ${d.description}` : ""}</>}
         actions={
           <>
-            <Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />
+            <ShuffleToggle on={shuffle} onChange={setShuffle} />
             <Button onClick={() => setEditingDeck(true)}><PencilSquareIcon className="h-4 w-4" /> Paquet</Button>
             <Button onClick={() => setEditing("new")}><PlusIcon className="h-4 w-4" /> Carte</Button>
             <ReviewButton deck={d.id} disabled={d.cards === 0} shuffle={shuffle} />
