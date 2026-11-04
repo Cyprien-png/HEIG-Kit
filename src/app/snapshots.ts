@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Db } from "../rag/db.js";
 
 /** What the server keeps a copy of, so the web app answers without touching GAPS or Cyberlearn. */
-export type SnapshotKind = "schedule" | "deadlines" | "grades" | "transcript" | "plan" | "absences" | "courses";
+export type SnapshotKind = "schedule" | "deadlines" | "grades" | "transcript" | "plan" | "absences" | "courses" | "contents";
 
 export interface Snapshot<T> {
   data: T;

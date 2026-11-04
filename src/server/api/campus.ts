@@ -11,6 +11,7 @@ const KINDS: Record<string, SnapshotKind> = {
   plan: "plan",
   absences: "absences",
   courses: "courses",
+  contents: "contents",
 };
 
 /** GAPS and Cyberlearn data from the server's snapshots (refreshed by the sync, see /api/status). */

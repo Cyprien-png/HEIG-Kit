@@ -5,6 +5,7 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { MfaRequiredError } from "../auth/eduid.js";
+import { findCourse } from "../courses.js";
 import type { Course, Deadline } from "../cyberlearn/client.js";
 import { fetchContinuousGrades, fetchTranscript } from "../gaps/grades.js";
 import { fetchStudentRecord } from "../gaps/student.js";
@@ -13,7 +14,8 @@ import type { Db } from "../rag/db.js";
 import { CyberlearnSource } from "../rag/sources/cyberlearn.js";
 import { CYBERLEARN_TOKEN_FILE, OVERDUE_WINDOW_DAYS, PENDING_MFA_FILE, SESSION_FILE, loginGaps, withCyberlearn } from "../services.js";
 import { scheduleCourses } from "../table.js";
-import { deadlinesToEvents, lessonsToEvents, syncSourceEvents } from "./calendar.js";
+import { type SyncResult, deadlinesToEvents, lessonsToEvents, syncSourceEvents } from "./calendar.js";
+import { type CourseContents, lessonNotes } from "./lessons.js";
 import { latestSnapshot, saveSnapshot } from "./snapshots.js";
 
 export type RunKind = "gaps" | "cyberlearn" | "ingest-check";
@@ -133,7 +135,7 @@ export class Syncer {
     const gaps = await loginGaps(false, mfaCode);
     const lessons = await gaps.fetchSchedule();
     const schedule = await saveSnapshot(this.db, "schedule", lessons);
-    const calendar = await syncSourceEvents(this.db, "gaps", lessonsToEvents(lessons), new Date(0));
+    const calendar = await this.scheduleEvents(lessons);
     const grades = await saveSnapshot(this.db, "grades", await fetchContinuousGrades(gaps));
     const transcript = await saveSnapshot(this.db, "transcript", await fetchTranscript(gaps));
     const record = await fetchStudentRecord(gaps);
@@ -142,14 +144,32 @@ export class Syncer {
     return { lessons: lessons.length, calendar, changed: { schedule: schedule.changed, grades: grades.changed, transcript: transcript.changed, plan: plan.changed, absences: absences.changed } };
   }
 
+  /** The GAPS lessons as events, each with the programme its course page announces for that day. */
+  private async scheduleEvents(lessons: Lesson[]): Promise<SyncResult> {
+    const contents = (await latestSnapshot<CourseContents>(this.db, "contents"))?.data ?? {};
+    return syncSourceEvents(this.db, "gaps", lessonsToEvents(lessons, lessonNotes(contents)), new Date(0));
+  }
+
   private async cyberlearn(mfaCode?: string): Promise<Record<string, unknown>> {
     const from = new Date(Date.now() - OVERDUE_WINDOW_DAYS * 86_400_000);
-    const { courses, deadlines } = await withCyberlearn(false, mfaCode, async (client) => ({ courses: await client.courses(), deadlines: await client.deadlines(from) }));
-    const scheduleCodes = scheduleCourses((await latestSnapshot<Lesson[]>(this.db, "schedule"))?.data ?? []);
+    const lessons = (await latestSnapshot<Lesson[]>(this.db, "schedule"))?.data ?? [];
+    const scheduleCodes = scheduleCourses(lessons);
+    const { courses, deadlines, contents } = await withCyberlearn(false, mfaCode, async (client) => {
+      const courses = await client.courses();
+      const contents: CourseContents = {};
+      for (const code of scheduleCodes) {
+        const course = findCourse(courses, code, scheduleCodes);
+        if (course) contents[code] = await client.courseContents(course.id);
+      }
+      return { courses, deadlines: await client.deadlines(from), contents };
+    });
     const savedCourses = await saveSnapshot(this.db, "courses", courses);
+    const savedContents = await saveSnapshot(this.db, "contents", contents);
     const savedDeadlines = await saveSnapshot(this.db, "deadlines", deadlines);
     const calendar = await syncSourceEvents(this.db, "cyberlearn", deadlinesToEvents(deadlines, scheduleCodes), from);
-    return { courses: courses.length, deadlines: deadlines.length, calendar, changed: { courses: savedCourses.changed, deadlines: savedDeadlines.changed } };
+    // The course pages may announce the programme or an evaluation of a lesson: refresh the lessons from the saved schedule.
+    const schedule = savedContents.changed && lessons.length > 0 ? await this.scheduleEvents(lessons) : undefined;
+    return { courses: courses.length, deadlines: deadlines.length, calendar, schedule, changed: { courses: savedCourses.changed, contents: savedContents.changed, deadlines: savedDeadlines.changed } };
   }
 
   /** Lists Cyberlearn like an ingestion would and compares with the index, without downloading anything. */
