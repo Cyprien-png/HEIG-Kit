@@ -30,7 +30,7 @@ export function CourseDetail() {
       <SearchBox course={code} />
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4 min-w-0">
           {docs.error && <ErrorBox error={docs.error} retry={docs.reload} />}
           {docs.loading ? <Loading /> : byType.size === 0 ? <Empty title="Aucun document indexé pour ce cours" /> : (
             TYPE_ORDER.filter((t) => byType.has(t)).map((type) => (
@@ -56,14 +56,14 @@ export function CourseDetail() {
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <Card title="Échéances" padded={false}>
             {events.loading ? <Loading /> : (events.data?.events.length ?? 0) === 0 ? <Empty title="Rien de prévu" hint="Pas de rendu ni d'examen dans les 60 jours." /> : (
               <ul className="divide-y divide-line">
                 {events.data!.events.map((e) => (
                   <li key={e.key} className="px-4 py-2 text-sm flex items-center gap-2">
                     <span className="font-mono text-xs text-ink-2 w-20 shrink-0">{day(e.startsAt)}</span>
-                    <span className="flex-1 truncate">{e.title}</span>
+                    <span className="flex-1 min-w-0 truncate">{e.title}</span>
                     <Badge tone={e.kind === "exam" ? "bad" : e.kind === "deadline" ? "warn" : "info"}>{e.kind === "exam" ? "examen" : e.kind === "deadline" ? "rendu" : "événement"}</Badge>
                   </li>
                 ))}
