@@ -9,6 +9,8 @@ const RETRY_DELAYS_MS = [2_000, 10_000, 30_000];
 
 /** A deadline from the Moodle timeline: an activity the user still has to act on (submit, attempt…). */
 export interface Deadline {
+  /** Moodle calendar event id, stable across fetches. */
+  id: number;
   /** Due date, ISO UTC. */
   due: string;
   name: string;
@@ -198,6 +200,7 @@ function flatten(value: unknown, key: string, body: URLSearchParams): void {
 
 function toDeadline(event: TimelineEvent): Deadline {
   return {
+    id: event.id,
     due: new Date(event.timesort * 1000).toISOString(),
     name: event.activityname ?? event.name,
     module: event.modulename ?? "",
