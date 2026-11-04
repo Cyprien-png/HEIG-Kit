@@ -5,3 +5,7 @@ node_modules/
 data/
 # Programs installed by `npm run setup` (manim, TinyTeX…)
 vendor/
+# Built web application (built into the server image)
+web/dist/
+# Compose settings of the server machine (rag/compose.yml), e.g. HEIG_BIND=0.0.0.0
+rag/.env

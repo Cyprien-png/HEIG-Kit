@@ -101,9 +101,17 @@ npm run server:start    # downloads the server and render images, then starts th
 curl -s http://127.0.0.1:8766/health    # ok
 ```
 
-## 8. HTTPS with Caddy
+## 8. HTTPS
 
-Caddy gets and renews the certificate by itself. From its repository:
+**You already have a reverse proxy** (on another machine, with the certificate): publish the server on the network and
+point the proxy to it, keeping the `Host` header:
+
+```sh
+echo HEIG_BIND=0.0.0.0 > rag/.env
+npm run server:start
+```
+
+**Otherwise, Caddy on this machine** gets and renews the certificate by itself. From its repository:
 
 ```sh
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https

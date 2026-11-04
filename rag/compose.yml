@@ -63,7 +63,8 @@ services:
     restart: unless-stopped
 
   # Remote server (npm run server:start, docs/server.md): the only service holding the secrets. Published on 127.0.0.1 only,
-  # behind a reverse proxy doing HTTPS.
+  # for a reverse proxy doing HTTPS on the same machine; HEIG_BIND=0.0.0.0 in rag/.env publishes it on the network, for a
+  # reverse proxy elsewhere on the LAN.
   server:
     profiles: ["server"]
     # Published by .github/workflows/server-images.yml (npm run server:update); `npm run server:build` builds it here.
@@ -85,7 +86,7 @@ services:
       - outputs:/outputs
       - jobs:/jobs
     ports:
-      - "127.0.0.1:8766:8766"
+      - "${HEIG_BIND:-127.0.0.1}:8766:8766"
     read_only: true
     tmpfs:
       - /tmp
