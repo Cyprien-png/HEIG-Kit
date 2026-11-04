@@ -17,6 +17,8 @@ import { JobQueue, safeBaseName } from "../src/server/jobs.js";
 const base = mkdtempSync(path.join(os.tmpdir(), "heig-server-"));
 const secretFile = path.join(base, "secret.pdf");
 process.env.HEIG_OUTPUT_DIR = path.join(base, "out");
+// Without a built web application, unknown paths are 404 (web/dist may exist on a developer's machine).
+process.env.HEIG_WEB_DIR = path.join(base, "no-web");
 const documents = path.join(base, "out", "documents");
 mkdirSync(documents, { recursive: true });
 mkdirSync(path.join(base, "out", "videos"), { recursive: true });
