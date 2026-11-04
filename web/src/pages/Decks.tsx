@@ -18,8 +18,7 @@ export function Decks() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Cartes de révision"
-        subtitle="Recto-verso, avec répétition espacée : les cartes reviennent quand vous êtes sur le point de les oublier."
+        title="Cartes"
         actions={
           <>
             <Button onClick={() => setCreating(true)}>

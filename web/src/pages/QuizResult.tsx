@@ -30,7 +30,6 @@ export function QuizResult() {
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <div>
-        <div className="text-xs text-ink-3 uppercase tracking-wide">Résultat</div>
         <h1 className="text-xl font-semibold flex items-center gap-2 flex-wrap"><CourseChip code={quiz.course} /> {quiz.title}</h1>
         <p className="text-sm text-ink-3 mt-0.5">{attempt.finishedAt ? `Terminé le ${dateTime(attempt.finishedAt)}` : "En cours"} · {attempt.mode === "voice" ? "à l'oral" : attempt.mode === "cli" ? "dans le terminal" : "sur l'app"}</p>
       </div>

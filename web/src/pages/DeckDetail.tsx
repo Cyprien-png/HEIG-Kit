@@ -62,8 +62,7 @@ export function DeckDetail() {
             return (
               <Card key={c.id} padded={false} className="flex flex-col">
                 <button onClick={() => toggle(c.id)} className="text-left p-4 flex-1 min-h-[7rem]">
-                  <div className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">{back ? "Verso" : "Recto"}</div>
-                  <Markdown source={back ? c.back : c.front} />
+                  <Markdown source={back ? c.back : c.front} className={back ? "border-l-2 border-accent pl-3" : ""} />
                   {!back && c.hint && <p className="text-xs text-ink-3 mt-2 italic">Indice : {c.hint}</p>}
                 </button>
                 <div className="flex items-center gap-1.5 px-3 py-2 border-t border-line text-xs text-ink-2">

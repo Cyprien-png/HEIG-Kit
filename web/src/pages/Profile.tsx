@@ -19,7 +19,7 @@ export function Profile() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Profil" subtitle="Ce que vos corrections révèlent : points faibles, erreurs fréquentes, points forts. L'agent s'en sert pour cibler vos révisions." actions={<><Segmented value={tab} onChange={setTab} options={[{ value: "summary", label: "Synthèse" }, { value: "notes", label: "Notes" }]} /><Button onClick={() => setAdding(true)}><PlusIcon className="h-4 w-4" /> Note</Button></>} />
+      <PageHeader title="Profil" actions={<><Segmented value={tab} onChange={setTab} options={[{ value: "summary", label: "Synthèse" }, { value: "notes", label: "Notes" }]} /><Button onClick={() => setAdding(true)}><PlusIcon className="h-4 w-4" /> Note</Button></>} />
       {summary.error && <ErrorBox error={summary.error} retry={summary.reload} />}
       {summary.loading && !s ? <Loading /> : tab === "notes" ? <Notes onChanged={() => void summary.reload()} /> : !s || (s.courses.length === 0 && s.toRevise.length === 0) ? (
         <Empty title="Profil vide" hint="Faites corriger vos exercices (« corrige ma série 3 ») : chaque correction note vos erreurs et vos acquis ici." />

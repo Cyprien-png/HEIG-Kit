@@ -28,7 +28,7 @@ export function Quizzes() {
 
   return (
     <div>
-      <PageHeader title="Quiz" subtitle="Vrai ou faux : une affirmation par carte, à droite si c'est vrai, à gauche si c'est faux. La note et les erreurs expliquées à la fin." />
+      <PageHeader title="Quiz" />
       {quizzes.error && <ErrorBox error={quizzes.error} retry={quizzes.reload} />}
       {quizzes.loading && !quizzes.data ? (
         <Loading />

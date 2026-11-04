@@ -41,7 +41,7 @@ export function Corrections() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Corrections" subtitle="Vos exercices papier photographiés, transcrits et corrigés par l'agent. Demandez-lui « corrige mes exercices » : il vous donne un QR code." actions={<Segmented value={filter} onChange={setFilter} options={[{ value: "all", label: "Toutes" }, { value: "open", label: "En cours" }, { value: "corrected", label: "Corrigées" }]} />} />
+      <PageHeader title="Corrections" actions={<Segmented value={filter} onChange={setFilter} options={[{ value: "all", label: "Toutes" }, { value: "open", label: "En cours" }, { value: "corrected", label: "Corrigées" }]} />} />
       {corrections.error && <ErrorBox error={corrections.error} retry={corrections.reload} />}
       {corrections.loading && !corrections.data ? <Loading /> : list.length === 0 ? <Empty title="Aucune correction" hint="Dans Claude Code : « corrige ma série 3 de MAD ». Scannez le QR code, photographiez vos pages, envoyez." /> : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">

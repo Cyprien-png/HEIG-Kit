@@ -75,7 +75,7 @@ export function Courses() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Cours" subtitle="Vos supports indexés et la recherche dans tout le matériel de cours." />
+      <PageHeader title="Cours" />
       <SearchBox autoFocus={Boolean(params.get("q"))} />
       {kb.error && <ErrorBox error={kb.error} retry={kb.reload} />}
       {kb.loading ? <Loading /> : indexed.length === 0 ? <Empty title="Aucun cours indexé" hint="Lancez l'ingestion sur le serveur (npm run ingest)." /> : (
