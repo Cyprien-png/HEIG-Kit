@@ -332,7 +332,8 @@ function jsonForm(raw: string): URLSearchParams {
 
 const PAGE_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
-  "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  // form-action also governs the redirect that follows the form (Chrome, WebKit): the client's callback must be allowed.
+  "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; frame-ancestors 'none'",
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
@@ -344,8 +345,8 @@ function page(res: ServerResponse, status: number, title: string, body: string):
   const html = `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · HEIG-Kit</title>
 <style>
-:root{--canvas:#f3f5f8;--surface:#fff;--line:#d7dde6;--ink:#0f172a;--ink-2:#475569;--ink-3:#8a9bb2;--accent:#1d4ed8;--accent-ink:#fff;--bad:#b91c1c;--bad-soft:#fee2e2;color-scheme:light}
-@media(prefers-color-scheme:dark){:root{--canvas:#0b1220;--surface:#111a2b;--line:#243149;--ink:#e6ebf2;--ink-2:#a3b2c9;--ink-3:#5f7190;--accent:#60a5fa;--accent-ink:#0b1220;--bad:#f87171;--bad-soft:#7f1d1d;color-scheme:dark}}
+:root{--canvas:#f5f4f1;--surface:#fff;--line:#dcd8d2;--ink:#1c1a17;--ink-2:#57534c;--ink-3:#8f887f;--accent:#d90115;--accent-ink:#fff;--bad:#9f1239;--bad-soft:#ffe4e6;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--canvas:#161412;--surface:#1e1b18;--line:#353028;--ink:#ede9e3;--ink-2:#b8b0a6;--ink-3:#7d756b;--accent:#ff5a66;--accent-ink:#1a0608;--bad:#fb7185;--bad-soft:#701a2b;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--canvas);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 main{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 1px 2px rgb(15 23 42/.06),0 4px 16px rgb(15 23 42/.05)}
 .brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:16px}.mark{width:28px;height:28px;border-radius:6px;display:block}

@@ -68,6 +68,7 @@ test("the OAuth flow: metadata, registration, login page, code with PKCE, tokens
   const html = await pageRes.text();
   assert.match(html, /Claude/);
   assert.match(html, /name="password"/);
+  assert.match(pageRes.headers.get("content-security-policy") ?? "", /form-action 'self' https:/, "the redirect to the client's callback must be allowed by the CSP");
   assert.equal((await fetch(`${meta.authorization_endpoint}?${new URLSearchParams({ ...Object.fromEntries(query), redirect_uri: "https://evil.example/cb" })}`)).status, 400);
 
   const submit = (password: string) => fetch(meta.authorization_endpoint, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...Object.fromEntries(query), username: "me", password }) });
