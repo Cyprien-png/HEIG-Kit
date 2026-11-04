@@ -1,6 +1,7 @@
 import { ArrowDownTrayIcon, DocumentIcon, FilmIcon, MagnifyingGlassIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Input, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
@@ -9,18 +10,49 @@ import type { LibraryFile, LibraryItem } from "../lib/types";
 
 const fileUrl = (f: LibraryFile) => `/api/library/files/${f.id}`;
 
+/** The type tags, in the order the library shows them; the other tags are topics. */
+const TYPE_TAGS = ["explication", "révision", "exercices", "corrigé", "te blanc", "vidéo"];
+const typeRank = (item: LibraryItem) => {
+  const ranks = item.tags.map((t) => TYPE_TAGS.indexOf(t)).filter((r) => r >= 0);
+  return ranks.length ? Math.min(...ranks) : TYPE_TAGS.length;
+};
+const tagOrder = (a: string, b: string) => {
+  const ra = TYPE_TAGS.indexOf(a);
+  const rb = TYPE_TAGS.indexOf(b);
+  return (ra < 0 ? TYPE_TAGS.length : ra) - (rb < 0 ? TYPE_TAGS.length : rb) || a.localeCompare(b);
+};
+const NO_COURSE = "–";
+
 export function Library() {
   const { kind, name } = useParams();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "document" | "video">("all");
+  const [sort, setSort] = useState<"course" | "recent">("course");
+  const [course, setCourse] = useState<string>();
+  const [tags, setTags] = useState<string[]>([]);
   const items = useApi<{ items: LibraryItem[] }>(`/api/library${q.trim() ? `?q=${encodeURIComponent(q)}` : ""}`, [q]);
-  const list = (items.data?.items ?? []).filter((i) => filter === "all" || i.kind === filter);
-  const opened = kind && name ? (items.data?.items ?? []).flatMap((i) => i.files).find((f) => f.id === `${kind}/${name}`) : undefined;
+  const all = items.data?.items ?? [];
+
+  // The filters offered: every course and tag present (the type tags first).
+  const courses = useMemo(() => [...new Set(all.map((i) => i.course ?? NO_COURSE))].sort((a, b) => (a === NO_COURSE ? 1 : b === NO_COURSE ? -1 : a.localeCompare(b))), [all]);
+  const allTags = useMemo(() => [...new Set(all.flatMap((i) => i.tags))].sort(tagOrder), [all]);
+
+  const list = all.filter((i) => (filter === "all" || i.kind === filter) && (!course || (i.course ?? NO_COURSE) === course) && tags.every((t) => i.tags.includes(t)));
+  const groups = useMemo(() => {
+    if (sort === "recent") return [{ course: undefined, items: [...list].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)) }];
+    const byCourse = new Map<string, LibraryItem[]>();
+    for (const i of list) byCourse.set(i.course ?? NO_COURSE, [...(byCourse.get(i.course ?? NO_COURSE) ?? []), i]);
+    return [...byCourse.entries()]
+      .sort(([a], [b]) => (a === NO_COURSE ? 1 : b === NO_COURSE ? -1 : a.localeCompare(b)))
+      .map(([code, group]) => ({ course: code, items: group.sort((a, b) => typeRank(a) - typeRank(b) || b.modifiedAt.localeCompare(a.modifiedAt)) }));
+  }, [list, sort]);
+  const opened = kind && name ? all.flatMap((i) => i.files).find((f) => f.id === `${kind}/${name}`) : undefined;
+  const toggleTag = (t: string) => setTags((current) => (current.includes(t) ? current.filter((x) => x !== t) : [...current, t]));
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Bibliothèque" />
+      <PageHeader title="Bibliothèque" actions={<Segmented size="sm" value={sort} onChange={setSort} options={[{ value: "course", label: "Par cours" }, { value: "recent", label: "Récents" }]} />} />
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[12rem] max-w-md">
           <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
@@ -28,11 +60,48 @@ export function Library() {
         </div>
         <Segmented value={filter} onChange={setFilter} options={[{ value: "all", label: "Tout" }, { value: "document", label: "Documents" }, { value: "video", label: "Vidéos" }]} />
       </div>
+      {(courses.length > 1 || allTags.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {courses.length > 1 &&
+            courses.map((c) => (
+              <button key={c} onClick={() => setCourse(course === c ? undefined : c)} className={cx("rounded-md ring-offset-1 ring-offset-canvas transition", course === c ? "ring-2 ring-accent" : "opacity-80 hover:opacity-100")} aria-pressed={course === c}>
+                {c === NO_COURSE ? <Badge>sans cours</Badge> : <CourseChip code={c} link={false} />}
+              </button>
+            ))}
+          {courses.length > 1 && allTags.length > 0 && <span className="w-px h-4 bg-line mx-1" />}
+          {allTags.map((t) => (
+            <button key={t} onClick={() => toggleTag(t)} aria-pressed={tags.includes(t)} className="transition hover:opacity-100">
+              <Badge tone={tags.includes(t) ? "accent" : "neutral"} className={cx("normal-case tracking-normal text-xs", !TYPE_TAGS.includes(t) && !tags.includes(t) && "bg-transparent border border-line")}>
+                {t}
+              </Badge>
+            </button>
+          ))}
+          {(course || tags.length > 0) && (
+            <button onClick={() => { setCourse(undefined); setTags([]); }} className="text-xs text-ink-3 hover:text-ink ml-1">
+              Effacer
+            </button>
+          )}
+        </div>
+      )}
       {items.error && <ErrorBox error={items.error} retry={items.reload} />}
-      {items.loading && !items.data ? <Loading /> : list.length === 0 ? <Empty title="Bibliothèque vide" hint="Les PDF et vidéos créés par l'agent apparaîtront ici." /> : (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {list.map((item) => (
-            <LibraryCard key={`${item.kind}:${item.name}`} item={item} onOpen={(f) => navigate(`/library/${f.id}`)} onDeleted={() => void items.reload()} />
+      {items.loading && !items.data ? <Loading /> : list.length === 0 ? (
+        <Empty title={all.length === 0 ? "Bibliothèque vide" : "Rien ne correspond"} hint={all.length === 0 ? "Les PDF et vidéos créés par l'agent apparaîtront ici." : "Changez les filtres."} />
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <section key={group.course ?? "all"} className="space-y-2">
+              {group.course !== undefined && (
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  {group.course === NO_COURSE ? <span className="text-ink-2">Sans cours</span> : <CourseChip code={group.course} className="text-xs" />}
+                  <span className="text-xs text-ink-3 font-normal tabular-nums">{group.items.length}</span>
+                </h2>
+              )}
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {group.items.map((item) => (
+                  <LibraryCard key={`${item.kind}:${item.name}`} item={item} onOpen={(f) => navigate(`/library/${f.id}`)} onDeleted={() => void items.reload()} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -59,6 +128,13 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
           <div className="min-w-0">
             <h2 className="font-medium leading-snug line-clamp-2">{item.title}</h2>
             <p className="text-xs text-ink-3 mt-1 font-mono truncate">{item.name}</p>
+            {item.tags.length > 0 && (
+              <div className={cx("flex flex-wrap gap-1 mt-2", !item.tagged && "opacity-60")} title={item.tagged ? undefined : "Classement automatique, pas encore tagué"}>
+                {[...item.tags].sort(tagOrder).map((t) => (
+                  <Badge key={t} className="normal-case tracking-normal">{t}</Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </button>

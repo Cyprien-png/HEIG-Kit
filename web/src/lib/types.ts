@@ -177,6 +177,10 @@ export interface LibraryItem {
   title: string;
   modifiedAt: string;
   files: LibraryFile[];
+  /** Course code and tags, saved by the agent (tagged) or guessed from the name and title. */
+  course?: string;
+  tags: string[];
+  tagged: boolean;
 }
 
 export interface Deck {
