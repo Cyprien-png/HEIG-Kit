@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, validateResult, verdictStats } from "../src/app/corrections.js";
-import { addCards, createDeck, deleteDeck, getDeck, listDecks, review, schedule, studyQueue, studyStats, updateCard } from "../src/app/flashcards.js";
+import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
 import { addNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
@@ -112,4 +112,44 @@ test("profile: notes aggregate into weaknesses, mistakes and topics to revise", 
   await resolveNote(db!, notes[3].id);
   assert.equal((await listNotes(db!, { course: "ANA1" })).length, 0);
   assert.equal((await listNotes(db!, { course: "ANA1", resolved: true })).length, 1);
+});
+
+test("review sessions: resumed where they were left, a card to see again comes back, finished or discarded on purpose", { skip: !db && "no local database" }, async () => {
+  const deck = await createDeck(db!, { title: "PRG · Tableaux", course: "PRG" });
+  const cards = await addCards(db!, deck.id, [
+    { front: "Taille d'un `std::array`", back: "Fixée à la compilation" },
+    { front: "`v.size()` d'un `std::vector`", back: "Nombre d'éléments, pas la capacité" },
+    { front: "Indice valide d'un tableau de n éléments", back: "0 à n - 1" },
+  ]);
+  const opened = await openStudySession(db!, deck.id, { limit: 10 });
+  assert.equal(opened.resumed, false);
+  assert.deepEqual(opened.session.slots.map((s) => s.card.id), cards.map((c) => c.id));
+  assert.equal((await openStudySession(db!, deck.id)).resumed, true, "the session in progress is resumed, not replaced");
+
+  let session = (await answerStudySession(db!, opened.session.id, 0, 2))!;
+  assert.deepEqual([session.position, session.answered, session.slots.length], [1, 1, 3]);
+  session = (await answerStudySession(db!, opened.session.id, 1, 0))!;
+  assert.equal(session.slots.length, 4, "a card to see again is appended to the session");
+  assert.equal(session.slots[3].card.id, cards[1].id);
+  assert.equal(session.again, 1);
+  session = (await answerStudySession(db!, opened.session.id, 1, 2))!;
+  assert.deepEqual([session.slots[1].grade, session.slots.length], [2, 4], "a second answer replaces the first, the appended card stays");
+  assert.equal((await studyQueue(db!, deck.id)).map((c) => c.id).join(), String(cards[2].id), "graded cards left the study queue");
+
+  session = (await updateStudySession(db!, opened.session.id, { position: 0 }))!;
+  assert.equal(session.position, 0);
+  assert.equal((await currentStudySession(db!, deck.id))?.id, opened.session.id);
+  assert.equal(await currentStudySession(db!, undefined), undefined, "the session of a deck is not the session of all the due cards");
+  await updateStudySession(db!, opened.session.id, { finished: true });
+  assert.equal(await currentStudySession(db!, deck.id), undefined, "a finished session is not resumed");
+  await assert.rejects(answerStudySession(db!, opened.session.id, 3, 2), /finished/);
+
+  const fresh = await openStudySession(db!, deck.id);
+  assert.equal(fresh.resumed, false);
+  assert.deepEqual(fresh.session.slots.map((s) => s.card.id), [cards[2].id], "a new session starts from what is still due");
+  const replaced = await openStudySession(db!, deck.id, { discard: true });
+  assert.notEqual(replaced.session.id, fresh.session.id, "discarding drops the session in progress");
+  assert.equal(await deleteStudySession(db!, replaced.session.id), true);
+  assert.equal(await currentStudySession(db!, deck.id), undefined);
+  await deleteDeck(db!, deck.id);
 });

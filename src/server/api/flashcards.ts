@@ -1,4 +1,4 @@
-import { type CardInput, type Grade, addCards, createDeck, deleteCard, deleteDeck, getDeck, listDecks, review, studyQueue, studyStats, updateCard, updateDeck } from "../../app/flashcards.js";
+import { type CardInput, type Grade, addCards, answerStudySession, createDeck, currentStudySession, deleteCard, deleteDeck, deleteStudySession, getDeck, getStudySession, listDecks, openStudySession, review, studyQueue, studyStats, updateCard, updateDeck, updateStudySession } from "../../app/flashcards.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, intParam, readJson, stringField } from "./util.js";
@@ -89,10 +89,62 @@ export function registerFlashcardRoutes(router: Router, app: App): void {
 
   router.post("/api/cards/:id/review", async ({ req, params }) => {
     const body = await readJson(req);
-    const grade = body.grade;
-    if (grade !== 0 && grade !== 1 && grade !== 2 && grade !== 3) throw new HttpError(400, "grade must be 0 (again), 1 (hard), 2 (good) or 3 (easy)");
-    const card = await review(app.db, intParam(params.id, "id"), grade as Grade);
+    const card = await review(app.db, intParam(params.id, "id"), gradeOf(body.grade));
     if (!card) throw new HttpError(404, "no such card");
     return card;
   });
+
+  // Review sessions: resumed where they were left, until the student finishes or discards them.
+  router.get("/api/study/sessions", async ({ url }) => {
+    const deck = url.searchParams.get("deck");
+    return { session: (await currentStudySession(app.db, deck ? intParam(deck, "deck") : undefined)) ?? null };
+  });
+  router.post("/api/study/sessions", async ({ req }) => {
+    const body = await readJson(req);
+    const deck = body.deck === undefined || body.deck === null ? undefined : Number(body.deck);
+    if (deck !== undefined && !Number.isInteger(deck)) throw new HttpError(400, "deck must be an integer");
+    const limit = body.limit === undefined ? undefined : Number(body.limit);
+    if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1 && limit <= 200)) throw new HttpError(400, "limit must be between 1 and 200");
+    return openStudySession(app.db, deck, { shuffle: body.shuffle === true, discard: body.discard === true, limit });
+  });
+  router.get("/api/study/sessions/:id", async ({ params }) => {
+    const session = await getStudySession(app.db, intParam(params.id, "id"));
+    if (!session) throw new HttpError(404, "no such session");
+    return session;
+  });
+  router.post("/api/study/sessions/:id/answers", async ({ req, params }) => {
+    const body = await readJson(req);
+    const slot = Number(body.slot);
+    if (!Number.isInteger(slot) || slot < 0) throw new HttpError(400, "slot must be a positive integer");
+    const session = await domain(() => answerStudySession(app.db, intParam(params.id, "id"), slot, gradeOf(body.grade)));
+    if (!session) throw new HttpError(404, "no such session");
+    return session;
+  });
+  router.patch("/api/study/sessions/:id", async ({ req, params }) => {
+    const body = await readJson(req);
+    const position = body.position === undefined ? undefined : Number(body.position);
+    if (position !== undefined && !(Number.isInteger(position) && position >= 0)) throw new HttpError(400, "position must be a positive integer");
+    const session = await updateStudySession(app.db, intParam(params.id, "id"), { position, finished: body.finished === true });
+    if (!session) throw new HttpError(404, "no such session");
+    return session;
+  });
+  router.delete("/api/study/sessions/:id", async ({ params }) => {
+    if (!(await deleteStudySession(app.db, intParam(params.id, "id")))) throw new HttpError(404, "no such session");
+    return { ok: true };
+  });
+}
+
+function gradeOf(value: unknown): Grade {
+  if (value !== 0 && value !== 1 && value !== 2 && value !== 3) throw new HttpError(400, "grade must be 0 (again), 1 (hard), 2 (good) or 3 (easy)");
+  return value;
+}
+
+/** Domain errors ("No slot…", "This session is finished") become 400s instead of 500s. */
+async function domain<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof Error && /^(No |This )/.test(error.message)) throw new HttpError(400, error.message);
+    throw error;
+  }
 }

@@ -80,8 +80,16 @@ everything ends up, whether the agent rendered it there or on the user's compute
 
 Decks (`decks`) of cards (`cards`, Markdown with LaTeX on both faces) per course. Studying follows a small spaced
 repetition scheme (`card_state`: due date, interval, ease, four grades), on the web (keyboard and touch) and through
-`GET /api/decks/<id>/study`. The agent creates decks from the course material (`create_deck`, `add_flashcards`), the
+`GET /api/study`. The agent creates decks from the course material (`create_deck`, `add_flashcards`), the
 `heig:flashcards` skill explains how.
+
+A review on the web is a **session** kept on the server (`study_sessions`, `study_session_answers`): the cards of the
+study queue in order (shuffled on request), the grade given at each slot, and the position reached. Leaving the page
+keeps it; opening the deck again resumes it (`POST /api/study/sessions` returns the session in progress, or starts
+one; `discard: true` drops it first, which the deck page asks for with « Recommencer »). Arrows and the strip above the
+card move between the slots, each showing the answer given, and a card can be answered again. A card graded « à
+revoir » is appended once to the session. « Terminer » closes the session (`PATCH … {finished: true}`); every grade
+updates the card's spaced repetition state at once, whether the session is finished or not.
 
 ## Quizzes
 

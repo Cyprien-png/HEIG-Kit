@@ -227,3 +227,128 @@ export async function studyStats(db: Db): Promise<StudyStats> {
   );
   return { due: counts.rows[0].due, fresh: counts.rows[0].fresh, reviewedToday: counts.rows[0].today, days: days.rows };
 }
+
+// Review sessions: the queue of a review kept on the server, so that it resumes where it was left, on any device.
+
+export interface StudySlot {
+  slot: number;
+  card: Card;
+  grade?: Grade;
+  answeredAt?: Date;
+}
+
+export interface StudySession {
+  id: number;
+  deckId?: number;
+  shuffled: boolean;
+  /** Index of the card shown last (where the session resumes). */
+  position: number;
+  startedAt: Date;
+  updatedAt: Date;
+  finishedAt?: Date;
+  slots: StudySlot[];
+  answered: number;
+  again: number;
+}
+
+function shuffleIds(ids: number[]): number[] {
+  const out = [...ids];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+async function sessionFromRow(db: Db, row: Record<string, unknown>): Promise<StudySession> {
+  const order = (row.card_order as number[]) ?? [];
+  const { rows: cards } = await db.query(
+    "SELECT c.*, s.due_at, s.interval_days, s.ease, s.reps, s.lapses, s.last_grade, s.reviewed_at FROM cards c LEFT JOIN card_state s ON s.card_id = c.id WHERE c.id = ANY($1::int[])",
+    [order],
+  );
+  const byId = new Map(cards.map((r) => [Number(r.id), cardRow(r)]));
+  const { rows: answers } = await db.query("SELECT slot, grade, answered_at FROM study_session_answers WHERE session_id = $1", [row.id]);
+  const graded = new Map(answers.map((a) => [a.slot as number, a]));
+  // Cards deleted since the session started are skipped; their slot numbers are kept so answers stay attached.
+  const slots: StudySlot[] = [];
+  order.forEach((id, slot) => {
+    const card = byId.get(id);
+    if (!card) return;
+    const a = graded.get(slot);
+    slots.push({ slot, card, grade: a ? (a.grade as Grade) : undefined, answeredAt: a ? (a.answered_at as Date) : undefined });
+  });
+  return {
+    id: Number(row.id),
+    deckId: row.deck_id === null ? undefined : Number(row.deck_id),
+    shuffled: row.shuffled as boolean,
+    position: row.position as number,
+    startedAt: row.started_at as Date,
+    updatedAt: row.updated_at as Date,
+    finishedAt: (row.finished_at as Date | null) ?? undefined,
+    slots,
+    answered: slots.filter((s) => s.grade !== undefined).length,
+    again: slots.filter((s) => s.grade === 0).length,
+  };
+}
+
+/** The session in progress for a deck (or for all the due cards when `deckId` is undefined), if any. */
+export async function currentStudySession(db: Db, deckId: number | undefined): Promise<StudySession | undefined> {
+  const { rows } = await db.query("SELECT * FROM study_sessions WHERE deck_id IS NOT DISTINCT FROM $1::int AND finished_at IS NULL ORDER BY started_at DESC LIMIT 1", [deckId ?? null]);
+  return rows[0] ? sessionFromRow(db, rows[0]) : undefined;
+}
+
+export async function getStudySession(db: Db, id: number): Promise<StudySession | undefined> {
+  const { rows } = await db.query("SELECT * FROM study_sessions WHERE id = $1", [id]);
+  return rows[0] ? sessionFromRow(db, rows[0]) : undefined;
+}
+
+/**
+ * Resumes the session in progress of a deck (or of all the due cards), or starts one from the study queue. Starting
+ * a session is what the student does when nothing is left to resume; `discard` first drops the one in progress.
+ */
+export async function openStudySession(db: Db, deckId: number | undefined, options: { shuffle?: boolean; limit?: number; discard?: boolean } = {}): Promise<{ session: StudySession; resumed: boolean }> {
+  const current = await currentStudySession(db, deckId);
+  if (current && !options.discard) return { session: current, resumed: true };
+  if (current) await deleteStudySession(db, current.id);
+  const queue = await studyQueue(db, deckId, options.limit ?? 50);
+  const ids = queue.map((c) => c.id);
+  const { rows } = await db.query("INSERT INTO study_sessions (deck_id, card_order, shuffled) VALUES ($1, $2, $3) RETURNING *", [deckId ?? null, options.shuffle ? shuffleIds(ids) : ids, options.shuffle ?? false]);
+  return { session: await sessionFromRow(db, rows[0]), resumed: false };
+}
+
+/**
+ * Grades the card at a slot: the card's spaced repetition state is updated as for any review, the answer is kept (a
+ * second answer at the same slot replaces the first), a card to see again is appended to the session unless it is
+ * still to come, and the session moves on to the next slot.
+ */
+export async function answerStudySession(db: Db, id: number, slot: number, grade: Grade): Promise<StudySession | undefined> {
+  const { rows } = await db.query("SELECT * FROM study_sessions WHERE id = $1", [id]);
+  const row = rows[0];
+  if (!row) return undefined;
+  const order = row.card_order as number[];
+  const cardId = order[slot];
+  if (cardId === undefined) throw new Error(`No slot ${slot} in this session`);
+  if (row.finished_at) throw new Error("This session is finished");
+  if (!(await review(db, cardId, grade))) throw new Error("This card no longer exists");
+  await db.query(
+    "INSERT INTO study_session_answers (session_id, slot, card_id, grade) VALUES ($1, $2, $3, $4) ON CONFLICT (session_id, slot) DO UPDATE SET grade = EXCLUDED.grade, answered_at = now()",
+    [id, slot, cardId, grade],
+  );
+  const pendingLater = order.slice(slot + 1).includes(cardId);
+  const next = grade === 0 && !pendingLater ? [...order, cardId] : order;
+  await db.query("UPDATE study_sessions SET card_order = $2, position = $3, updated_at = now() WHERE id = $1", [id, next, Math.min(slot + 1, next.length - 1)]);
+  return getStudySession(db, id);
+}
+
+/** Remembers where the student is (navigating back and forth), or closes the session. */
+export async function updateStudySession(db: Db, id: number, patch: { position?: number; finished?: boolean }): Promise<StudySession | undefined> {
+  await db.query(
+    `UPDATE study_sessions SET position = coalesce($2, position), finished_at = CASE WHEN $3::boolean THEN coalesce(finished_at, now()) ELSE finished_at END, updated_at = now() WHERE id = $1`,
+    [id, patch.position ?? null, patch.finished ?? false],
+  );
+  return getStudySession(db, id);
+}
+
+export async function deleteStudySession(db: Db, id: number): Promise<boolean> {
+  return (await db.query("DELETE FROM study_sessions WHERE id = $1", [id])).rowCount === 1;
+}
