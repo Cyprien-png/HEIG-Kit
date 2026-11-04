@@ -79,8 +79,13 @@ curl -s https://heig.example.org/auth/login -H 'Content-Type: application/json' 
 claude mcp add --transport http heig-kit https://heig.example.org/mcp --header "Authorization: Bearer <access_token>"
 ```
 
-The token lasts 90 days (`HEIG_JWT_DAYS`); log in again and update the client afterwards. This is a bearer token, so
-clients that only support OAuth, such as web connectors, cannot use this server.
+The token lasts 90 days (`HEIG_JWT_DAYS`); log in again and update the client afterwards.
+
+Clients that only speak OAuth, such as claude.ai connectors and the Claude phone app, connect through the server's own
+OAuth 2.1 authorization server (`src/server/oauth.ts`): on claude.ai, Settings → Connectors → Add custom connector
+with `https://heig.example.org/mcp`; Claude registers itself, a login page of the server asks for the account of
+`.env`, and the connector then appears in the phone app too. Access tokens of connectors last 7 days and are renewed
+with a refresh token (90 days); changing `HEIG_JWT_VERSION` revokes everything.
 
 ## Endpoints
 
@@ -89,6 +94,7 @@ clients that only support OAuth, such as web connectors, cannot use this server.
 | `GET /health` | No authentication; used by Docker |
 | `POST /auth/login` | `{"username", "password"}`, gives the access token |
 | `/mcp` | MCP over Streamable HTTP, `Authorization: Bearer <token>` |
+| `/.well-known/oauth-*`, `/oauth/register`, `/oauth/authorize`, `/oauth/token` | OAuth 2.1 (metadata, dynamic registration, login page with PKCE, tokens) for connectors |
 | `GET /files?token=…` | Signed link given by `get_job` or `get_download_link` |
 | `/api/*` | The web application's API ([app.md](app.md)): session cookie (`POST /api/auth/login`) or `Authorization: Bearer <token>` |
 | `/` and every other path | The web application |
