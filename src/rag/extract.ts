@@ -63,7 +63,7 @@ export async function extractMarkdown(bytes: Buffer, filename: string, contentHa
 
 export async function isDoclingAvailable(): Promise<boolean> {
   try {
-    return (await fetch(`${DOCLING_URL}/health`)).ok;
+    return (await fetch(`${DOCLING_URL}/health`, { signal: AbortSignal.timeout(3000) })).ok;
   } catch {
     return false;
   }

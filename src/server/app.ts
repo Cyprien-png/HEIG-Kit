@@ -1,5 +1,6 @@
 import type { Db } from "../rag/db.js";
 import { RequestLog } from "../app/requests.js";
+import { Syncer } from "../app/sync.js";
 import { Auth, LoginLimiter } from "./auth.js";
 import type { ServerConfig } from "./config.js";
 import type { JobQueue } from "./jobs.js";
@@ -12,8 +13,9 @@ export interface App {
   queue?: JobQueue;
   limiter: LoginLimiter;
   requests: RequestLog;
+  syncer: Syncer;
 }
 
 export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, auth = new Auth(config)): App {
-  return { config, auth, db, queue, limiter: new LoginLimiter(), requests: new RequestLog(db) };
+  return { config, auth, db, queue, limiter: new LoginLimiter(), requests: new RequestLog(db), syncer: new Syncer(db, config.syncMinutes) };
 }

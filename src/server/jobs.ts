@@ -126,6 +126,17 @@ export class JobQueue {
     return existsSync(file) ? (JSON.parse(readFileSync(file, "utf-8")) as JobRecord) : undefined;
   }
 
+  /** Jobs queued for more than five minutes without being taken: the render container is probably not running. */
+  staleJobs(): number {
+    return this.all().filter((r) => r.state === "queued" && Date.now() - r.createdAt > 5 * 60_000).length;
+  }
+
+  /** The most recent jobs, newest first. */
+  recent(limit = 20): JobRecord[] {
+    this.collect();
+    return this.all().sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+  }
+
   framesFile(id: string): string {
     return path.join(this.records, `${id}.png`);
   }
