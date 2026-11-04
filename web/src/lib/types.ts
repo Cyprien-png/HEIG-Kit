@@ -295,3 +295,64 @@ export interface RequestEntry {
   tool?: string;
   note?: string;
 }
+
+// Quizzes (mirrors src/app/quizzes.ts)
+
+export interface QuizSummary {
+  id: number;
+  course?: string;
+  title: string;
+  description?: string;
+  createdAt: string;
+  questions: number;
+  attempts: number;
+  last?: { attemptId: number; score: number; total: number; finishedAt: string };
+  best?: { score: number; total: number };
+}
+
+export interface QuizQuestion {
+  id: number;
+  quizId: number;
+  position: number;
+  statement: string;
+  answer: boolean;
+  explanation?: string;
+  source?: string;
+  topic?: string;
+}
+
+export interface QuizAttempt {
+  id: number;
+  quizId: number;
+  mode: "web" | "voice" | "cli";
+  startedAt: string;
+  finishedAt?: string;
+  total: number;
+  answered: number;
+  score: number;
+}
+
+export interface QuizAnswer {
+  questionId: number;
+  position: number;
+  statement: string;
+  expected: boolean;
+  answer?: boolean;
+  correct: boolean;
+  explanation?: string;
+  source?: string;
+  topic?: string;
+}
+
+export interface QuizResult {
+  attempt: QuizAttempt;
+  quiz: { id: number; title: string; course?: string };
+  answers: QuizAnswer[];
+  mistakes: QuizAnswer[];
+}
+
+export interface QuizProgress {
+  attempt: QuizAttempt;
+  next?: { id: number; position: number; statement: string; topic?: string };
+  result?: QuizResult;
+}

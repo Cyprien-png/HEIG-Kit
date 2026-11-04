@@ -1,8 +1,9 @@
 import { ArrowUturnLeftIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
+import { type SwipeCardHandle, SwipeCard } from "../components/SwipeCard";
 import { Button, Card, Empty, ErrorBox, Kbd, Loading, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import type { Card as CardT, Deck } from "../lib/types";
@@ -10,7 +11,6 @@ import type { Card as CardT, Deck } from "../lib/types";
 /** Two answers, like a swipe: left = to review (comes back in ten minutes), right = known (spaced out). */
 const AGAIN = 0;
 const KNOWN = 2;
-const SWIPE_PX = 90;
 
 function nextInterval(card: CardT, grade: number): string {
   const s = card.state;
@@ -30,9 +30,7 @@ export function Study() {
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState<{ grade: number; card: CardT }[]>([]);
   const [busy, setBusy] = useState(false);
-  // The swipe: horizontal offset of the card while dragging, and where it flies when released.
-  const [drag, setDrag] = useState<{ dx: number; dragging: boolean; leaving?: -1 | 1 }>({ dx: 0, dragging: false });
-  const pointer = useRef<{ id: number; startX: number; startY: number; moved: boolean } | undefined>(undefined);
+  const swipe = useRef<SwipeCardHandle>(null);
 
   useEffect(() => {
     if (queue.data) {
@@ -58,20 +56,9 @@ export function Study() {
         setFlipped(false);
       } finally {
         setBusy(false);
-        setDrag({ dx: 0, dragging: false });
       }
     },
     [current, busy],
-  );
-
-  /** Lets the card fly out, then records the answer. */
-  const answer = useCallback(
-    (direction: -1 | 1) => {
-      if (!current || busy || drag.leaving) return;
-      setDrag({ dx: direction * (window.innerWidth || 600), dragging: false, leaving: direction });
-      setTimeout(() => void grade(direction > 0 ? KNOWN : AGAIN), 220);
-    },
-    [current, busy, drag.leaving, grade],
   );
 
   useEffect(() => {
@@ -80,44 +67,12 @@ export function Study() {
       if (e.key === " " || e.key === "Enter" || e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         setFlipped((f) => !f);
-      } else if (e.key === "ArrowLeft" || e.key === "1") answer(-1);
-      else if (e.key === "ArrowRight" || e.key === "2") answer(1);
+      } else if (e.key === "ArrowLeft" || e.key === "1") swipe.current?.fly(-1);
+      else if (e.key === "ArrowRight" || e.key === "2") swipe.current?.fly(1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [answer]);
-
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (drag.leaving || e.button !== 0) return;
-    pointer.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const p = pointer.current;
-    if (!p || p.id !== e.pointerId) return;
-    const dx = e.clientX - p.startX;
-    const dy = e.clientY - p.startY;
-    if (!p.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    // A mostly vertical gesture scrolls the page instead.
-    if (!p.moved && Math.abs(dy) > Math.abs(dx)) {
-      pointer.current = undefined;
-      return;
-    }
-    p.moved = true;
-    setDrag({ dx, dragging: true });
-  };
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const p = pointer.current;
-    if (!p || p.id !== e.pointerId) return;
-    pointer.current = undefined;
-    const dx = e.clientX - p.startX;
-    if (!p.moved) {
-      setFlipped((f) => !f);
-      return;
-    }
-    if (Math.abs(dx) >= SWIPE_PX) answer(dx > 0 ? 1 : -1);
-    else setDrag({ dx: 0, dragging: false });
-  };
+  }, []);
 
   if (queue.loading && !queue.data) return <Loading />;
   if (queue.error) return <ErrorBox error={queue.error} retry={queue.reload} />;
@@ -156,7 +111,6 @@ export function Study() {
     );
   }
 
-  const ratio = Math.max(-1, Math.min(1, drag.dx / (SWIPE_PX * 1.5)));
   const next = cards[index + 1];
 
   return (
@@ -174,17 +128,7 @@ export function Study() {
 
       <div className="relative min-h-[20rem] sm:min-h-[24rem]">
         {next && <div className="absolute inset-x-3 top-2 bottom-0 rounded-2xl border border-line bg-surface-2/60" aria-hidden />}
-        <div
-          className={cx("absolute inset-0 touch-pan-y", !drag.dragging && "transition-transform duration-200 ease-out")}
-          style={{ transform: `translateX(${drag.dx}px) rotate(${drag.dx / 24}deg)`, opacity: drag.leaving ? 0 : 1, transition: drag.dragging ? "none" : "transform 0.2s ease-out, opacity 0.2s" }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={() => {
-            pointer.current = undefined;
-            setDrag({ dx: 0, dragging: false });
-          }}
-        >
+        <SwipeCard ref={swipe} resetKey={`${current.id}-${index}`} disabled={busy} leftLabel="À revoir" rightLabel="Je sais" onTap={() => setFlipped((f) => !f)} onSwipe={(d) => void grade(d > 0 ? KNOWN : AGAIN)}>
           <div className="flip-scene h-full">
             <div className={cx("flip-card relative h-full cursor-grab active:cursor-grabbing", flipped && "is-flipped")}>
               <div className="flip-face absolute inset-0 bg-surface border border-line rounded-2xl shadow-card p-5 sm:p-6 flex flex-col">
@@ -200,19 +144,16 @@ export function Study() {
               </div>
             </div>
           </div>
-          {/* Verdict stamps that appear while dragging. */}
-          <div className="pointer-events-none absolute top-5 left-5 rounded-lg border-2 border-ok text-ok px-3 py-1 text-lg font-bold uppercase tracking-wide -rotate-12" style={{ opacity: Math.max(0, ratio) }}>Je sais</div>
-          <div className="pointer-events-none absolute top-5 right-5 rounded-lg border-2 border-bad text-bad px-3 py-1 text-lg font-bold uppercase tracking-wide rotate-12" style={{ opacity: Math.max(0, -ratio) }}>À revoir</div>
-        </div>
+        </SwipeCard>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => answer(-1)} disabled={busy} className="rounded-xl border border-bad/30 bg-bad-soft text-bad h-14 px-3 flex items-center justify-center gap-2 hover:brightness-95 dark:hover:brightness-110 transition disabled:opacity-50">
+        <button onClick={() => swipe.current?.fly(-1)} disabled={busy} className="rounded-xl border border-bad/30 bg-bad-soft text-bad h-14 px-3 flex items-center justify-center gap-2 hover:brightness-95 dark:hover:brightness-110 transition disabled:opacity-50">
           <XMarkIcon className="h-5 w-5" />
           <span className="text-left leading-tight"><span className="block text-sm font-semibold">À revoir</span><span className="block text-[11px] opacity-80 tabular-nums">{nextInterval(current, AGAIN)}</span></span>
           <Kbd>←</Kbd>
         </button>
-        <button onClick={() => answer(1)} disabled={busy} className="rounded-xl border border-ok/30 bg-ok-soft text-ok h-14 px-3 flex items-center justify-center gap-2 hover:brightness-95 dark:hover:brightness-110 transition disabled:opacity-50">
+        <button onClick={() => swipe.current?.fly(1)} disabled={busy} className="rounded-xl border border-ok/30 bg-ok-soft text-ok h-14 px-3 flex items-center justify-center gap-2 hover:brightness-95 dark:hover:brightness-110 transition disabled:opacity-50">
           <CheckIcon className="h-5 w-5" />
           <span className="text-left leading-tight"><span className="block text-sm font-semibold">Je sais</span><span className="block text-[11px] opacity-80 tabular-nums">{nextInterval(current, KNOWN)}</span></span>
           <Kbd>→</Kbd>
