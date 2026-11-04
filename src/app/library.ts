@@ -84,7 +84,7 @@ export function listLibrary(keywords: string[] = []): LibraryItem[] {
     if (item.kind !== "video" || item.files.some((f) => f.ext !== ".py")) continue;
     const scene = item.files[0];
     const owners = [...items.values()].filter((other) => other.kind === "video" && other !== item && titles.get(`video:${other.name}`)?.extra.includes(`scene: ${scene.name} `));
-    if (owners.length === 0) continue;
+    // A source that produced no video (a helper module, a scene not rendered yet) is not a library item.
     for (const owner of owners) owner.files.push(scene);
     items.delete(`video:${item.name}`);
   }
