@@ -1,9 +1,10 @@
 import { PlayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, cx } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, Toggle, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { useShuffle } from "../lib/shuffle";
 import type { QuizSummary } from "../lib/types";
 
 /** The score of an attempt as a percentage and a tone. */
@@ -15,6 +16,7 @@ export function scoreTone(score: number, total: number): "ok" | "warn" | "bad" {
 export function Quizzes() {
   const quizzes = useApi<{ quizzes: QuizSummary[] }>("/api/quizzes");
   const navigate = useNavigate();
+  const [shuffle, setShuffle] = useShuffle();
   const list = quizzes.data?.quizzes ?? [];
   const remove = async (q: QuizSummary) => {
     if (!confirm(`Supprimer le quiz « ${q.title} » et ses essais ?`)) return;
@@ -22,13 +24,13 @@ export function Quizzes() {
     void quizzes.reload();
   };
   const start = async (q: QuizSummary) => {
-    const progress = await api<{ attempt: { id: number } }>(`/api/quizzes/${q.id}/attempts`, { method: "POST", json: { mode: "web" } });
+    const progress = await api<{ attempt: { id: number } }>(`/api/quizzes/${q.id}/attempts`, { method: "POST", json: { mode: "web", shuffle } });
     navigate(`/quiz/play/${progress.attempt.id}`);
   };
 
   return (
     <div>
-      <PageHeader title="Quiz" />
+      <PageHeader title="Quiz" actions={<Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />} />
       {quizzes.error && <ErrorBox error={quizzes.error} retry={quizzes.reload} />}
       {quizzes.loading && !quizzes.data ? (
         <Loading />

@@ -6,6 +6,7 @@ import { AnswerButton, NextCard, Session, SessionCard } from "../components/Sess
 import { CardBody, type SwipeCardHandle, SwipeCard, cardNumber } from "../components/SwipeCard";
 import { Button, Card, Empty, ErrorBox, Loading, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
+import { shuffled, useShuffle } from "../lib/shuffle";
 import type { Card as CardT } from "../lib/types";
 
 /** Two answers, like a swipe: left = to review (comes back in ten minutes), right = known (spaced out). */
@@ -21,10 +22,12 @@ function nextInterval(card: CardT, grade: number): string {
   return days < 1.5 ? "1 j" : days < 30 ? `${Math.round(days)} j` : `${(days / 30).toFixed(1)} mois`;
 }
 
-/** A review session full screen: tap to flip, swipe right when known and left to see the card again. */
+/** A review session full screen: tap to flip, swipe right when known and left to see the card again; the queue is
+ * ordered by due date, or shuffled when the « Mélanger » switch of the deck pages is on. */
 export function Study() {
   const { id } = useParams();
   const queue = useApi<{ cards: CardT[] }>(`/api/study?limit=50${id ? `&deck=${id}` : ""}`, [id]);
+  const [shuffle] = useShuffle();
   const [cards, setCards] = useState<CardT[]>([]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -35,12 +38,12 @@ export function Study() {
 
   useEffect(() => {
     if (queue.data) {
-      setCards(queue.data.cards);
+      setCards(shuffle ? shuffled(queue.data.cards) : queue.data.cards);
       setIndex(0);
       setFlipped(false);
       setDone([]);
     }
-  }, [queue.data]);
+  }, [queue.data, shuffle]);
 
   const current = cards[index];
 

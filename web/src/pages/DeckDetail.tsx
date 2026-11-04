@@ -3,9 +3,10 @@ import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
-import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Textarea, cx } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Textarea, Toggle, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { useShuffle } from "../lib/shuffle";
 import type { Card as CardT, Deck } from "../lib/types";
 
 type DeckFull = Deck & { cardList: CardT[] };
@@ -16,6 +17,7 @@ export function DeckDetail() {
   const deck = useApi<DeckFull>(`/api/decks/${id}`, [id]);
   const [editing, setEditing] = useState<CardT | "new">();
   const [editingDeck, setEditingDeck] = useState(false);
+  const [shuffle, setShuffle] = useShuffle();
   const [flipped, setFlipped] = useState<Set<number>>(new Set());
 
   if (deck.loading && !deck.data) return <Loading />;
@@ -45,6 +47,7 @@ export function DeckDetail() {
         subtitle={<>{d.cards} cartes · {d.due} à réviser · {d.fresh} nouvelles{d.description ? ` · ${d.description}` : ""}</>}
         actions={
           <>
+            <Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />
             <Button onClick={() => setEditingDeck(true)}><PencilSquareIcon className="h-4 w-4" /> Paquet</Button>
             <Button onClick={() => setEditing("new")}><PlusIcon className="h-4 w-4" /> Carte</Button>
             <Link to={`/study/${d.id}`}>

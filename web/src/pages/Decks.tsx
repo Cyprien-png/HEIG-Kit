@@ -2,15 +2,17 @@ import { PlayIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea, Toggle } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
+import { useShuffle } from "../lib/shuffle";
 import type { Deck, StudyStats } from "../lib/types";
 
 export function Decks() {
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
+  const [shuffle, setShuffle] = useShuffle();
   const stats = decks.data?.stats;
   const byCourse = new Map<string, Deck[]>();
   for (const d of decks.data?.decks ?? []) byCourse.set(d.course ?? "", [...(byCourse.get(d.course ?? "") ?? []), d]);
@@ -21,6 +23,7 @@ export function Decks() {
         title="Cartes"
         actions={
           <>
+            <Toggle checked={shuffle} onChange={setShuffle} label="Mélanger" />
             <Button onClick={() => setCreating(true)}>
               <PlusIcon className="h-4 w-4" /> Paquet
             </Button>
