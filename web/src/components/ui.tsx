@@ -212,7 +212,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 
 export function Table({ head, children, className }: { head: ReactNode[]; children: ReactNode; className?: string }) {
   return (
-    <div className={cx("overflow-x-auto -mx-4 sm:mx-0", className)}>
+    <div className={cx("overflow-x-auto", className)}>
       <table className="w-full text-sm min-w-[480px]">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3 border-b border-line">

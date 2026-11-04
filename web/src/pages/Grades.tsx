@@ -29,7 +29,7 @@ export function Grades() {
                     <span className="font-medium">{p.type}</span>
                     <span className="text-ink-2 tabular-nums">moyenne <span className={gradeTone(p.average)}>{p.average || "–"}</span> · poids {p.weight}</span>
                   </div>
-                  <Table head={["Date", "Évaluation", "Classe", "Coef.", "Note"]} className="mx-0">
+                  <Table head={["Date", "Évaluation", "Classe", "Coef.", "Note"]}>
                     {p.assessments.map((a, j) => (
                       <tr key={j}>
                         <Td mono className="whitespace-nowrap text-ink-2">{a.date}</Td>
