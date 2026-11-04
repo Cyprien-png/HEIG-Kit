@@ -9,6 +9,7 @@ import * as calendar from "./calendar.js";
 import * as corrections from "./corrections.js";
 import * as flashcards from "./flashcards.js";
 import * as profile from "./profile.js";
+import * as quizzes from "./quizzes.js";
 
 type Json<T> = T extends Date ? string : T extends Buffer ? Buffer : T extends (infer U)[] ? Json<U>[] : T extends object ? { [K in keyof T]: Json<T[K]> } : T;
 
@@ -24,6 +25,11 @@ export type Card = Json<flashcards.Card>;
 export type Correction = Json<corrections.Correction>;
 export type ProfileNote = Json<profile.ProfileNote>;
 export type ProfileSummary = Json<profile.ProfileSummary>;
+export type QuizSummary = Json<quizzes.QuizSummary>;
+export type Quiz = Json<quizzes.QuizSummary & { questionList: quizzes.Question[] }>;
+export type QuizProgress = Json<quizzes.Progress>;
+export type QuizAnswered = Json<Awaited<ReturnType<typeof quizzes.answerQuestion>>>;
+export type QuizResult = Json<quizzes.AttemptResult>;
 
 export interface HeigApi {
   calendars(): Promise<Calendar[]>;
@@ -62,6 +68,15 @@ export interface HeigApi {
   searchNotes(query: string, course?: string): Promise<ProfileNote[]>;
   addNotes(notes: profile.NoteInput[]): Promise<ProfileNote[]>;
   resolveNote(id: number, resolved?: boolean): Promise<ProfileNote | undefined>;
+
+  quizzes(course?: string): Promise<QuizSummary[]>;
+  quiz(id: number): Promise<Quiz | undefined>;
+  createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]): Promise<Quiz>;
+  deleteQuiz(id: number): Promise<boolean>;
+  startQuiz(quizId: number, mode?: quizzes.AttemptMode): Promise<QuizProgress>;
+  answerQuiz(attemptId: number, answer: boolean, questionId?: number): Promise<QuizAnswered>;
+  finishQuiz(attemptId: number): Promise<QuizResult>;
+  quizResult(attemptId: number): Promise<QuizResult | undefined>;
 }
 
 const json = <T>(value: T): Json<T> => (value === undefined ? value : JSON.parse(JSON.stringify(value))) as Json<T>;
@@ -201,6 +216,31 @@ export class LocalApi implements HeigApi {
   async resolveNote(id: number, resolved = true) {
     return json(await profile.resolveNote(this.db, id, resolved));
   }
+
+  async quizzes(course?: string) {
+    return json(await quizzes.listQuizzes(this.db, course));
+  }
+  async quiz(id: number) {
+    return json(await quizzes.getQuiz(this.db, id));
+  }
+  async createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]) {
+    return json(await quizzes.createQuiz(this.db, input, questions));
+  }
+  deleteQuiz(id: number) {
+    return quizzes.deleteQuiz(this.db, id);
+  }
+  async startQuiz(quizId: number, mode: quizzes.AttemptMode = "web") {
+    return json(await quizzes.startAttempt(this.db, quizId, mode));
+  }
+  async answerQuiz(attemptId: number, answer: boolean, questionId?: number) {
+    return json(await quizzes.answerQuestion(this.db, attemptId, answer, questionId));
+  }
+  async finishQuiz(attemptId: number) {
+    return json(await quizzes.finishAttempt(this.db, attemptId));
+  }
+  async quizResult(attemptId: number) {
+    return json(await quizzes.attemptResult(this.db, attemptId));
+  }
 }
 
 const qs = (params: Record<string, string | number | boolean | undefined>) => {
@@ -325,5 +365,30 @@ export class RemoteApi implements HeigApi {
   }
   async resolveNote(id: number, resolved = true) {
     return this.client.post<ProfileNote>(`/api/profile/notes/${id}/resolve`, { resolved }).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
+  }
+
+  async quizzes(course?: string) {
+    return (await this.client.get<{ quizzes: QuizSummary[] }>(`/api/quizzes${qs({ course })}`)).quizzes;
+  }
+  async quiz(id: number) {
+    return this.client.get<Quiz>(`/api/quizzes/${id}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
+  }
+  createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]) {
+    return this.client.post<Quiz>("/api/quizzes", { ...input, questions });
+  }
+  async deleteQuiz(id: number) {
+    return this.client.delete(`/api/quizzes/${id}`).then(() => true, (e) => (notFound(e) ? false : Promise.reject(e)));
+  }
+  startQuiz(quizId: number, mode: quizzes.AttemptMode = "web") {
+    return this.client.post<QuizProgress>(`/api/quizzes/${quizId}/attempts`, { mode });
+  }
+  answerQuiz(attemptId: number, answer: boolean, questionId?: number) {
+    return this.client.post<QuizAnswered>(`/api/quiz-attempts/${attemptId}/answers`, { answer, questionId });
+  }
+  finishQuiz(attemptId: number) {
+    return this.client.post<QuizResult>(`/api/quiz-attempts/${attemptId}/finish`);
+  }
+  async quizResult(attemptId: number) {
+    return this.client.get<QuizResult>(`/api/quiz-attempts/${attemptId}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
 }

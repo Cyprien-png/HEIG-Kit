@@ -7,6 +7,7 @@ import { registerFlashcardRoutes } from "./flashcards.js";
 import { registerKnowledgeRoutes } from "./knowledge.js";
 import { registerLibraryRoutes } from "./library.js";
 import { registerProfileRoutes } from "./profile.js";
+import { registerQuizRoutes } from "./quizzes.js";
 import { Router } from "./router.js";
 import { registerStatusRoutes } from "./status.js";
 
@@ -21,6 +22,7 @@ export function createApi(app: App): Router {
   registerFlashcardRoutes(router, app);
   registerCorrectionRoutes(router, app);
   registerProfileRoutes(router, app);
+  registerQuizRoutes(router, app);
   registerStatusRoutes(router, app);
   return router;
 }
