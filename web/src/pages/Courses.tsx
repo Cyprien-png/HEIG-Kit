@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, PageHeader } from "../components/ui";
 import { api, useApi } from "../lib/api";
+import { prettyCourseName } from "../lib/courses";
 import type { CyberlearnCourse, KbCourse, SearchResult, Snapshot } from "../lib/types";
 
 export const DOC_TYPE_LABEL: Record<string, string> = { lecture: "cours", exercises: "exercices", solutions: "corrigés", exam: "examens", lab: "labos", planning: "planning", other: "autre" };
@@ -85,7 +86,7 @@ export function Courses() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <CourseChip code={c.course} link={false} className="text-xs" />
-                    <h2 className="mt-2 font-semibold leading-tight">{c.name ?? c.course}</h2>
+                    <h2 className="mt-2 font-semibold leading-tight">{prettyCourseName(c.name, c.course)}</h2>
                     {c.teachers && c.teachers.length > 0 && <p className="text-xs text-ink-2 mt-1">{c.teachers.join(", ")}</p>}
                   </div>
                   <div className="text-right shrink-0">

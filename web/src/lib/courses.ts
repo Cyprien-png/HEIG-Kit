@@ -38,3 +38,13 @@ export function parseLessonCode(summary: string): { course: string; type: string
   const names: Record<string, string> = { C: "cours", L: "labo", A: "appui", E: "exercices" };
   return { course: parts[0], type, label: `${parts[0]} · ${names[type] ?? type}` };
 }
+
+/** "26_HEIG-VD_MAD_JHH_Mathématiques discrètes" → "Mathématiques discrètes"; names without such a prefix stay as they are. */
+export function prettyCourseName(name: string | null | undefined, code?: string | null): string {
+  if (!name) return code ?? "";
+  const tokens = name.split(/[_/]+/).filter(Boolean);
+  const noise = (t: string) => /^(\d{2,4}(-\d{2,4})?|HEIG-?VD(-[A-Z0-9]+)?|[A-Z]{2,4}\d?|[A-Z]{2,4}\d?-[A-Z]{1,2})$/.test(t) || (code ? t.toUpperCase() === code.toUpperCase() : false);
+  while (tokens.length > 1 && noise(tokens[0])) tokens.shift();
+  const rest = tokens.join(" ").replace(/\s+/g, " ").trim();
+  return rest || name;
+}

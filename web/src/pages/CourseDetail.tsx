@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useApi } from "../lib/api";
+import { prettyCourseName } from "../lib/courses";
 import { addDays, day, today } from "../lib/format";
 import type { CalendarEvent, Correction, Deck, KbCourse, KbDocument, ProfileSummary } from "../lib/types";
 import { DOC_TYPE_LABEL, SearchBox } from "./Courses";
@@ -25,7 +26,7 @@ export function CourseDetail() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={<span className="flex items-center gap-3"><CourseChip code={code} link={false} className="text-sm" /> {info?.name ?? code}</span>} subtitle={info?.teachers?.join(", ")} />
+      <PageHeader title={<span className="flex items-center gap-3"><CourseChip code={code} link={false} className="text-sm" /> {prettyCourseName(info?.name, code)}</span>} subtitle={info?.teachers?.join(", ")} />
       <SearchBox course={code} />
 
       <div className="grid lg:grid-cols-3 gap-4">

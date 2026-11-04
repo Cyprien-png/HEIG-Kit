@@ -11,7 +11,7 @@ const RUN_LABEL: Record<string, string> = { gaps: "GAPS (horaire, notes, plan)",
 
 export function Status() {
   const status = useApi<StatusReport>("/api/status", [], { refreshMs: 20_000 });
-  const requests = useApi<{ requests: RequestEntry[] }>("/api/status/requests?limit=150", [], { refreshMs: 20_000 });
+  const requests = useApi<{ requests: RequestEntry[] }>("/api/status/requests?limit=80", [], { refreshMs: 20_000 });
   const [busy, setBusy] = useState<string>();
   const [message, setMessage] = useState<{ tone: "ok" | "bad" | "warn"; text: string }>();
   const [code, setCode] = useState("");

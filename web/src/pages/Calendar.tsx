@@ -43,14 +43,14 @@ export function Calendar() {
   const range = useMemo(() => {
     if (view === "week") {
       const monday = mondayOf(anchor);
-      return { from: monday, to: addDays(monday, 7), label: `Semaine du ${day(monday + "T12:00:00")}` };
+      return { from: monday, to: addDays(monday, 7), label: `semaine du ${day(monday + "T12:00:00")}` };
     }
     if (view === "month") {
       const first = `${anchor.slice(0, 7)}-01`;
       const start = mondayOf(first);
       return { from: start, to: addDays(start, 42), label: F.monthYear.format(new Date(`${first}T12:00:00`)) };
     }
-    return { from: anchor, to: addDays(anchor, 21), label: `3 semaines dès le ${day(anchor + "T12:00:00")}` };
+    return { from: anchor, to: addDays(anchor, 21), label: `dès le ${day(anchor + "T12:00:00")}` };
   }, [view, anchor]);
 
   const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${range.from}&to=${range.to}`, [], { refreshMs: 300_000 });
@@ -84,7 +84,7 @@ export function Calendar() {
           <IconButton label="Suivant" onClick={() => move(1)}>
             <ChevronRightIcon className="h-5 w-5" />
           </IconButton>
-          <h1 className="text-lg md:text-xl font-semibold tracking-tight ml-2 capitalize">{range.label}</h1>
+          <h1 className="text-base md:text-xl font-semibold tracking-tight ml-2">{range.label.charAt(0).toUpperCase() + range.label.slice(1)}</h1>
         </div>
         <div className="flex items-center gap-2">
           <Segmented value={view} onChange={setView} options={[{ value: "week", label: "Semaine" }, { value: "month", label: "Mois" }, { value: "agenda", label: "Agenda" }]} />

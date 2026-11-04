@@ -76,8 +76,14 @@ export function CorrectionDetail() {
           <Card>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex-1 min-w-[12rem]">
-                <div className="text-3xl font-semibold tabular-nums">{v.correct}<span className="text-ink-3 text-lg font-normal"> / {v.total} justes</span></div>
-                <div className="mt-2"><VerdictBar c={c} /></div>
+                {level >= 1 ? (
+                  <>
+                    <div className="text-3xl font-semibold tabular-nums">{v.correct}<span className="text-ink-3 text-lg font-normal"> / {v.total} justes</span></div>
+                    <div className="mt-2"><VerdictBar c={c} /></div>
+                  </>
+                ) : (
+                  <div className="text-3xl font-semibold tabular-nums">{v.total}<span className="text-ink-3 text-lg font-normal"> exercice{v.total > 1 ? "s" : ""}</span></div>
+                )}
               </div>
               {level >= 2 ? <Markdown source={c.result.summary} className="flex-[2] min-w-[16rem]" /> : <p className="flex-[2] min-w-[16rem] text-sm text-ink-2">{level === 0 ? "Les verdicts sont masqués : relisez vos réponses et cherchez vos erreurs, puis affichez les verdicts." : "Essayez de trouver vos erreurs sur les exercices faux ou partiels avant d'afficher les détails."}</p>}
             </div>
@@ -132,7 +138,7 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
   return (
     <Card padded={false} className={cx("border-l-4", level >= 1 ? info.ring : "border-l-line")}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
-        <span className="font-mono text-sm font-semibold w-10 shrink-0">{e.number}</span>
+        <span className="font-mono text-sm font-semibold min-w-[2.5rem] shrink-0 whitespace-nowrap">{e.number}</span>
         <span className="flex-1 font-medium truncate">{e.title ?? (e.topics[0] ? e.topics[0] : "Exercice")}</span>
         {level >= 1 ? (
           <Badge tone={info.tone} className="inline-flex items-center gap-1"><Icon className="h-3.5 w-3.5" /> {info.label}{e.points ? ` · ${e.points.obtained}/${e.points.total}` : ""}</Badge>
