@@ -102,7 +102,9 @@
 }
 
 /* The document never scrolls nor bounces: the body is pinned to the viewport and the app scrolls inside it (the main
-   area of the shell, or #root for the pages outside it), so the header and the bottom bar stay put on phones. */
+   area of the shell, or #root for the pages outside it), so the header and the bottom bar stay put on phones. Its
+   height is the dynamic viewport (what is really visible, also in a home-screen app, where 100% can overshoot the
+   screen on iOS), with the classic units as a fallback. */
 html,
 body {
   height: 100%;
@@ -113,6 +115,8 @@ body {
   position: fixed;
   inset: 0;
   width: 100%;
+  height: 100vh;
+  height: 100dvh;
   @apply bg-canvas text-ink font-sans antialiased;
   font-feature-settings: "cv11", "ss01", "tnum";
   -webkit-tap-highlight-color: transparent;
