@@ -14,8 +14,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
-import { openDb } from "../rag/db.js";
-import { Auth } from "../server/auth.js";
+import { migrate, openDb } from "../rag/db.js";
+import { createApp } from "../server/app.js";
 import { loadServerConfig } from "../server/config.js";
 import { createRemoteServer } from "../server/http.js";
 import { JobQueue } from "../server/jobs.js";
@@ -113,13 +113,15 @@ const { values } = parseArgs({ options: { http: { type: "boolean", default: fals
 
 if (values.server) {
   const config = loadServerConfig();
-  const auth = new Auth(config);
   const queue = config.jobsDir ? new JobQueue(config.jobsDir) : undefined;
   if (queue) setInterval(() => queue.collect(), 5000).unref();
   else console.error("HEIG_JOBS_DIR is not set: rendering is disabled, since it must not run next to the secrets.");
+  const applied = await migrate(db);
+  if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
+  const app = createApp(config, db, queue);
   instructions = REMOTE_INSTRUCTIONS;
-  registerOutputs = (server) => registerRemoteOutputTools(server, auth, config.publicUrl, queue, config.linkMinutes);
-  createRemoteServer(config, buildServer, auth).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
+  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
+  createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
 } else if (values.http) {
   const tokenFile = path.join(DATA_DIR, "mcp-token");
   if (!existsSync(tokenFile)) {
