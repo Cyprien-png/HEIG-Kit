@@ -2,16 +2,30 @@ import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/2
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { Markdown } from "../components/Markdown";
 import { Badge, Button, Card, ErrorBox, Input, Loading, PageHeader, Segmented } from "../components/ui";
 import { useApi } from "../lib/api";
 import type { DocumentText } from "../lib/types";
 import { DOC_TYPE_LABEL } from "./Courses";
 
+type Mode = "pdf" | "markdown" | "text";
+
+/**
+ * The extracted text of a page as Markdown to render: the `[figure n : labels]` markers become the figure's image and
+ * the `[formule : …]` markers (raw text of a formula the extraction could not read) a marked span.
+ */
+export function pageMarkdown(text: string, documentId: string): string {
+  return text
+    .replace(/\[figure (\d+) : ([^\]]*)\]/g, (_, n: string, labels: string) => `![${labels.replace(/[\[\]()]/g, " ").trim()}](/api/kb/documents/${documentId}/figures/${n})`)
+    .replace(/\[figure (\d+)\]/g, (_, n: string) => `![figure ${n}](/api/kb/documents/${documentId}/figures/${n})`)
+    .replace(/\[formule : ([^\]]*)\]/g, (_, raw: string) => `<span class="formula">${raw.replace(/</g, "&lt;")}</span>`);
+}
+
 export function DocumentView() {
   const { id = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const doc = useApi<DocumentText>(`/api/kb/documents/${id}`, [id]);
-  const [mode, setMode] = useState<"pdf" | "text">(() => (window.innerWidth < 768 ? "text" : "pdf"));
+  const [mode, setMode] = useState<Mode>(() => (window.innerWidth < 768 ? "markdown" : "pdf"));
   const [filter, setFilter] = useState("");
   const page = Number(params.get("page") ?? 1) || 1;
   const fileUrl = `/api/kb/documents/${id}/file`;
@@ -33,7 +47,7 @@ export function DocumentView() {
   if (doc.loading) return <Loading />;
   if (doc.error || !doc.data) return <ErrorBox error={doc.error ?? "Document introuvable"} retry={doc.reload} />;
   const d = doc.data;
-  const viewMode = hasFile === false ? "text" : mode;
+  const viewMode: Mode = hasFile === false && mode === "pdf" ? "markdown" : mode;
 
   return (
     <div className="space-y-4">
@@ -42,7 +56,7 @@ export function DocumentView() {
         subtitle={<span className="flex items-center gap-2 flex-wrap"><CourseChip code={d.course} /> <Badge>{DOC_TYPE_LABEL[d.docType] ?? d.docType}</Badge> {d.chapter && <span>{d.chapter}</span>} <span>· {d.pageCount} pages · document {d.id}</span></span>}
         actions={
           <>
-            {hasFile !== false && <Segmented value={viewMode} onChange={setMode} options={[{ value: "pdf", label: "PDF" }, { value: "text", label: "Texte" }]} />}
+            <Segmented value={viewMode} onChange={setMode} options={[...(hasFile !== false ? [{ value: "pdf" as const, label: "PDF" }] : []), { value: "markdown" as const, label: "Markdown" }, { value: "text" as const, label: "Texte" }]} />
             {hasFile && (
               <a href={`${fileUrl}`} download>
                 <Button size="md"><ArrowDownTrayIcon className="h-4 w-4" /> Fichier</Button>
@@ -72,7 +86,7 @@ export function DocumentView() {
                 <span>Page {p.n}</span>
                 {hasFile && <button onClick={() => { setParams({ page: String(p.n) }); setMode("pdf"); }} className="text-accent">voir dans le PDF</button>}
               </div>
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed px-4 py-3 text-ink-2">{p.text.trim()}</pre>
+              {viewMode === "markdown" ? <Markdown source={pageMarkdown(p.text, id)} className="px-4 py-3 doc-page" /> : <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed px-4 py-3 text-ink-2">{p.text.trim()}</pre>}
             </Card>
           ))}
         </div>

@@ -62,6 +62,13 @@ gets the programme announced for its day in its details, shown when the lesson i
 evaluation becomes an exam named after the announcement. The lessons are refreshed from the saved schedule after every
 Cyberlearn sync, so a planning posted later still reaches the calendar.
 
+## Courses and documents
+
+The Courses page lists the indexed material of each curriculum course and searches it. A document opens as the original
+PDF, as Markdown (the extracted text rendered, with the figures the extraction saved in place of their `[figure n : …]`
+markers, served by `GET /api/kb/documents/<id>/figures/<n>`, and the raw text of unreadable formulas marked) or as plain
+text, page by page with a filter; the Markdown view is the default on phones.
+
 ## Library
 
 Generated documents and videos are the files of the output folder, on the server (`outputs` volume, or the folder named by `HEIG_LIBRARY_DIR` in `rag/.env`). The API lists
@@ -82,7 +89,9 @@ True/false quizzes (`quizzes`, `quiz_questions`): the agent writes them from the
 `heig:quiz` skill), the student answers them one statement at a time: full-screen cards swiped right (true) or left (false) on the
 web app's Quiz page (LaTeX between `$…$` is rendered), aloud with a voice assistant through `start_quiz` / `answer_quiz` (each call records an answer
 and returns the next question, the last one returns the result as lines to read), or `npm run quiz -- play` in the
-terminal. Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
+terminal. An attempt may shuffle the questions (the « Mélanger » switch of the Quiz page, `shuffle` of `start_quiz`,
+`--shuffle` of `play`): the order is kept with the attempt (`question_order`) and the questions are numbered in that order.
+Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
 and source; an attempt stopped early counts the rest as wrong.
 
 ## Corrections

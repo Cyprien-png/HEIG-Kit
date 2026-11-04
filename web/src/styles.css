@@ -102,11 +102,10 @@
 }
 
 /* The document never scrolls nor bounces: the body is pinned to the viewport and the app scrolls inside it (the main
-   area of the shell, or #root for the pages outside it), so the header and the bottom bar stay put on phones. Its
-   height is the dynamic viewport (what is really visible, also in a home-screen app, where 100% can overshoot the
-   screen on iOS), with the classic units as a fallback. */
-html,
-body {
+   area of the shell, or #root for the pages outside it), so the header and the bottom bar stay put on phones. The body
+   takes its size from its four edges only (no height: on iOS, 100% and the vh units are not the visible area when
+   Safari's bars show or in a home-screen app, and would leave a gap under the bottom bar or push it off screen). */
+html {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
@@ -114,9 +113,8 @@ body {
 body {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   @apply bg-canvas text-ink font-sans antialiased;
   font-feature-settings: "cv11", "ss01", "tnum";
   -webkit-tap-highlight-color: transparent;
@@ -193,6 +191,13 @@ body {
 }
 .prose-kit img {
   @apply max-w-full rounded;
+}
+/* Figures of an extracted course page, and the raw text of a formula the extraction could not read. */
+.prose-kit.doc-page img {
+  @apply block my-2 mx-auto max-h-[28rem] border border-line bg-white;
+}
+.prose-kit .formula {
+  @apply font-mono text-[0.92em] text-ink-2 bg-surface-2 rounded px-1.5 py-0.5 whitespace-pre-wrap;
 }
 
 /* Scrollbars that do not fight the theme. */
