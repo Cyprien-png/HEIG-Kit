@@ -140,7 +140,7 @@ if (values.server) {
   const app = createApp(config, db, queue);
   knowledge = new LocalKnowledge(db);
   study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
-  if (process.env.HEIG_SYNC_MINUTES !== "0") app.syncer.start();
+  if (config.syncMinutes > 0) app.syncer.start();
   instructions = REMOTE_INSTRUCTIONS;
   registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
   createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
