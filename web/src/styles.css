@@ -103,12 +103,14 @@
 
 /* The document never scrolls nor bounces: the body is pinned to the viewport and the app scrolls inside it (the main
    area of the shell, or #root for the pages outside it), so the header and the bottom bar stay put on phones. The body
-   takes its size from its four edges only (no height: on iOS, 100% and the vh units are not the visible area when
-   Safari's bars show or in a home-screen app, and would leave a gap under the bottom bar or push it off screen). */
+   takes its size from its four edges (no height: on iOS, 100% and the vh units are not the visible area when Safari's
+   bars show). The root element must not clip: an overflow set on it becomes the viewport's clip, and on an iPhone
+   home-screen app that viewport stops a status bar's height above the bottom of the screen; the pinned body clips
+   instead, nothing in flow can scroll, and touches outside a scrolling area move nothing. */
 html {
   height: 100%;
-  overflow: hidden;
   overscroll-behavior: none;
+  touch-action: none;
 }
 body {
   position: fixed;
