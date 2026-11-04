@@ -31,7 +31,7 @@ export function Login() {
     <div className="min-h-full grid place-items-center px-4 py-10">
       <form onSubmit={submit} className="w-full max-w-sm bg-surface border border-line rounded-2xl shadow-card p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <span className="h-10 w-10 rounded-lg bg-ink text-canvas grid place-items-center font-mono text-sm font-bold">HK</span>
+          <img src="/favicon.svg" alt="" className="h-10 w-10 rounded-lg" />
           <div>
             <h1 className="text-lg font-semibold tracking-tight">HEIG-Kit</h1>
             <p className="text-xs text-ink-2">Le compte défini dans le .env du serveur</p>

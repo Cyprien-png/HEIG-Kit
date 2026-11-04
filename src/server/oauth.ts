@@ -332,7 +332,7 @@ function jsonForm(raw: string): URLSearchParams {
 
 const PAGE_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
-  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
@@ -348,11 +348,11 @@ function page(res: ServerResponse, status: number, title: string, body: string):
 @media(prefers-color-scheme:dark){:root{--canvas:#0b1220;--surface:#111a2b;--line:#243149;--ink:#e6ebf2;--ink-2:#a3b2c9;--ink-3:#5f7190;--accent:#60a5fa;--accent-ink:#0b1220;--bad:#f87171;--bad-soft:#7f1d1d;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--canvas);color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 main{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 1px 2px rgb(15 23 42/.06),0 4px 16px rgb(15 23 42/.05)}
-.brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:16px}.mark{width:28px;height:28px;border-radius:6px;background:var(--ink);color:var(--canvas);display:grid;place-items:center;font:700 12px ui-monospace,Menlo,monospace}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:16px}.mark{width:28px;height:28px;border-radius:6px;display:block}
 h1{font-size:18px;margin:0 0 12px}p{margin:0 0 12px}label{display:block;font-size:13px;font-weight:500;color:var(--ink-2);margin:12px 0 4px}
 input{display:block;width:100%;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
 button{margin-top:16px;width:100%;height:42px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
 .error{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--ink-3);font-size:13px}code{font:13px ui-monospace,Menlo,monospace}
-</style></head><body><main><div class="brand"><span class="mark">HK</span>HEIG-Kit</div><h1>${escape(title)}</h1>${body}</main></body></html>`;
+</style></head><body><main><div class="brand"><img class="mark" src="/favicon.svg" alt="">HEIG-Kit</div><h1>${escape(title)}</h1>${body}</main></body></html>`;
   res.writeHead(status, PAGE_HEADERS).end(html);
 }

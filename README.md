@@ -1,3 +1,5 @@
+<p align="center"><img src="web/public/icon.svg" alt="HEIG-Kit" width="112" height="112"></p>
+
 # HEIG-Kit
 
 Your HEIG-VD school life in the terminal and in [Claude Code](https://claude.com/claude-code): timetable, grades, course

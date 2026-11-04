@@ -53,7 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-full md:grid md:grid-cols-[13.5rem_1fr] xl:grid-cols-[15rem_1fr]">
       <aside className="hidden md:flex flex-col border-r border-line bg-surface sticky top-0 h-screen">
         <div className="px-4 h-14 flex items-center gap-2 border-b border-line">
-          <span className="h-7 w-7 rounded-md bg-ink text-canvas grid place-items-center font-mono text-xs font-bold">HK</span>
+          <img src="/favicon.svg" alt="" className="h-7 w-7 rounded-md" />
           <span className="font-semibold tracking-tight">HEIG-Kit</span>
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
