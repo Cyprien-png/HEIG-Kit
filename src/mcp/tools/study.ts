@@ -14,15 +14,33 @@ const VERDICTS = ["correct", "partial", "wrong", "missing"] as const;
 
 const when = new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-function formatEvents(events: { key: string; kind: string; title: string; course?: string; startsAt: string; endsAt?: string; location?: string; overridden: boolean; source: string }[]): string {
+type EventJson = Awaited<ReturnType<HeigApi["calendarList"]>>[number];
+type CalendarJson = Awaited<ReturnType<HeigApi["calendars"]>>[number];
+
+function formatEvents(events: EventJson[], calendars: CalendarJson[], withDetails = false): string {
   if (events.length === 0) return "No events in this period.";
+  const names = new Map(calendars.map((c) => [c.id, c.name]));
   return events
     .map((e) => {
       const end = e.endsAt ? `–${new Intl.DateTimeFormat("fr-CH", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" }).format(new Date(e.endsAt))}` : "";
       const flags = [e.overridden ? "modified by hand" : "", e.source === "manual" ? "manual" : ""].filter(Boolean).join(", ");
-      return `${when.format(new Date(e.startsAt))}${end} · ${e.kind} · ${e.course ? `${e.course} · ` : ""}${e.title}${e.location ? ` @ ${e.location}` : ""}${flags ? ` (${flags})` : ""}\n  key: ${e.key}`;
+      const details = withDetails && e.details ? `\n  ${e.details.replace(/\n/g, "\n  ")}` : "";
+      return `${when.format(new Date(e.startsAt))}${end} · ${e.kind} · ${e.course ? `${e.course} · ` : ""}${e.title}${e.location ? ` @ ${e.location}` : ""} · [${names.get(e.calendarId) ?? e.calendarId}]${flags ? ` (${flags})` : ""}\n  key: ${e.key}${details}`;
     })
     .join("\n");
+}
+
+const formatCalendars = (calendars: CalendarJson[]) =>
+  calendars.length === 0 ? "No calendars." : calendars.map((c) => `${c.id} · ${c.name} · ${c.color} · ${c.visible ? "shown" : "hidden"}${c.slug ? ` · built in (${c.slug})` : ""}${c.description ? `\n  ${c.description}` : ""}`).join("\n");
+
+/** A calendar by id, built-in slug or name. */
+async function pickCalendar(api: HeigApi, ref: string | number | undefined): Promise<CalendarJson | undefined> {
+  if (ref === undefined) return undefined;
+  const calendars = await api.calendars();
+  const text = String(ref).toLowerCase();
+  const found = calendars.find((c) => String(c.id) === text || c.slug === text || c.name.toLowerCase() === text);
+  if (!found) throw new Error(`No calendar "${ref}". Calendars: ${calendars.map((c) => `${c.id} ${c.name}`).join(", ")}`);
+  return found;
 }
 
 const cardSchema = z.object({
@@ -63,14 +81,17 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     {
       title: "Calendar",
       description:
-        "The student's calendar: GAPS lessons, Cyberlearn deadlines, exams and events added by hand, between two dates " +
-        "(default: the coming 14 days). Each event has a key, needed to change or remove it. Events changed by hand " +
-        "stay so until the source changes again.",
+        "The student's calendar: GAPS lessons (with the programme their course page announces on Cyberlearn), Cyberlearn " +
+        "deadlines, exams and events added by hand, between two dates (default: the coming 14 days), across calendars " +
+        "(layers: Horaires, Examens, Rendus, and the student's own such as a revision plan). Each event has a key, needed " +
+        "to change or remove it. Events changed by hand stay so until the source changes again.",
       inputSchema: {
         from: z.string().optional().describe("ISO date or date-time, default today"),
         to: z.string().optional().describe("ISO date or date-time, default from + 14 days"),
         kinds: z.array(z.enum(EVENT_KINDS)).optional(),
         course: z.string().optional(),
+        calendar: z.string().optional().describe("Only this calendar (id or name)"),
+        details: z.boolean().optional().describe("Include each event's details (programme of a lesson, content of a revision session)"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -79,7 +100,9 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         const from = a.from ? new Date(a.from) : new Date(new Date().setHours(0, 0, 0, 0));
         const to = a.to ? new Date(a.to) : new Date(from.getTime() + 14 * 86_400_000);
         if (a.to && !/T/.test(a.to)) to.setDate(to.getDate() + 1);
-        return formatEvents(await api.calendarList(from.toISOString(), to.toISOString(), { kinds: a.kinds, course: a.course }));
+        const calendar = await pickCalendar(api, a.calendar);
+        const events = await api.calendarList(from.toISOString(), to.toISOString(), { kinds: a.kinds, course: a.course, calendars: calendar ? [calendar.id] : undefined });
+        return formatEvents(events, await api.calendars(), a.details);
       }),
   );
 
@@ -88,9 +111,10 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     {
       title: "Add or change a calendar event",
       description:
-        "Adds an exam, a deadline or any event the student asks for, or changes an existing one by its key (a deadline a " +
-        "teacher did not update on Cyberlearn, a moved exam…). A change of a GAPS or Cyberlearn event stays until that " +
-        "source changes again after it. Times are Europe/Zurich unless an offset is given.",
+        "Adds an exam, a deadline, a revision session or any event the student asks for, or changes an existing one by " +
+        "its key (a deadline a teacher did not update on Cyberlearn, a moved exam…). A change of a GAPS or Cyberlearn " +
+        "event stays until that source changes again after it. Times are Europe/Zurich unless an offset is given. " +
+        "Details are Markdown (lists of exercises to do, topics, links).",
       inputSchema: {
         key: z.string().optional().describe("Key of the event to change (from get_calendar); omit to add a new event"),
         kind: z.enum(EVENT_KINDS).optional().describe("Default: event (exam for tests and exams)"),
@@ -101,15 +125,18 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         all_day: z.boolean().optional(),
         location: z.string().optional(),
         url: z.string().optional(),
-        details: z.string().optional(),
+        details: z.string().optional().describe("Markdown"),
+        calendar: z.string().optional().describe("Calendar (id or name) the event belongs to; default: Examens for exams, Rendus for deadlines, Horaires otherwise"),
       },
     },
     async (a) =>
       respond(async () => {
-        const patch = { kind: a.kind, title: a.title, course: a.course, startsAt: a.starts_at, endsAt: a.ends_at, allDay: a.all_day, location: a.location, url: a.url, details: a.details };
-        if (a.key) return `Updated:\n${formatEvents([await api.calendarUpdate(a.key, patch)])}`;
+        const calendarId = (await pickCalendar(api, a.calendar))?.id;
+        const patch = { kind: a.kind, title: a.title, course: a.course, startsAt: a.starts_at, endsAt: a.ends_at, allDay: a.all_day, location: a.location, url: a.url, details: a.details, calendarId };
+        const calendars = await api.calendars();
+        if (a.key) return `Updated:\n${formatEvents([await api.calendarUpdate(a.key, patch)], calendars)}`;
         if (!a.title || !a.starts_at) throw new Error("A new event needs at least title and starts_at");
-        return `Added:\n${formatEvents([await api.calendarAdd({ ...patch, kind: a.kind ?? "event", title: a.title, startsAt: a.starts_at })])}`;
+        return `Added:\n${formatEvents([await api.calendarAdd({ ...patch, kind: a.kind ?? "event", title: a.title, startsAt: a.starts_at })], calendars)}`;
       }),
   );
 
@@ -125,7 +152,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       respond(async () => {
         if (a.reset) {
           const event = await api.calendarReset(a.key);
-          return event ? `Back to the source version:\n${formatEvents([event])}` : "Manual changes forgotten.";
+          return event ? `Back to the source version:\n${formatEvents([event], await api.calendars())}` : "Manual changes forgotten.";
         }
         await api.calendarRemove(a.key);
         return `Removed ${a.key}.`;
@@ -145,6 +172,57 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         const versions = await api.calendarHistory(a.key);
         if (versions.length === 0) return `No event ${a.key}`;
         return versions.map((v) => `${v.fetchedAt} · ${v.source}/${v.author}${v.deleted ? " · deleted" : ""} · ${v.title} · ${v.startsAt}${v.endsAt ? ` → ${v.endsAt}` : ""}${v.location ? ` @ ${v.location}` : ""}`).join("\n");
+      }),
+  );
+
+  server.registerTool(
+    "list_calendars",
+    {
+      title: "Calendars",
+      description: "The calendars (layers) of the student's calendar page: the built-in Horaires, Examens and Rendus, and the student's own (revision plans…), with their colors and whether they are shown.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => respond(async () => formatCalendars(await api.calendars())),
+  );
+
+  server.registerTool(
+    "set_calendar",
+    {
+      title: "Create or change a calendar",
+      description:
+        "Creates a calendar (layer), e.g. 'Révision MAD' for a revision plan before an exam, then add its sessions with " +
+        "set_calendar_event and calendar=<its name>. With id, changes a calendar's name, color, description or visibility " +
+        "(the built-in ones can be renamed and hidden, not deleted).",
+      inputSchema: {
+        id: z.number().int().optional().describe("Calendar to change; omit to create one"),
+        name: z.string().optional(),
+        color: z.string().optional().describe("#rrggbb; default: the next free color"),
+        description: z.string().optional(),
+        visible: z.boolean().optional(),
+      },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.id !== undefined) return `Updated:\n${formatCalendars([await api.calendarEdit(a.id, { name: a.name, color: a.color, description: a.description, visible: a.visible })])}`;
+        if (!a.name) throw new Error("A new calendar needs a name");
+        return `Created:\n${formatCalendars([await api.calendarCreate({ name: a.name, color: a.color, description: a.description })])}`;
+      }),
+  );
+
+  server.registerTool(
+    "remove_calendar",
+    {
+      title: "Delete a calendar",
+      description: "Deletes one of the student's own calendars with all its events (a built-in calendar can only be hidden with set_calendar).",
+      inputSchema: { calendar: z.string().describe("Id or name") },
+      annotations: { destructiveHint: true },
+    },
+    async (a) =>
+      respond(async () => {
+        const calendar = (await pickCalendar(api, a.calendar))!;
+        await api.calendarDelete(calendar.id);
+        return `Deleted calendar ${calendar.name} and its events.`;
       }),
   );
 

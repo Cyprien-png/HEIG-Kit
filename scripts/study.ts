@@ -2,10 +2,14 @@
  * Calendar, flashcards, corrections and profile from the terminal (used by the heig:* skills). On a computer connected
  * to a server (HEIG_REMOTE_URL) everything happens there; otherwise in the local database.
  *
- *   npm run calendar -- [--from D] [--to D] [--kind exam] [--course MAD] [--json]   events (default: 14 days)
- *   npm run calendar -- add "TE 2 MAD" 2026-12-05T08:30 [--end …] [--kind exam] [--course MAD] [--location B01]
- *   npm run calendar -- set <key> [--title …] [--start …] [--end …] [--location …] [--kind …]
+ *   npm run calendar -- [--from D] [--to D] [--kind exam] [--course MAD] [--calendar <id|name>] [--json]   events (default: 14 days)
+ *   npm run calendar -- show <key>                                                 one event with its details
+ *   npm run calendar -- add "TE 2 MAD" 2026-12-05T08:30 [--end …] [--kind exam] [--course MAD] [--location B01] [--calendar …]
+ *   npm run calendar -- set <key> [--title …] [--start …] [--end …] [--location …] [--kind …] [--calendar …]
  *   npm run calendar -- remove <key> | reset <key> | history <key> | overrides
+ *   npm run calendar -- calendars | calendars add "Révision MAD" [--color #7c3aed] [--description …]
+ *   npm run calendar -- calendars set <id> [--name …] [--color …] [--description …] [--visible true|false] | calendars remove <id>
+ *   npm run calendar -- import plan.json      a calendar with its events: {"calendar": {"name", "color", "description"} | "<id|name>", "events": [...]}
  *   npm run cards -- [list [--course MAD]] | show <deck id> | create "Title" --course MAD --file cards.json
  *   npm run cards -- add <deck id> --file cards.json | study [<deck id>] | delete-deck <id> | delete-card <id>
  *   npm run correction -- new "Série 3 MAD" [--course MAD] [--topic …] [--notes …]   creates it and prints the QR code
@@ -37,6 +41,11 @@ const { values, positionals } = parseArgs({
     location: { type: "string" },
     url: { type: "string" },
     details: { type: "string" },
+    calendar: { type: "string" },
+    name: { type: "string" },
+    color: { type: "string" },
+    description: { type: "string" },
+    visible: { type: "string" },
     file: { type: "string" },
     photos: { type: "string" },
     query: { type: "string" },
@@ -76,28 +85,50 @@ async function openApi(): Promise<{ api: HeigApi; close: () => Promise<void> }> 
   return { api: new LocalApi(db, { author: "user" }), close: () => db.end() };
 }
 
+type EventJson = Awaited<ReturnType<HeigApi["calendarList"]>>[number];
+type CalendarJson = Awaited<ReturnType<HeigApi["calendars"]>>[number];
+
+/** A calendar by id, built-in slug or name, as typed on the command line. */
+async function pickCalendar(api: HeigApi, ref: string | undefined): Promise<CalendarJson | undefined> {
+  if (!ref) return undefined;
+  const calendars = await api.calendars();
+  const found = calendars.find((c) => String(c.id) === ref || c.slug === ref || c.name.toLowerCase() === ref.toLowerCase());
+  if (!found) throw new Error(`No calendar "${ref}". Calendars: ${calendars.map((c) => `${c.id} ${c.name}`).join(", ")}`);
+  return found;
+}
+
 async function calendar(api: HeigApi): Promise<void> {
-  const fmt = (events: Awaited<ReturnType<HeigApi["calendarList"]>>) =>
+  const names = new Map((await api.calendars()).map((c) => [c.id, c.name]));
+  const fmt = (events: EventJson[]) =>
     events.length === 0
       ? "No events."
-      : events.map((e) => `${when.format(new Date(e.startsAt))}${e.endsAt ? `–${time.format(new Date(e.endsAt))}` : ""}  ${e.kind.padEnd(8)} ${(e.course ?? "").padEnd(6)} ${e.title}${e.location ? ` @ ${e.location}` : ""}${e.overridden ? "  (modified by hand)" : e.source === "manual" ? "  (manual)" : ""}\n    key: ${e.key}`).join("\n");
+      : events.map((e) => `${when.format(new Date(e.startsAt))}${e.endsAt ? `–${time.format(new Date(e.endsAt))}` : ""}  ${e.kind.padEnd(8)} ${(e.course ?? "").padEnd(6)} ${e.title}${e.location ? ` @ ${e.location}` : ""}  [${names.get(e.calendarId) ?? e.calendarId}]${e.overridden ? "  (modified by hand)" : e.source === "manual" ? "  (manual)" : ""}\n    key: ${e.key}`).join("\n");
+  const fmtCalendars = (calendars: CalendarJson[]) => calendars.map((c) => `${String(c.id).padStart(3)}  ${c.visible ? "●" : "○"} ${c.color}  ${c.name}${c.slug ? `  (built in: ${c.slug})` : ""}${c.description ? `\n       ${c.description}` : ""}`).join("\n");
   const kind = values.kind as "lesson" | "deadline" | "exam" | "event" | undefined;
+  const calendarId = (await pickCalendar(api, values.calendar))?.id;
   switch (action) {
     case undefined:
     case "list": {
       const from = values.from ? new Date(values.from) : new Date(new Date().setHours(0, 0, 0, 0));
       const to = values.to ? new Date(new Date(values.to).getTime() + (/T/.test(values.to) ? 0 : 86_400_000)) : new Date(from.getTime() + 14 * 86_400_000);
-      const events = await api.calendarList(from.toISOString(), to.toISOString(), { kinds: kind ? [kind] : undefined, course: values.course });
+      const events = await api.calendarList(from.toISOString(), to.toISOString(), { kinds: kind ? [kind] : undefined, course: values.course, calendars: calendarId ? [calendarId] : undefined });
       return out(values.json ? events : fmt(events));
+    }
+    case "show": {
+      if (!rest[0]) throw new Error("Usage: npm run calendar -- show <key>");
+      const versions = await api.calendarHistory(rest[0]);
+      const event = versions[0];
+      if (!event || event.deleted) throw new Error(`No event ${rest[0]}`);
+      return out(values.json ? event : `${fmt([event])}${event.url ? `\n    ${event.url}` : ""}${event.details ? `\n\n${event.details}` : ""}`);
     }
     case "add": {
       const [title, start] = rest;
-      if (!title || !start) throw new Error('Usage: npm run calendar -- add "Title" <start> [--end …] [--kind exam] [--course MAD]');
-      return out(fmt([await api.calendarAdd({ kind: kind ?? "event", title, course: values.course, startsAt: isoLocal(start)!, endsAt: isoLocal(values.end), allDay: values["all-day"], location: values.location, url: values.url, details: values.details })]));
+      if (!title || !start) throw new Error('Usage: npm run calendar -- add "Title" <start> [--end …] [--kind exam] [--course MAD] [--calendar <id|name>]');
+      return out(fmt([await api.calendarAdd({ kind: kind ?? "event", title, course: values.course, startsAt: isoLocal(start)!, endsAt: isoLocal(values.end), allDay: values["all-day"], location: values.location, url: values.url, details: values.details, calendarId })]));
     }
     case "set": {
-      if (!rest[0]) throw new Error("Usage: npm run calendar -- set <key> [--title …] [--start …] [--end …] [--location …] [--kind …] [--course …]");
-      return out(fmt([await api.calendarUpdate(rest[0], { kind, title: values.title, course: values.course, startsAt: isoLocal(values.start), endsAt: isoLocal(values.end), location: values.location, url: values.url, details: values.details, allDay: values["all-day"] || undefined })]));
+      if (!rest[0]) throw new Error("Usage: npm run calendar -- set <key> [--title …] [--start …] [--end …] [--location …] [--kind …] [--course …] [--calendar …]");
+      return out(fmt([await api.calendarUpdate(rest[0], { kind, title: values.title, course: values.course, startsAt: isoLocal(values.start), endsAt: isoLocal(values.end), location: values.location, url: values.url, details: values.details, allDay: values["all-day"] || undefined, calendarId })]));
     }
     case "remove":
       if (!rest[0]) throw new Error("Usage: npm run calendar -- remove <key>");
@@ -111,14 +142,47 @@ async function calendar(api: HeigApi): Promise<void> {
     case "history": {
       if (!rest[0]) throw new Error("Usage: npm run calendar -- history <key>");
       const versions = await api.calendarHistory(rest[0]);
-      return out(values.json ? versions : versions.map((v) => `${v.fetchedAt}  ${v.source}/${v.author}${v.deleted ? " deleted" : ""}  ${v.title}  ${v.startsAt}${v.endsAt ? ` → ${v.endsAt}` : ""}${v.location ? ` @ ${v.location}` : ""}`).join("\n"));
+      return out(values.json ? versions : versions.map((v) => `${v.fetchedAt}  ${v.source}/${v.author}${v.deleted ? " deleted" : ""}  ${v.title}  ${v.startsAt}${v.endsAt ? ` → ${v.endsAt}` : ""}${v.location ? ` @ ${v.location}` : ""}  [${names.get(v.calendarId) ?? v.calendarId}]`).join("\n"));
     }
     case "overrides": {
       const events = await api.calendarOverrides();
       return out(values.json ? events : fmt(events));
     }
+    case "calendars": {
+      const [sub, ...args] = rest;
+      if (!sub) return out(values.json ? await api.calendars() : fmtCalendars(await api.calendars()));
+      if (sub === "add") {
+        if (!args[0]) throw new Error('Usage: npm run calendar -- calendars add "Name" [--color #7c3aed] [--description …]');
+        return out(fmtCalendars([await api.calendarCreate({ name: args[0], color: values.color, description: values.description })]));
+      }
+      const target = await pickCalendar(api, args[0]);
+      if (!target) throw new Error("Usage: npm run calendar -- calendars [add | set <id> | remove <id>]");
+      if (sub === "set") {
+        const visible = values.visible === undefined ? undefined : values.visible !== "false";
+        return out(fmtCalendars([await api.calendarEdit(target.id, { name: values.name, color: values.color, description: values.description, visible })]));
+      }
+      if (sub === "remove") {
+        await api.calendarDelete(target.id);
+        return out(`Removed calendar ${target.name} and its events.`);
+      }
+      throw new Error("Usage: npm run calendar -- calendars [add | set <id> | remove <id>]");
+    }
+    case "import": {
+      interface Plan {
+        calendar?: string | { name: string; color?: string; description?: string };
+        events: { kind?: "lesson" | "deadline" | "exam" | "event"; title: string; course?: string; start: string; end?: string; allDay?: boolean; location?: string; url?: string; details?: string }[];
+      }
+      const plan = readJsonFile<Plan>(rest[0] ?? values.file, "plan");
+      const target = typeof plan.calendar === "object" ? await api.calendarCreate(plan.calendar) : await pickCalendar(api, plan.calendar);
+      const added: EventJson[] = [];
+      for (const e of plan.events ?? []) {
+        added.push(await api.calendarAdd({ kind: e.kind ?? "event", title: e.title, course: e.course, startsAt: isoLocal(e.start)!, endsAt: isoLocal(e.end), allDay: e.allDay, location: e.location, url: e.url, details: e.details, calendarId: target?.id }));
+      }
+      if (target) names.set(target.id, target.name);
+      return out(`${target ? `Calendar ${target.id} "${target.name}"\n` : ""}${fmt(added)}`);
+    }
     default:
-      throw new Error("Usage: npm run calendar -- [list] | add | set | remove | reset | history | overrides");
+      throw new Error("Usage: npm run calendar -- [list] | show | add | set | remove | reset | history | overrides | calendars | import");
   }
 }
 
