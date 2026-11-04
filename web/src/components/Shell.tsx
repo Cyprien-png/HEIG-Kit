@@ -5,55 +5,69 @@ import {
   CalendarDaysIcon,
   ChartBarIcon,
   CheckBadgeIcon,
-  EllipsisHorizontalIcon,
+  Cog6ToothIcon,
   FolderIcon,
   HomeIcon,
-  MoonIcon,
   QuestionMarkCircleIcon,
   RectangleStackIcon,
   SignalIcon,
-  SunIcon,
+  Squares2X2Icon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { type ComponentType, type ReactNode, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useSession, useTheme } from "../lib/auth";
-import { Modal, cx } from "./ui";
+import { Drawer, Segmented, cx } from "./ui";
 
-interface Item {
+export interface NavItem {
   to: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
+  /** Routes that light this item up besides its own. */
+  under?: string[];
+  hint?: string;
 }
 
-const MAIN: Item[] = [
+/** The four places of the app, in the order of the bottom bar. */
+export const TABS: NavItem[] = [
   { to: "/", label: "Accueil", icon: HomeIcon },
   { to: "/calendar", label: "Calendrier", icon: CalendarDaysIcon },
-  { to: "/courses", label: "Cours", icon: BookOpenIcon },
-  { to: "/cards", label: "Cartes", icon: RectangleStackIcon },
-  { to: "/quiz", label: "Quiz", icon: QuestionMarkCircleIcon },
-  { to: "/corrections", label: "Corrections", icon: CheckBadgeIcon },
-  { to: "/profile", label: "Profil", icon: UserCircleIcon },
-  { to: "/grades", label: "Notes", icon: ChartBarIcon },
-  { to: "/studies", label: "Études", icon: AcademicCapIcon },
-  { to: "/library", label: "Bibliothèque", icon: FolderIcon },
-  { to: "/status", label: "Statut", icon: SignalIcon },
+  { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/courses", "/documents", "/library", "/corrections", "/profile"] },
+  { to: "/etudes", label: "Études", icon: AcademicCapIcon, under: ["/studies", "/grades"] },
 ];
-const BOTTOM = MAIN.slice(0, 4);
+
+/** What the Révision and Études hubs lead to (also the sections of the desktop sidebar). */
+export const REVISION: NavItem[] = [
+  { to: "/cards", label: "Cartes", icon: RectangleStackIcon, hint: "Répétition espacée, recto-verso" },
+  { to: "/quiz", label: "Quiz", icon: QuestionMarkCircleIcon, hint: "Vrai ou faux, à glisser" },
+  { to: "/courses", label: "Cours", icon: Squares2X2Icon, hint: "Supports indexés et recherche" },
+  { to: "/library", label: "Bibliothèque", icon: FolderIcon, hint: "Documents et vidéos générés" },
+  { to: "/corrections", label: "Corrections", icon: CheckBadgeIcon, hint: "Vos exercices photographiés" },
+  { to: "/profile", label: "Profil", icon: UserCircleIcon, hint: "Points forts, points faibles" },
+];
+export const ETUDES: NavItem[] = [
+  { to: "/studies", label: "Plan d'études", icon: AcademicCapIcon, hint: "Modules, unités, absences" },
+  { to: "/grades", label: "Notes", icon: ChartBarIcon, hint: "Contrôle continu par module, bulletin" },
+];
 
 /** Routes shown without the phone's header and bottom bar: a card fills the screen and has its own way out. */
 const IMMERSIVE = /^\/(study|quiz\/play)(\/|$)/;
 
+const isUnder = (pathname: string, item: NavItem) => (item.to === "/" ? pathname === "/" : [item.to, ...(item.under ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`)));
+
 export function Shell({ children }: { children: ReactNode }) {
   const { username, logout } = useSession();
   const [theme, setTheme] = useTheme();
-  const [more, setMore] = useState(false);
+  const [settings, setSettings] = useState(false);
   const location = useLocation();
-  const moreActive = !BOTTOM.some((i) => (i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to)));
   const immersive = IMMERSIVE.test(location.pathname);
 
-  const ThemeIcon = theme === "dark" ? MoonIcon : SunIcon;
-  const cycleTheme = () => setTheme(theme === "system" ? "dark" : theme === "dark" ? "light" : "system");
+  const sideLink = (item: NavItem) => (
+    <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm font-medium transition-colors", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
+      <item.icon className="h-5 w-5 shrink-0" />
+      {item.label}
+    </NavLink>
+  );
 
   return (
     <div className="h-full md:grid md:grid-cols-[13.5rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
@@ -63,31 +77,17 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="font-semibold tracking-tight">HEIG-Kit</span>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-2 space-y-0.5">
-          {MAIN.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm font-medium transition-colors", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {item.label}
-            </NavLink>
-          ))}
+          {TABS.slice(0, 2).map(sideLink)}
+          <div className="pt-3 pb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Révision</div>
+          {REVISION.map(sideLink)}
+          <div className="pt-3 pb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Études</div>
+          {ETUDES.map(sideLink)}
         </nav>
-        <div className="border-t border-line p-2 flex items-center justify-between gap-2 shrink-0">
-          <div className="min-w-0 px-1.5">
-            <div className="text-xs text-ink-3">Connecté</div>
-            <div className="text-sm font-medium truncate">{username}</div>
-          </div>
-          <div className="flex items-center">
-            <button onClick={cycleTheme} title={`Thème : ${theme}`} className="h-8 w-8 grid place-items-center rounded-md text-ink-2 hover:bg-surface-2">
-              <ThemeIcon className="h-4.5 w-4.5" />
-            </button>
-            <button onClick={() => void logout()} title="Se déconnecter" className="h-8 w-8 grid place-items-center rounded-md text-ink-2 hover:bg-surface-2">
-              <ArrowRightStartOnRectangleIcon className="h-4.5 w-4.5" />
-            </button>
-          </div>
+        <div className="border-t border-line p-2 shrink-0">
+          <button onClick={() => setSettings(true)} className="w-full flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
+            <Cog6ToothIcon className="h-5 w-5 shrink-0" />
+            <span className="flex-1 text-left truncate">{username}</span>
+          </button>
         </div>
       </aside>
 
@@ -97,8 +97,8 @@ export function Shell({ children }: { children: ReactNode }) {
           <header className="md:hidden shrink-0 pt-safe bg-surface border-b border-line">
             <div className="h-12 flex items-center justify-between px-4">
               <span className="font-semibold tracking-tight">HEIG-Kit</span>
-              <button onClick={cycleTheme} aria-label="Thème" className="h-8 w-8 grid place-items-center rounded-md text-ink-2">
-                <ThemeIcon className="h-5 w-5" />
+              <button onClick={() => setSettings(true)} aria-label="Réglages" className="h-9 w-9 -mr-1.5 grid place-items-center rounded-lg text-ink-2 hover:bg-surface-2">
+                <Cog6ToothIcon className="h-5.5 w-5.5" />
               </button>
             </div>
           </header>
@@ -109,35 +109,38 @@ export function Shell({ children }: { children: ReactNode }) {
         </main>
         {!immersive && (
           <nav className="md:hidden shrink-0 bg-surface border-t border-line pb-safe">
-            <div className="grid grid-cols-5">
-              {BOTTOM.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", isActive ? "text-accent" : "text-ink-3")}>
-                  <item.icon className="h-6 w-6" />
-                  {item.label}
-                </NavLink>
-              ))}
-              <button onClick={() => setMore(true)} className={cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", moreActive ? "text-accent" : "text-ink-3")}>
-                <EllipsisHorizontalIcon className="h-6 w-6" />
-                Plus
-              </button>
+            <div className="grid grid-cols-4">
+              {TABS.map((item) => {
+                const active = isUnder(location.pathname, item);
+                return (
+                  <NavLink key={item.to} to={item.to} className={cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", active ? "text-accent" : "text-ink-3")}>
+                    <item.icon className="h-6 w-6" />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
             </div>
           </nav>
         )}
       </div>
 
-      <Modal open={more} onClose={() => setMore(false)} title="Plus">
-        <div className="grid grid-cols-2 gap-2">
-          {MAIN.slice(4).map((item) => (
-            <NavLink key={item.to} to={item.to} onClick={() => setMore(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg border px-3 h-12 text-sm font-medium", isActive ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-2")}>
-              <item.icon className="h-5 w-5" />
-              {item.label}
-            </NavLink>
-          ))}
-          <button onClick={() => void logout()} className="flex items-center gap-2.5 rounded-lg border border-line px-3 h-12 text-sm font-medium text-ink-2 col-span-2">
-            <ArrowRightStartOnRectangleIcon className="h-5 w-5" /> Se déconnecter ({username})
-          </button>
+      <Drawer open={settings} onClose={() => setSettings(false)} title="Réglages">
+        <div className="space-y-5">
+          <div>
+            <div className="text-xs font-medium text-ink-2 mb-1.5">Thème</div>
+            <Segmented value={theme} onChange={setTheme} options={[{ value: "system", label: "Système" }, { value: "light", label: "Clair" }, { value: "dark", label: "Sombre" }]} />
+          </div>
+          <NavLink to="/status" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
+            <SignalIcon className="h-5 w-5" /> Statut du serveur
+          </NavLink>
+          <div className="border-t border-line pt-4">
+            <div className="text-xs text-ink-3 mb-2">Connecté en tant que <span className="font-medium text-ink">{username}</span></div>
+            <button onClick={() => void logout()} className="flex items-center gap-2.5 rounded-lg border border-line px-3 h-10 text-sm font-medium text-ink-2 hover:bg-surface-2 w-full">
+              <ArrowRightStartOnRectangleIcon className="h-5 w-5" /> Se déconnecter
+            </button>
+          </div>
         </div>
-      </Modal>
+      </Drawer>
     </div>
   );
 }

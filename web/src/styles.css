@@ -116,6 +116,7 @@ html {
   --safe-top: env(safe-area-inset-top, 0px);
 }
 body {
+  position: relative; /* overlays (modals, drawers) are absolute to it */
   height: 100vh;
   height: 100dvh;
   /* Set by lib/viewport.ts on iPhone home-screen apps, whose viewport is a status bar short of the screen. */

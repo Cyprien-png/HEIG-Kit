@@ -1,4 +1,4 @@
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, useEffect } from "react";
 import { Link } from "react-router-dom";
 
@@ -82,12 +82,12 @@ export function Dot({ tone }: { tone: Tone }) {
   return <span className={cx("inline-block h-2 w-2 rounded-full", colors[tone])} />;
 }
 
-export function Stat({ label, value, hint, tone = "neutral", to }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; to?: string }) {
+export function Stat({ label, value, hint, tone = "neutral", to, compact }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone; to?: string; compact?: boolean }) {
   const body = (
-    <div className="bg-surface border border-line rounded-xl p-4 h-full hover:border-line-strong transition-colors">
-      <div className="text-[12px] font-medium uppercase tracking-wide text-ink-3">{label}</div>
-      <div className={cx("mt-1 text-2xl font-semibold tabular-nums tracking-tight", tone === "bad" && "text-bad", tone === "warn" && "text-warn", tone === "ok" && "text-ok", tone === "accent" && "text-accent")}>{value}</div>
-      {hint && <div className="mt-1 text-xs text-ink-2">{hint}</div>}
+    <div className={cx("bg-surface border border-line rounded-xl h-full hover:border-line-strong transition-colors min-w-0", compact ? "px-2 py-2.5 text-center flex flex-col justify-between" : "p-4")}>
+      <div className={cx("font-medium uppercase tracking-wide text-ink-3", compact ? "text-[10px] leading-tight" : "text-[12px] truncate")}>{label}</div>
+      <div className={cx("mt-1 font-semibold tabular-nums tracking-tight truncate", compact ? "text-xl" : "text-2xl", tone === "bad" && "text-bad", tone === "warn" && "text-warn", tone === "ok" && "text-ok", tone === "accent" && "text-accent")}>{value}</div>
+      {hint && !compact && <div className="mt-1 text-xs text-ink-2">{hint}</div>}
     </div>
   );
   return to ? <Link to={to}>{body}</Link> : body;
@@ -196,7 +196,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
+    <div className="absolute inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className={cx("relative bg-surface border border-line rounded-t-2xl sm:rounded-2xl shadow-card w-full max-h-[92vh] overflow-y-auto", wide ? "sm:max-w-3xl" : "sm:max-w-lg")}>
         <header className="sticky top-0 bg-surface/95 backdrop-blur flex items-center justify-between px-4 py-3 border-b border-line z-10">
@@ -234,4 +234,43 @@ export const Td = ({ children, className, mono }: { children: ReactNode; classNa
 
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded border border-line-strong bg-surface-2 font-mono text-[11px] text-ink-2">{children}</kbd>;
+}
+
+/** A panel sliding in from the right (settings, filters), over a dimmed page. */
+export function Drawer({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="absolute inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative h-full w-80 max-w-[85vw] bg-surface border-l border-line shadow-card flex flex-col pt-safe">
+        <header className="flex items-center justify-between px-4 h-12 border-b border-line shrink-0">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <IconButton label="Fermer" onClick={onClose}>
+            <XMarkIcon className="h-5 w-5" />
+          </IconButton>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-safe">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** A section that folds: a native details/summary styled as a card header, open or closed to start with. */
+export function Disclosure({ title, aside, defaultOpen, children, className, level = 1 }: { title: ReactNode; aside?: ReactNode; defaultOpen?: boolean; children: ReactNode; className?: string; level?: 1 | 2 }) {
+  return (
+    <details open={defaultOpen} className={cx("group", level === 1 ? "min-w-0 bg-surface border border-line rounded-xl shadow-card" : "min-w-0 border-t border-line first:border-t-0", className)}>
+      <summary className={cx("list-none cursor-pointer select-none flex items-center gap-3 min-w-0 [&::-webkit-details-marker]:hidden", level === 1 ? "px-4 py-3" : "px-4 py-2.5 bg-surface-2/40")}>
+        <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-3 transition-transform group-open:rotate-90" />
+        <div className={cx("flex-1 min-w-0", level === 1 ? "text-sm font-semibold" : "text-sm font-medium")}>{title}</div>
+        {aside && <div className="shrink-0 flex items-center gap-2">{aside}</div>}
+      </summary>
+      <div className={level === 1 ? "border-t border-line" : ""}>{children}</div>
+    </details>
+  );
 }

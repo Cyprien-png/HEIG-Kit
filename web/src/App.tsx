@@ -24,6 +24,8 @@ const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.P
 const Grades = lazy(() => import("./pages/Grades").then((m) => ({ default: m.Grades })));
 const Studies = lazy(() => import("./pages/Studies").then((m) => ({ default: m.Studies })));
 const Status = lazy(() => import("./pages/Status").then((m) => ({ default: m.Status })));
+const Revision = lazy(() => import("./pages/Hub").then((m) => ({ default: m.Revision })));
+const Etudes = lazy(() => import("./pages/Hub").then((m) => ({ default: m.Etudes })));
 
 function Protected({ children }: { children: ReactNode }) {
   const { username, ready } = useSession();
@@ -49,6 +51,8 @@ export function App() {
                     <Routes>
                       <Route index element={<Dashboard />} />
                       <Route path="calendar" element={<Calendar />} />
+                      <Route path="revision" element={<Revision />} />
+                      <Route path="etudes" element={<Etudes />} />
                       <Route path="courses" element={<Courses />} />
                       <Route path="courses/:code" element={<CourseDetail />} />
                       <Route path="documents/:id" element={<DocumentView />} />
