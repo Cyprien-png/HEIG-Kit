@@ -71,8 +71,8 @@ export class RequestLog {
     const { rows } = await this.db.query(
       `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE status >= 500)::int AS errors,
-              count(*) FILTER (WHERE status = 401)::int AS unauthorized,
-              max(at) FILTER (WHERE status = 401) AS last_unauthorized,
+              count(*) FILTER (WHERE status = 401 AND note = 'invalid token')::int AS unauthorized,
+              max(at) FILTER (WHERE status = 401 AND note = 'invalid token') AS last_unauthorized,
               max(at) FILTER (WHERE path = '/mcp' AND status < 400) AS last_mcp
        FROM request_log WHERE at > now() - interval '24 hours'`,
     );

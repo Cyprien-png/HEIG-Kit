@@ -146,8 +146,10 @@ export function createRemoteServer(app: App, buildServer: () => Promise<McpServe
     let tool: string | undefined;
     let note: string | undefined;
     res.on("finish", () => {
-      if (req.url === "/health") return;
-      app.requests.record({ at: new Date(), client, method: req.method ?? "", path: new URL(req.url ?? "/", app.config.publicUrl).pathname, status: res.statusCode, ms: performance.now() - started, tool, note });
+      const pathname = new URL(req.url ?? "/", app.config.publicUrl).pathname;
+      // Static files of the web application would drown the log.
+      if (pathname === "/health" || pathname.startsWith("/assets/") || /\.(svg|webmanifest|ico|png|woff2?)$/.test(pathname)) return;
+      app.requests.record({ at: new Date(), client, method: req.method ?? "", path: pathname, status: res.statusCode, ms: performance.now() - started, tool, note });
     });
     try {
       const url = new URL(req.url ?? "/", app.config.publicUrl);
