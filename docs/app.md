@@ -76,6 +76,15 @@ repetition scheme (`card_state`: due date, interval, ease, four grades), on the 
 `GET /api/decks/<id>/study`. The agent creates decks from the course material (`create_deck`, `add_flashcards`), the
 `heig:flashcards` skill explains how.
 
+## Quizzes
+
+True/false quizzes (`quizzes`, `quiz_questions`): the agent writes them from the course material (`create_quiz`,
+`heig:quiz` skill), the student answers them one statement at a time: cards swiped right (true) or left (false) on the
+web app's Quiz page, aloud with a voice assistant through `start_quiz` / `answer_quiz` (each call records an answer
+and returns the next question, the last one returns the result as lines to read), or `npm run quiz -- play` in the
+terminal. Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
+and source; an attempt stopped early counts the rest as wrong.
+
 ## Corrections
 
 1. The agent creates a correction (`create_correction`), which gives a capture link; the `heig:correct` skill prints it

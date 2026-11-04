@@ -32,6 +32,7 @@
     "cards": "tsx scripts/study.ts cards",
     "correction": "tsx scripts/study.ts correction",
     "profile": "tsx scripts/study.ts profile",
+    "quiz": "tsx scripts/study.ts quiz",
     "typecheck": "tsc --noEmit",
     "aliases": "tsx scripts/aliases.ts",
     "rag:start": "tsx scripts/mcp-token.ts && docker compose -f rag/compose.yml up -d --build --wait",

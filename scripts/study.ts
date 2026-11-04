@@ -15,9 +15,11 @@
  *   npm run correction -- new "Série 3 MAD" [--course MAD] [--topic …] [--notes …]   creates it and prints the QR code
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
+ *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> | result <attempt id> | delete <id>
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import QRCode from "qrcode";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
@@ -305,10 +307,64 @@ async function profile(api: HeigApi): Promise<void> {
   }
 }
 
+async function quiz(api: HeigApi): Promise<void> {
+  type Result = Awaited<ReturnType<HeigApi["finishQuiz"]>>;
+  const fmtResult = (r: Result) => {
+    const lines = [`${r.quiz.course ? `${r.quiz.course} · ` : ""}${r.quiz.title}: ${r.attempt.score}/${r.attempt.total}${r.attempt.finishedAt ? "" : " (en cours)"}`];
+    for (const a of r.answers) lines.push(`  ${a.correct ? "✓" : "✗"} ${a.position}. ${a.statement}  [${a.expected ? "VRAI" : "FAUX"}${a.answer === undefined ? ", sans réponse" : a.correct ? "" : `, répondu ${a.answer ? "vrai" : "faux"}`}]${!a.correct && a.explanation ? `\n      ${a.explanation}${a.source ? ` (${a.source})` : ""}` : ""}`);
+    return lines.join("\n");
+  };
+  switch (action) {
+    case undefined:
+    case "list": {
+      const quizzes = await api.quizzes(values.course);
+      return out(values.json ? quizzes : quizzes.length === 0 ? "No quizzes." : quizzes.map((q) => `[${q.id}] ${(q.course ?? "").padEnd(6)} ${q.title}: ${q.questions} questions, ${q.attempts} attempts${q.last ? `, last ${q.last.score}/${q.last.total}` : ""}${q.best ? `, best ${q.best.score}/${q.best.total}` : ""}`).join("\n"));
+    }
+    case "show": {
+      const q = await api.quiz(Number(rest[0]));
+      if (!q) throw new Error(`No quiz ${rest[0]}`);
+      return out(values.json ? q : `[${q.id}] ${q.course ? `${q.course} · ` : ""}${q.title}${q.description ? `\n${q.description}` : ""}\n${q.questionList.map((x) => `${x.position}. ${x.statement} → ${x.answer ? "VRAI" : "FAUX"}${x.explanation ? `\n   ${x.explanation}` : ""}${x.source ? ` (${x.source})` : ""}`).join("\n")}`);
+    }
+    case "create": {
+      const plan = readJsonFile<{ title: string; course?: string; description?: string; questions: { statement: string; answer: boolean; explanation?: string; source?: string; topic?: string }[] }>(values.file, "quiz");
+      const q = await api.createQuiz({ title: plan.title, course: plan.course ?? values.course, description: plan.description }, plan.questions);
+      return out(`Quiz ${q.id} "${q.title}" created with ${q.questionList.length} questions.`);
+    }
+    case "play": {
+      if (!rest[0]) throw new Error("Usage: npm run quiz -- play <id>");
+      let progress = await api.startQuiz(Number(rest[0]), "cli");
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        while (progress.next) {
+          const reply = (await rl.question(`${progress.next.position}/${progress.attempt.total}  ${progress.next.statement}\n  vrai (v) / faux (f) / quitter (q) > `)).trim().toLowerCase();
+          if (reply.startsWith("q")) break;
+          if (!/^[vfyntojn]/.test(reply)) continue;
+          const answer = /^[vyotj]/.test(reply);
+          const r = await api.answerQuiz(progress.attempt.id, answer, progress.next.id);
+          progress = r;
+          if (r.result) return out(`\n${fmtResult(r.result)}`);
+        }
+      } finally {
+        rl.close();
+      }
+      return out(`\n${fmtResult(await api.finishQuiz(progress.attempt.id))}`);
+    }
+    case "result": {
+      const r = await api.quizResult(Number(rest[0]));
+      if (!r) throw new Error(`No attempt ${rest[0]}`);
+      return out(values.json ? r : fmtResult(r));
+    }
+    case "delete":
+      return out((await api.deleteQuiz(Number(rest[0]))) ? "Quiz deleted." : "No such quiz.");
+    default:
+      throw new Error("Usage: npm run quiz -- [list] | show <id> | create --file quiz.json | play <id> | result <attempt id> | delete <id>");
+  }
+}
+
 async function main(): Promise<void> {
-  const commands: Record<string, (api: HeigApi) => Promise<void>> = { calendar, cards, correction, profile };
+  const commands: Record<string, (api: HeigApi) => Promise<void>> = { calendar, cards, correction, profile, quiz };
   const run = commands[command];
-  if (!run) throw new Error("Usage: npm run calendar|cards|correction|profile -- …");
+  if (!run) throw new Error("Usage: npm run calendar|cards|correction|profile|quiz -- …");
   const { api, close } = await openApi();
   try {
     await run(api);

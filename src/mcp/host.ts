@@ -29,6 +29,7 @@ import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerOutputTools } from "./tools/output.js";
 import { registerRemoteOutputTools } from "./tools/remote.js";
 import { registerRepoTools } from "./tools/repos.js";
+import { registerQuizTools } from "./tools/quiz.js";
 import { registerStudyPrompts, registerStudyTools } from "./tools/study.js";
 
 // With stdio, stdout carries the protocol: everything the services log goes to stderr.
@@ -65,6 +66,7 @@ async function buildServer(): Promise<McpServer> {
   await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
   registerStudyTools(server, study);
+  registerQuizTools(server, study);
   registerStudyPrompts(server);
   // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
   if (registerOutputs === registerOutputTools) registerRepoTools(server);
