@@ -40,8 +40,27 @@ Every event of the calendar is a row of `calendar_versions`, identified by a sta
   again after it, at which point the source wins back, as asked.
 - Manual events have their own keys and are only changed by the user.
 
-`GET /api/calendar/history/<key>` shows every version. Kinds: `lesson`, `deadline`, `exam`, `event`; exams are deadlines
-or lessons whose title says TE, examen, test or contrôle, or manual events of kind `exam`.
+`GET /api/calendar/events/<key>/history` shows every version. Kinds: `lesson`, `deadline`, `exam`, `event`; exams are
+deadlines or lessons whose title says TE, examen, test or contrôle, lessons whose course page announces an evaluation
+that day, or manual events of kind `exam`.
+
+### Calendars (layers)
+
+Every version belongs to a calendar (`calendars`): the built-in **Horaires** (GAPS lessons), **Examens** and **Rendus**
+(Cyberlearn deadlines) receive the source events according to their kind; the user's own calendars (a revision plan
+before an exam, created on the page, by the agent with `set_calendar`, or with `npm run calendar -- import`) hold the
+rest. A calendar can be hidden, renamed and recolored; deleting one of the user's own deletes its versions, so a source
+event moved into it falls back to its previous version. An event changed by hand into another kind follows its kind
+into the matching built-in calendar unless it was placed elsewhere on purpose. `GET /api/calendars`,
+`POST /api/calendars`, `PATCH|DELETE /api/calendars/<id>`; `GET /api/calendar?calendars=1,4&visible=true`.
+
+### Programme of a lesson
+
+The Cyberlearn sync also stores the contents of every curriculum course page (snapshot `contents`) and reads the
+plannings teachers post there ("Lundi 9 novembre — Cours : … — Exercices : …", `src/app/lessons.ts`): each GAPS lesson
+gets the programme announced for its day in its details, shown when the lesson is clicked, and a lesson announced as an
+evaluation becomes an exam named after the announcement. The lessons are refreshed from the saved schedule after every
+Cyberlearn sync, so a planning posted later still reaches the calendar.
 
 ## Library
 
