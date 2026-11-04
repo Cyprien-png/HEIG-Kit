@@ -1,77 +1,77 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
 
-/* Design tokens: a neutral slate scale with one accent, defined for light and dark, exposed to Tailwind below. */
+/* Design tokens: a warm neutral scale with the red of the logo as accent, defined for light and dark, exposed to Tailwind below. */
 :root {
-  --canvas: #f3f5f8;
+  --canvas: #f5f4f1;
   --surface: #ffffff;
-  --surface-2: #eaeef3;
-  --line: #d7dde6;
-  --line-strong: #b9c3d1;
-  --ink: #0f172a;
-  --ink-2: #475569;
-  --ink-3: #8a9bb2;
-  --accent: #1d4ed8;
-  --accent-soft: #dbe6ff;
+  --surface-2: #eceae6;
+  --line: #dcd8d2;
+  --line-strong: #bdb6ad;
+  --ink: #1c1a17;
+  --ink-2: #57534c;
+  --ink-3: #8f887f;
+  --accent: #d90115;
+  --accent-soft: #fde3e5;
   --accent-ink: #ffffff;
-  --ok: #047857;
-  --ok-soft: #d1fae5;
+  --ok: #15803d;
+  --ok-soft: #dcfce7;
   --warn: #b45309;
   --warn-soft: #fef3c7;
-  --bad: #b91c1c;
-  --bad-soft: #fee2e2;
-  --info: #0369a1;
-  --info-soft: #e0f2fe;
-  --shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 4px 16px rgb(15 23 42 / 0.05);
+  --bad: #9f1239;
+  --bad-soft: #ffe4e6;
+  --info: #1d4ed8;
+  --info-soft: #dbe6ff;
+  --shadow: 0 1px 2px rgb(28 26 23 / 0.06), 0 4px 16px rgb(28 26 23 / 0.05);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #0b1220;
-    --surface: #111a2b;
-    --surface-2: #192338;
-    --line: #243149;
-    --line-strong: #34456a;
-    --ink: #e6ebf2;
-    --ink-2: #a3b2c9;
-    --ink-3: #5f7190;
-    --accent: #60a5fa;
-    --accent-soft: #1e3a8a;
-    --accent-ink: #0b1220;
-    --ok: #34d399;
-    --ok-soft: #064e3b;
+    --canvas: #161412;
+    --surface: #1e1b18;
+    --surface-2: #28241f;
+    --line: #353028;
+    --line-strong: #4d463d;
+    --ink: #ede9e3;
+    --ink-2: #b8b0a6;
+    --ink-3: #7d756b;
+    --accent: #ff5a66;
+    --accent-soft: #4a1218;
+    --accent-ink: #1a0608;
+    --ok: #4ade80;
+    --ok-soft: #14532d;
     --warn: #fbbf24;
     --warn-soft: #78350f;
-    --bad: #f87171;
-    --bad-soft: #7f1d1d;
-    --info: #38bdf8;
-    --info-soft: #0c4a6e;
+    --bad: #fb7185;
+    --bad-soft: #701a2b;
+    --info: #7ea4ff;
+    --info-soft: #1e3a8a;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --canvas: #0b1220;
-  --surface: #111a2b;
-  --surface-2: #192338;
-  --line: #243149;
-  --line-strong: #34456a;
-  --ink: #e6ebf2;
-  --ink-2: #a3b2c9;
-  --ink-3: #5f7190;
-  --accent: #60a5fa;
-  --accent-soft: #1e3a8a;
-  --accent-ink: #0b1220;
-  --ok: #34d399;
-  --ok-soft: #064e3b;
+  --canvas: #161412;
+  --surface: #1e1b18;
+  --surface-2: #28241f;
+  --line: #353028;
+  --line-strong: #4d463d;
+  --ink: #ede9e3;
+  --ink-2: #b8b0a6;
+  --ink-3: #7d756b;
+  --accent: #ff5a66;
+  --accent-soft: #4a1218;
+  --accent-ink: #1a0608;
+  --ok: #4ade80;
+  --ok-soft: #14532d;
   --warn: #fbbf24;
   --warn-soft: #78350f;
-  --bad: #f87171;
-  --bad-soft: #7f1d1d;
-  --info: #38bdf8;
-  --info-soft: #0c4a6e;
+  --bad: #fb7185;
+  --bad-soft: #701a2b;
+  --info: #7ea4ff;
+  --info-soft: #1e3a8a;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
   color-scheme: dark;
 }
