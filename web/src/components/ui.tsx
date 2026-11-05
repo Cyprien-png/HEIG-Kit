@@ -1,5 +1,5 @@
 import { ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, useEffect } from "react";
+import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 export const cx = (...classes: (string | false | undefined | null)[]) => classes.filter(Boolean).join(" ");
@@ -262,9 +262,32 @@ export function Drawer({ open, onClose, title, children }: { open: boolean; onCl
 }
 
 /** A section that folds: a native details/summary styled as a card header, open or closed to start with. */
-export function Disclosure({ title, aside, defaultOpen, children, className, level = 1 }: { title: ReactNode; aside?: ReactNode; defaultOpen?: boolean; children: ReactNode; className?: string; level?: 1 | 2 }) {
+/** The folding sections a visitor opened, by id, so they stay as they were left (everything is closed by default). */
+const OPENED = "heig.opened";
+const opened = (): Record<string, true> => {
+  try { return JSON.parse(localStorage.getItem(OPENED) ?? "{}") as Record<string, true>; } catch { return {}; }
+};
+const rememberOpen = (id: string, open: boolean) => {
+  try {
+    const all = opened();
+    if (open) all[id] = true; else delete all[id];
+    localStorage.setItem(OPENED, JSON.stringify(all));
+  } catch { /* private window or storage disabled: the section still works, it just forgets */ }
+};
+
+/** A folding section. With an `id`, whether it is open is kept in the browser; otherwise it starts as `defaultOpen` says. */
+export function Disclosure({ id, title, aside, defaultOpen, children, className, level = 1 }: { id?: string; title: ReactNode; aside?: ReactNode; defaultOpen?: boolean; children: ReactNode; className?: string; level?: 1 | 2 }) {
+  const [open, setOpen] = useState(() => (id ? opened()[id] === true : Boolean(defaultOpen)));
   return (
-    <details open={defaultOpen} className={cx("group", level === 1 ? "min-w-0 bg-surface border border-line rounded-xl shadow-card" : "min-w-0 border-t border-line first:border-t-0", className)}>
+    <details
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        if (id) rememberOpen(id, now);
+      }}
+      className={cx("group", level === 1 ? "min-w-0 bg-surface border border-line rounded-xl shadow-card" : "min-w-0 border-t border-line first:border-t-0", className)}
+    >
       <summary className={cx("list-none cursor-pointer select-none flex items-center gap-3 min-w-0 [&::-webkit-details-marker]:hidden", level === 1 ? "px-4 py-3" : "px-4 py-2.5 bg-surface-2/40")}>
         <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-3 transition-transform group-open:rotate-90" />
         <div className={cx("flex-1 min-w-0", level === 1 ? "text-sm font-semibold" : "text-sm font-medium")}>{title}</div>

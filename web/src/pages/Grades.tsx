@@ -95,8 +95,8 @@ export function Grades() {
         return (
           <Disclosure
             key={m.code}
-            defaultOpen
-            title={<span className="flex items-center gap-2 min-w-0">{m.code !== "—" && <span className="shrink-0 font-mono text-xs font-semibold bg-surface-2 rounded px-1.5 py-0.5">{m.code}</span>}<span className="min-w-0 break-words leading-snug">{m.name}</span></span>}
+            id={`grades.${m.code}`}
+            title={<span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">{m.code !== "—" && <span className="shrink-0 font-mono text-xs font-semibold bg-surface-2 rounded px-1.5 py-0.5">{m.code}</span>}<span className="min-w-0 break-words leading-snug">{m.name}</span></span>}
             aside={
               <>
                 {partial && <span className="hidden sm:inline text-[11px] text-ink-3">provisoire</span>}
@@ -108,8 +108,8 @@ export function Grades() {
             {m.units.map((u) => (
               <Disclosure
                 key={u.code}
+                id={`grades.${m.code}.${u.code}`}
                 level={2}
-                defaultOpen={Boolean(u.grades)}
                 title={<span className="flex items-center gap-2 min-w-0"><CourseChip code={u.code} /><span className="min-w-0 truncate">{u.name}</span>{u.credits > 0 && <span className="shrink-0 text-xs text-ink-3 tabular-nums">{u.credits} ECTS</span>}</span>}
                 aside={<span className={cx("text-base tabular-nums", gradeTone(u.grades?.average))}>{u.grades?.average || "–"}</span>}
               >
@@ -132,7 +132,7 @@ export function Grades() {
         );
       })}
       {transcript.data && (
-        <Disclosure title="Bulletin de notes" aside={<Badge tone="accent">{transcript.data.data.totalCredits} crédits</Badge>}>
+        <Disclosure id="grades.transcript" title="Bulletin de notes" aside={<Badge tone="accent">{transcript.data.data.totalCredits} crédits</Badge>}>
           <Table head={transcript.data.data.header} className="mx-0">
             {transcript.data.data.lines.map((l, i) => (
               <tr key={i}>

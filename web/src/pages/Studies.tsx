@@ -13,7 +13,7 @@ const STATUS: Record<string, { label: string; tone: "ok" | "accent" | "neutral" 
   planned: { label: "prévue", tone: "neutral" },
 };
 
-/** The study plan, one folding section per year (the current one open), modules and units inside; absences on top. */
+/** The study plan, one folding section per year, modules and units inside, absences on top; every section starts closed. */
 export function Studies() {
   const plan = useApi<Snapshot<PlanUnit[]>>("/api/campus/plan");
   const absences = useApi<Snapshot<AbsenceRow[]>>("/api/campus/absences");
@@ -31,7 +31,7 @@ export function Studies() {
       <PageHeader title="Plan d'études" subtitle={plan.data ? `Relevé sur GAPS ${relative(plan.data.checkedAt)}.` : undefined} />
       {missing ? <Empty title="Pas encore relevé" hint="Lancez une synchronisation depuis la page Statut." /> : plan.error ? <ErrorBox error={plan.error} retry={plan.reload} /> : null}
       {absences.data && absences.data.data.length > 0 && (
-        <Disclosure title="Absences" defaultOpen aside={<Badge tone={absences.data.data.some((a) => Number(a.relativeRate.replace("%", "").replace(",", ".")) >= 10) ? "warn" : "neutral"}>{absences.data.data.length} unités</Badge>}>
+        <Disclosure id="studies.absences" title="Absences" aside={<Badge tone={absences.data.data.some((a) => Number(a.relativeRate.replace("%", "").replace(",", ".")) >= 10) ? "warn" : "neutral"}>{absences.data.data.length} unités</Badge>}>
           <Table head={["Unité", "Périodes", "Justifiées", "Taux (donné)", "Taux (total)", "Périodes totales"]} className="mx-0">
             {absences.data.data.map((a, i) => {
               const rate = Number(a.relativeRate.replace("%", "").replace(",", "."));
@@ -53,12 +53,12 @@ export function Studies() {
         const units = [...modules.values()].flat();
         const credits = units.reduce((s, u) => s + u.credits.reduce((c, p) => c + p.credits, 0), 0);
         return (
-          <Disclosure key={year} title={`Année ${year}`} defaultOpen={year === current} aside={<>{year === current && <Badge tone="accent">en cours</Badge>}<span className="text-xs text-ink-2 tabular-nums">{credits} ECTS</span></>}>
+          <Disclosure key={year} id={`studies.${year}`} title={`Année ${year}`} aside={<>{year === current && <Badge tone="accent">en cours</Badge>}<span className="text-xs text-ink-2 tabular-nums">{credits} ECTS</span></>}>
             {[...modules.entries()].map(([code, list]) => (
               <Disclosure
                 key={code}
+                id={`studies.${year}.${code}`}
                 level={2}
-                defaultOpen={year === current}
                 title={<span className="flex items-center gap-2 min-w-0"><span className="shrink-0 font-mono text-xs font-semibold bg-surface-2 rounded px-1.5 py-0.5">{code}</span><span className="min-w-0 truncate">{list[0].module.name}</span></span>}
                 aside={<span className="text-xs text-ink-2 tabular-nums">{list.reduce((s, u) => s + u.credits.reduce((c, p) => c + p.credits, 0), 0)} ECTS</span>}
               >
