@@ -88,12 +88,14 @@ npm --prefix <root> run -s correction -- submit <id> --file .cache/corrections/<
 
 Write `.cache/corrections/<id>/notes.json` and run `npm --prefix <root> run -s profile -- add --file <it>`:
 one `mistake` note per error (`topic`, `text` = the cause and what happened, `severity` 1 to 3, `correctionId`,
-`exercise`), one `weakness` per topic not mastered, one `strength` per topic clearly mastered. If a weakness listed
+`exercise`), one `weakness` per topic not mastered, one `strength` per topic clearly mastered, each with the `chapter`
+of the course it belongs to (`profile -- chapters <CODE>`; if the course has no chapters yet, set them first from the
+unit sheet, see `heig:profile`). If a weakness listed
 by `npm --prefix <root> run -s profile -- notes --course <CODE>` is now mastered, resolve it
 (`profile -- resolve <note id>`).
 
 ```json
-{ "notes": [ { "course": "MAD", "topic": "inclusion-exclusion", "kind": "mistake", "text": "Oublie de retirer |A ∩ B| : additionne les cardinaux.", "severity": 2, "correctionId": "<id>", "exercise": "2" } ] }
+{ "notes": [ { "course": "MAD", "chapter": "1. Ensembles", "topic": "inclusion-exclusion", "kind": "mistake", "text": "Oublie de retirer |A ∩ B| : additionne les cardinaux.", "severity": 2, "correctionId": "<id>", "exercise": "2" } ] }
 ```
 
 ## 5. Answer in two levels

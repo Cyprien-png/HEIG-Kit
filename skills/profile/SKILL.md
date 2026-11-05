@@ -15,6 +15,18 @@ description: Reads and updates the user's learning profile (strengths, weaknesse
   filters or by meaning.
 - `profile -- add --file notes.json`: `{ "notes": [ { "course": "MAD", "topic": "…", "kind": "weakness", "text": "…", "severity": 2 } ] }`.
 - `profile -- resolve <note id>`: a weakness is overcome.
+- `profile -- chapters [MAD]`: the chapters of a course, the axes of the profile's radar; `profile -- chapters MAD --file
+  chapters.json` sets them in order (`{ "chapters": [ { "title": "3. Relations", "keywords": ["relation d'ordre",
+  "diagramme de Hasse"] } ] }`). Each chapter is **maîtrisé**, **fragile**, **en difficulté** or **non évalué** from the
+  open notes filed under it (their `chapter` field, or a keyword equal to their topic).
+
+## Chapters first
+
+The first time a course appears in the profile (or when `profile` says its chapters are not set), define them from the
+course: the unit sheet (`heig:studies`, `get_unit_sheet`) or the Cyberlearn course page (`heig:courses`), one chapter
+per chapter of the syllabus, in order, with the topics of each as keywords (in the course's words, the ones corrections
+use). Then every note carries its `chapter`, so that the radar stays complete; topics the profile lists as « under no
+chapter » are added to a chapter's keywords.
 
 ## Revision targeted at weak points
 
@@ -26,4 +38,4 @@ description: Reads and updates the user's learning profile (strengths, weaknesse
    photographing the new exercises once done (`heig:correct`) so the profile is updated.
 
 When the user tells you something to remember about their learning ("je confonds toujours ⊆ et ∈"), record it as a
-`note` or `weakness` with `profile -- add`.
+`note` or `weakness` with `profile -- add`, with its `chapter`.

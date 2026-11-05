@@ -131,8 +131,14 @@ and source; an attempt stopped early counts the rest as wrong.
 ## Profile
 
 `profile_notes`: observations about the student per course and topic (`weakness`, `strength`, `mistake`, `note`),
-with an embedding so the agent can search them. The profile page aggregates them: weak and strong topics per course,
-frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a revision session.
+with an embedding so the agent can search them, and the chapter they belong to. `course_chapters` lists the chapters of
+a course in order (set by the agent from the unit sheet with `set_course_chapters`, or on the profile page), each with
+the topics it covers as keywords. The profile page shows, per course, a radar with one axis per chapter and the
+chapter's status, one of four: **maîtrisé** (70 % or more of the severity-weighted observations are strengths),
+**fragile** (40 to 70 %), **en difficulté** (below) or **non évalué** (no observation yet). A note counts for the chapter
+it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». Below the radar:
+weak and strong topics, frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a
+revision session.
 
 ## Markdown
 
