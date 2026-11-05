@@ -104,7 +104,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </header>
         )}
         {/* The only scrolling area of the app; it never chains its scroll to the document. */}
-        <main className={cx("flex-1 min-h-0 w-full min-w-0 overscroll-y-contain", immersive ? "overflow-hidden" : "overflow-y-auto overflow-x-clip px-4 md:px-6 xl:px-8 py-5 md:py-7")}>
+        <main className={cx("flex-1 min-h-0 w-full min-w-0 overscroll-y-contain", immersive ? "overflow-hidden" : "overflow-y-auto overflow-x-clip px-4 md:px-6 xl:px-8 pt-5 pb-12 md:pt-7 md:pb-16")}>
           {immersive ? children : <div className="h-full max-w-[1500px] mx-auto">{children}</div>}
         </main>
         {!immersive && (
