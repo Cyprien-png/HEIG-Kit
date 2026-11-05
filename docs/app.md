@@ -91,7 +91,7 @@ lists the library by course then by type, and filters it by course, type and tag
 
 ## Flashcards
 
-Decks (`decks`) of cards (`cards`, Markdown with LaTeX on both faces) per course. Studying follows a small spaced
+Decks (`decks`) of cards (`cards`, Markdown on both faces, see below) per course. Studying follows a small spaced
 repetition scheme (`card_state`: due date, interval, ease, four grades), on the web (keyboard and touch) and through
 `GET /api/study`. The agent creates decks from the course material (`create_deck`, `add_flashcards`), the
 `heig:flashcards` skill explains how.
@@ -133,6 +133,15 @@ and source; an attempt stopped early counts the rest as wrong.
 `profile_notes`: observations about the student per course and topic (`weakness`, `strength`, `mistake`, `note`),
 with an embedding so the agent can search them. The profile page aggregates them: weak and strong topics per course,
 frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a revision session.
+
+## Markdown
+
+Every text the app shows from the AI or the user (cards, quiz statements and explanations, corrections, event details,
+Markdown files of the library) goes through one renderer (`web/src/components/Markdown.tsx`): GFM Markdown with tables,
+LaTeX between `$…$` and `$$…$$` (KaTeX), ```` ```mermaid ```` diagrams and charts drawn in the theme's colours
+(Mermaid, loaded on first use), ```` ```svg ```` drawings inlined on a paper-white card so that black strokes and
+`currentColor` both show. Everything is sanitized (no scripts, styles, frames or `foreignObject`). The MCP tool
+descriptions and the skills tell the AI to redraw a student's sketches and graphs this way in corrections.
 
 ## Status
 

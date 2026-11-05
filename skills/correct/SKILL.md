@@ -49,7 +49,11 @@ It saves the photos as files: **read every one of them** (Read tool) before corr
 Follow this method, exercise by exercise (it is also the server's `correct_exercises` prompt):
 
 1. Transcribe **exactly** what the user wrote (`answer`, Markdown and LaTeX), mistakes included; `[illisible]` for
-   what cannot be read, and say so in the feedback.
+   what cannot be read, and say so in the feedback. Their tables become Markdown tables; their drawings, graphs and
+   diagrams (Hasse diagram, automaton, curve, truth table, sketch) are redrawn faithfully, mistakes included, in a
+   ```` ```svg ```` block (a `viewBox`, strokes in `currentColor`, shown on a paper-white card) or a ```` ```mermaid ````
+   block (`graph`, `flowchart`, `xychart-beta`, `pie`…) that the web app draws. The `solution` holds the correct
+   drawing, graph or table when the exercise has one; `feedback` may show the faulty part alone.
 2. Find the statement and the reference solution in the course material (`heig:teacher`:
    `npm --prefix <root> run -s kb -- exercise <n> --course <CODE>`, `kb -- search …`); otherwise solve it yourself with
    the course's method.

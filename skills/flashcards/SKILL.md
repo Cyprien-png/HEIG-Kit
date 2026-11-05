@@ -18,7 +18,9 @@ cards live on the remote server when `HEIG_REMOTE_URL` is set, otherwise in the 
 - `cards -- delete-card <id>`, `cards -- delete-deck <id>`.
 
 `cards.json` is `{ "cards": [ { "front": "…", "back": "…", "hint": "…", "tags": ["…"], "source": "Cours MAD ch. 1 p. 32" } ] }`,
-Markdown with LaTeX between `$…$` on both faces (`"$|A \\cup B| = |A| + |B| - |A \\cap B|$"`).
+Markdown with LaTeX between `$…$` on both faces (`"$|A \\cup B| = |A| + |B| - |A \\cap B|$"`); a face may also hold a
+Markdown table, a ```` ```mermaid ```` diagram (a small Hasse diagram, an automaton, a chart) or a ```` ```svg ```` drawing,
+which the web app renders.
 
 ## Making good cards
 
