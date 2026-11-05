@@ -81,6 +81,10 @@ HEIG_PUBLIC_URL=https://heig.example.org
 HEIG_TRUST_PROXY=1
 ```
 
+For courses published on GitHub (`npm run repos`, the `add_course_repo` tool), also set `HEIG_GITHUB_TOKEN`: a
+fine-grained token of the GitHub account that can read these repositories, with read-only access to their contents.
+The server's container fetches them with it; `git pull` of this folder keeps using the machine's own git account.
+
 ## 6. Check that GAPS and edu-ID accept the machine
 
 Before anything else: some hosting providers' addresses are refused, and then nothing else works.
@@ -195,6 +199,8 @@ HEIG_IMAGE_TAG=sha-1a2b3c4 npm run server:update
 | `EACCES` on `data/` or `.cache/` | They are not owned by uid 1000: `sudo chown -R 1000:1000 data .cache` |
 | `ENOENT … mkdir` when pushing the library | `HEIG_DOCUMENTS_DIR` / `HEIG_VIDEOS_DIR` of `.env` point outside the container: set `HEIG_LIBRARY_DIR` in `rag/.env` (section 8) or remove them |
 | 421 `unknown host` | `HEIG_PUBLIC_URL` does not match the address used by the client |
+| GitHub row of the status page: `could not fetch` | `HEIG_GITHUB_TOKEN` is missing, expired or not allowed to read that repository (private ones need it) |
+| GitHub row: `en attente de l'extraction` | PDFs of the repositories wait for docling, started by `npm run ingest` on the machine (or `docker compose -f rag/compose.yml --profile ingest up -d docling`) |
 
 ## Backups
 

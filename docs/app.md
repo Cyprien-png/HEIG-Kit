@@ -137,6 +137,7 @@ frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns 
 ## Status
 
 `/api/status` reports what the server can check without Docker access: database, embedding service, extraction
-service, render worker (last job), edu-ID session and Cyberlearn token, last syncs (`sync_runs`), ingestion (last run,
+service, render worker (last job), edu-ID session and Cyberlearn token, last syncs (`sync_runs`: GAPS, Cyberlearn, the
+Cyberlearn check, and the GitHub repositories the server indexes itself), ingestion (last run,
 documents changed on Cyberlearn but not indexed yet), and the last requests (`request_log`: route, status, tool,
 whether the token was refused). **Reconnect** runs the edu-ID login again, with a two-step code typed on the page.

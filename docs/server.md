@@ -103,6 +103,10 @@ with a refresh token (90 days); changing `HEIG_JWT_VERSION` revokes everything.
 
 - `render_document` and `render_animation` return a job id, followed with `get_job`; results are download links.
 - `open_generated` is replaced by `get_download_link`.
-- Repository tools are absent: use `npm run repos` and `npm run ingest` on the machine (`git` must be able to read them).
+- The GitHub repositories of courses (`add_course_repo`, `update_course_repos`, `npm run repos` from a computer with
+  `HEIG_REMOTE_URL`, the GitHub row of the status page) are fetched and indexed by the server itself, every sync and on
+  demand, with the token `HEIG_GITHUB_TOKEN` of `.env` (its container has no git account). Their PDFs and DOCX wait for
+  the extraction service, which the daily `npm run ingest` on the machine starts; code, Markdown and text are indexed at
+  once.
 - A PDF embedding a video shows its image, but its link points inside the worker: send the video link separately.
 - Skills of the Claude Code plugin call the local command line: on another computer, use the MCP tools.
