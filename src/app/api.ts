@@ -72,6 +72,9 @@ export interface HeigApi {
   searchNotes(query: string, course?: string): Promise<ProfileNote[]>;
   addNotes(notes: profile.NoteInput[]): Promise<ProfileNote[]>;
   resolveNote(id: number, resolved?: boolean): Promise<ProfileNote | undefined>;
+  /** The chapters of a course (of every course without one), the axes of the profile. */
+  chapters(course?: string): Promise<profile.Chapter[]>;
+  setChapters(course: string, chapters: profile.ChapterInput[]): Promise<profile.Chapter[]>;
 
   quizzes(course?: string): Promise<QuizSummary[]>;
   quiz(id: number): Promise<Quiz | undefined>;
@@ -229,6 +232,12 @@ export class LocalApi implements HeigApi {
   }
   async resolveNote(id: number, resolved = true) {
     return json(await profile.resolveNote(this.db, id, resolved));
+  }
+  chapters(course?: string) {
+    return profile.listChapters(this.db, course);
+  }
+  setChapters(course: string, chapters: profile.ChapterInput[]) {
+    return profile.setChapters(this.db, course, chapters);
   }
 
   async quizzes(course?: string) {
@@ -391,6 +400,12 @@ export class RemoteApi implements HeigApi {
   }
   async resolveNote(id: number, resolved = true) {
     return this.client.post<ProfileNote>(`/api/profile/notes/${id}/resolve`, { resolved }).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
+  }
+  async chapters(course?: string) {
+    return (await this.client.get<{ chapters: profile.Chapter[] }>(`/api/profile/chapters${qs({ course })}`)).chapters;
+  }
+  async setChapters(course: string, chapters: profile.ChapterInput[]) {
+    return (await this.client.put<{ chapters: profile.Chapter[] }>(`/api/profile/chapters/${encodeURIComponent(course)}`, { chapters })).chapters;
   }
 
   async quizzes(course?: string) {

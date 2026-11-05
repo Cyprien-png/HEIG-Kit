@@ -11,6 +11,8 @@ export type NoteKind = "weakness" | "strength" | "mistake" | "note";
 
 export interface NoteInput {
   course?: string;
+  /** Chapter of the course the topic belongs to (title or number of a course chapter). */
+  chapter?: string;
   topic: string;
   kind: NoteKind;
   text: string;
@@ -33,6 +35,7 @@ function row(r: Record<string, unknown>): ProfileNote {
   return {
     id: Number(r.id),
     course: (r.course as string | null) ?? undefined,
+    chapter: (r.chapter as string | null) ?? undefined,
     topic: r.topic as string,
     kind: r.kind as NoteKind,
     text: r.text as string,
@@ -63,9 +66,9 @@ export async function addNotes(db: Db, notes: NoteInput[]): Promise<ProfileNote[
   const out: ProfileNote[] = [];
   for (const [i, n] of notes.entries()) {
     const { rows } = await db.query(
-      `INSERT INTO profile_notes (course, topic, kind, text, severity, correction_id, exercise, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector) RETURNING *`,
-      [n.course ?? null, n.topic.trim(), n.kind, n.text.trim(), n.severity ?? 2, n.correctionId ?? null, n.exercise ?? null, embeddings[i]],
+      `INSERT INTO profile_notes (course, chapter, topic, kind, text, severity, correction_id, exercise, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector) RETURNING *`,
+      [n.course ?? null, n.chapter?.trim() || null, n.topic.trim(), n.kind, n.text.trim(), n.severity ?? 2, n.correctionId ?? null, n.exercise ?? null, embeddings[i]],
     );
     out.push(row(rows[0]));
   }
@@ -111,6 +114,109 @@ export async function searchNotes(db: Db, query: string, course?: string, limit 
   return rows.map(row);
 }
 
+// Chapters
+
+export interface ChapterInput {
+  title: string;
+  /** Topics of the chapter, as the notes name them. */
+  keywords?: string[];
+}
+
+export interface Chapter extends ChapterInput {
+  id: number;
+  course: string;
+  position: number;
+  keywords: string[];
+}
+
+/** The four states of a chapter: from the open notes filed under it, or none yet. */
+export type ChapterStatus = "mastered" | "fragile" | "struggling" | "unassessed";
+
+export interface ChapterSummary extends Chapter {
+  status: ChapterStatus;
+  /** Share of positive observations, 0 to 1 (0.5 when unassessed, for the drawing). */
+  level: number;
+  strengths: number;
+  weaknesses: number;
+  mistakes: number;
+  topics: string[];
+}
+
+export const CHAPTER_STATUSES: ChapterStatus[] = ["mastered", "fragile", "struggling", "unassessed"];
+
+export async function listChapters(db: Db, course?: string): Promise<Chapter[]> {
+  const { rows } = await db.query("SELECT * FROM course_chapters WHERE ($1::text IS NULL OR lower(course) = lower($1)) ORDER BY course, position", [course ?? null]);
+  return rows.map((r) => ({ id: Number(r.id), course: r.course as string, position: r.position as number, title: r.title as string, keywords: r.keywords as string[] }));
+}
+
+/** Replaces the chapters of a course, in the given order (an empty list removes them). */
+export async function setChapters(db: Db, course: string, chapters: ChapterInput[]): Promise<Chapter[]> {
+  const code = course.trim().toUpperCase();
+  if (!code) throw new Error("A course code is required");
+  const clean = chapters.map((c) => ({ title: c.title.trim(), keywords: [...new Set((c.keywords ?? []).map((k) => k.trim()).filter(Boolean))] })).filter((c) => c.title);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM course_chapters WHERE lower(course) = lower($1)", [code]);
+    for (const [i, c] of clean.entries()) await client.query("INSERT INTO course_chapters (course, position, title, keywords) VALUES ($1, $2, $3, $4)", [code, i + 1, c.title, c.keywords]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return listChapters(db, code);
+}
+
+const fold = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+/** The chapter a note belongs to: the one it names (title, number or start of the title), else the one whose keywords match its topic. */
+export function chapterOf(note: Pick<NoteInput, "chapter" | "topic">, chapters: Chapter[]): Chapter | undefined {
+  const named = note.chapter && fold(note.chapter);
+  if (named) {
+    const byName = chapters.find((c) => fold(c.title) === named || String(c.position) === named || fold(c.title).startsWith(named) || fold(c.title).replace(/^\d+[.:)\s-]*/, "") === named);
+    if (byName) return byName;
+  }
+  const topic = fold(note.topic);
+  return chapters.find((c) => c.keywords.some((k) => fold(k) === topic)) ?? chapters.find((c) => c.keywords.some((k) => topic.includes(fold(k)) || fold(k).includes(topic)));
+}
+
+/** The status of each chapter of a course from its open notes, severity-weighted; chapters without notes are unassessed. */
+export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[]): { chapters: ChapterSummary[]; unassigned: string[] } {
+  const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, topics: new Set<string>() }]));
+  const unassigned = new Set<string>();
+  for (const n of notes) {
+    if (n.kind === "note") continue;
+    const chapter = chapterOf(n, chapters);
+    if (!chapter) {
+      unassigned.add(n.topic);
+      continue;
+    }
+    const t = tally.get(chapter.id)!;
+    const weight = Math.max(1, n.severity ?? 2);
+    if (n.kind === "strength") {
+      t.pos += weight;
+      t.strengths++;
+    } else {
+      t.neg += weight;
+      if (n.kind === "weakness") t.weaknesses++;
+      else t.mistakes++;
+    }
+    t.topics.add(n.topic);
+  }
+  return {
+    chapters: chapters.map((c) => {
+      const t = tally.get(c.id)!;
+      const total = t.pos + t.neg;
+      const level = total === 0 ? 0.5 : t.pos / total;
+      const status: ChapterStatus = total === 0 ? "unassessed" : level >= 0.7 ? "mastered" : level >= 0.4 ? "fragile" : "struggling";
+      return { ...c, status, level, strengths: t.strengths, weaknesses: t.weaknesses, mistakes: t.mistakes, topics: [...t.topics] };
+    }),
+    unassigned: [...unassigned],
+  };
+}
+
 export interface TopicSummary {
   course: string | null;
   topic: string;
@@ -129,6 +235,10 @@ export interface ProfileSummary {
     strengths: TopicSummary[];
     mistakes: TopicSummary[];
     verdicts?: { corrections: number; correct: number; partial: number; wrong: number; missing: number };
+    /** The chapters of the course with their status; empty until they are set. */
+    chapters: ChapterSummary[];
+    /** Topics of open notes that no chapter claims. */
+    unassigned: string[];
   }[];
   /** Topics to revise first, across courses: weak topics and repeated mistakes, worst first. */
   toRevise: (TopicSummary & { score: number })[];
@@ -147,17 +257,28 @@ async function topics(db: Db, kind: NoteKind, course?: string): Promise<TopicSum
 }
 
 export async function profileSummary(db: Db, course?: string): Promise<ProfileSummary> {
-  const [weaknesses, strengths, mistakes, verdicts] = await Promise.all([topics(db, "weakness", course), topics(db, "strength", course), topics(db, "mistake", course), verdictStats(db, course)]);
-  const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? "")])].sort();
+  const [weaknesses, strengths, mistakes, verdicts, chapters, openNotes] = await Promise.all([
+    topics(db, "weakness", course),
+    topics(db, "strength", course),
+    topics(db, "mistake", course),
+    verdictStats(db, course),
+    listChapters(db, course),
+    listNotes(db, { course, limit: 5000 }),
+  ]);
+  const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? ""), ...chapters.map((c) => c.course)])].sort();
   const courses = courseKeys.map((key) => {
     const c = key || null;
     const v = verdicts.find((x) => (x.course ?? null) === c);
+    const own = chapters.filter((x) => x.course.toLowerCase() === (c ?? "").toLowerCase());
+    const perChapter = chapterSummaries(own, openNotes.filter((n) => (n.course ?? null)?.toLowerCase() === (c ?? "").toLowerCase() || (!n.course && c === null)));
     return {
       course: c,
       weaknesses: weaknesses.filter((t) => (t.course ?? null) === c),
       strengths: strengths.filter((t) => (t.course ?? null) === c),
       mistakes: mistakes.filter((t) => (t.course ?? null) === c),
       verdicts: v ? { corrections: v.corrections, correct: v.correct, partial: v.partial, wrong: v.wrong, missing: v.missing } : undefined,
+      chapters: perChapter.chapters,
+      unassigned: own.length > 0 ? perChapter.unassigned : [],
     };
   });
   const scored = new Map<string, TopicSummary & { score: number }>();
@@ -179,6 +300,13 @@ export function formatProfile(summary: ProfileSummary): string {
   for (const c of summary.courses) {
     lines.push(`## ${c.course ?? "General"}`);
     if (c.verdicts) lines.push(`Corrected exercises: ${c.verdicts.correct} correct, ${c.verdicts.partial} partial, ${c.verdicts.wrong} wrong, ${c.verdicts.missing} missing (${c.verdicts.corrections} corrections)`);
+    if (c.chapters.length > 0) {
+      lines.push("Chapters:");
+      for (const ch of c.chapters) lines.push(`- ${ch.position}. ${ch.title}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes)`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
+      if (c.unassigned.length > 0) lines.push(`- Topics under no chapter: ${c.unassigned.join(", ")} (add them to a chapter's keywords with set_course_chapters)`);
+    } else if (c.course) {
+      lines.push("Chapters: none set yet (set_course_chapters, from the unit sheet or the course page)");
+    }
     const block = (title: string, list: TopicSummary[]) => {
       if (list.length === 0) return;
       lines.push(`${title}:`);

@@ -70,6 +70,7 @@ const exerciseSchema = z.object({
 
 const noteSchema = z.object({
   course: z.string().optional().describe("Course code, e.g. MAD"),
+  chapter: z.string().optional().describe("Chapter of the course the topic belongs to (title or number from get_profile), so the chapter radar reflects it"),
   topic: z.string().describe("Short reusable topic, e.g. 'inclusion-exclusion'"),
   kind: z.enum(NOTE_KINDS),
   text: z.string().describe("The observation, one or two sentences"),
@@ -418,7 +419,8 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       title: "Student profile",
       description:
         "What the student does well and badly, per course and topic, from past corrections and notes: weaknesses, frequent " +
-        "mistakes, strengths and the topics to revise first. Use it before preparing revisions, exercises or a practice exam. " +
+        "mistakes, strengths, the status of each chapter of the course and the topics to revise first. Use it before preparing " +
+        "revisions, exercises or a practice exam. " +
         "With query, the notes closest in meaning.",
       inputSchema: { course: z.string().optional(), query: z.string().optional().describe("Find notes about a topic, e.g. 'cardinal et inclusion-exclusion'") },
       annotations: { readOnlyHint: true },
@@ -443,6 +445,26 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       inputSchema: { notes: z.array(noteSchema).min(1).max(50) },
     },
     async (a) => respond(async () => `${(await api.addNotes(a.notes)).length} notes recorded.`),
+  );
+
+  server.registerTool(
+    "set_course_chapters",
+    {
+      title: "Set the chapters of a course",
+      description:
+        "Replaces the chapters of a course, in order: the axes of the profile's radar, each chapter mastered, fragile, struggling or " +
+        "not assessed from the notes filed under it. Take them from the unit sheet (get_unit_sheet) or the course page " +
+        "(get_cyberlearn_course); give each chapter the topics its notes use as keywords, so existing notes land in it.",
+      inputSchema: {
+        course: z.string().describe("Course code, e.g. MAD"),
+        chapters: z.array(z.object({ title: z.string().describe("e.g. '3. Relations'"), keywords: z.array(z.string()).optional().describe("Topics of the chapter as the notes name them, e.g. 'relation d'ordre', 'diagramme de Hasse'") })).max(60),
+      },
+    },
+    async (a) =>
+      respond(async () => {
+        const chapters = await api.setChapters(a.course, a.chapters);
+        return chapters.length === 0 ? `Chapters of ${a.course.toUpperCase()} removed.` : `${chapters.length} chapters of ${chapters[0].course}:\n${chapters.map((c) => `${c.position}. ${c.title}${c.keywords.length ? ` (${c.keywords.join(", ")})` : ""}`).join("\n")}`;
+      }),
   );
 
   server.registerTool(
@@ -537,5 +559,5 @@ export const CORRECTION_METHOD = `Corrige mon travail photographié (correction 
 5. Pour chaque exercice non correct : dans feedback, montre précisément où est l'erreur (cite ma ligne fautive) et comment il fallait faire, étape par étape ; dans solution, la solution complète ; dans cause, la cause probable en quelques mots (confusion de notions, oubli d'un cas, erreur de calcul, lecture d'énoncé, méthode non maîtrisée…). Pour les exercices corrects, confirme en une phrase et signale une amélioration possible de rédaction s'il y en a.
 6. Donne à chaque exercice ses topics (thèmes courts et réutilisables, en français, p. ex. "inclusion-exclusion", "diagramme de Hasse").
 7. Appelle submit_correction avec le résumé (résultat global, points forts, LA chose à travailler), les exercices et to_revise.
-8. Enregistre dans mon profil (add_profile_notes, avec correctionId et exercise) : une note "mistake" par erreur (topic, cause, sévérité), une note "weakness" par thème non maîtrisé, une note "strength" par thème clairement maîtrisé. Si une faiblesse déjà notée est maintenant maîtrisée, résous-la (resolve_profile_note).
+8. Enregistre dans mon profil (add_profile_notes, avec correctionId, exercise et le chapitre du cours concerné, parmi ceux que donne get_profile ; s'il n'y a pas encore de chapitres pour ce cours, définis-les d'abord avec set_course_chapters depuis la fiche d'unité) : une note "mistake" par erreur (topic, cause, sévérité), une note "weakness" par thème non maîtrisé, une note "strength" par thème clairement maîtrisé. Si une faiblesse déjà notée est maintenant maîtrisée, résous-la (resolve_profile_note).
 9. Réponds-moi en deux niveaux : d'abord seulement la liste des exercices avec juste/partiel/faux (pour que je cherche mes erreurs moi-même), puis, séparé par un titre « Détails », la correction complète.`;

@@ -1,4 +1,4 @@
-import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, listNotes, profileSummary, resolveNote, searchNotes } from "../../app/profile.js";
+import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, listChapters, listNotes, profileSummary, resolveNote, searchNotes, setChapters } from "../../app/profile.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, intParam, readJson, stringField } from "./util.js";
@@ -12,6 +12,7 @@ export function noteFrom(value: unknown, index: number): NoteInput {
   if (severity !== 1 && severity !== 2 && severity !== 3) throw new HttpError(400, `note ${index + 1}: severity must be 1, 2 or 3`);
   return {
     course: stringField(body, "course", { optional: true, max: 40 }),
+    chapter: stringField(body, "chapter", { optional: true, max: 200 }),
     topic: stringField(body, "topic", { max: 200 })!,
     kind: kind as NoteKind,
     text: stringField(body, "text", { max: 2000 })!,
@@ -23,6 +24,22 @@ export function noteFrom(value: unknown, index: number): NoteInput {
 
 export function registerProfileRoutes(router: Router, app: App): void {
   router.get("/api/profile", async ({ url }) => profileSummary(app.db, url.searchParams.get("course") ?? undefined));
+
+  router.get("/api/profile/chapters", async ({ url }) => ({ chapters: await listChapters(app.db, url.searchParams.get("course") ?? undefined) }));
+
+  /** Replaces the chapters of a course: `{"chapters": [{"title", "keywords"?}]}` in order. */
+  router.put("/api/profile/chapters/:course", async ({ req, params }) => {
+    const body = await readJson(req);
+    if (!Array.isArray(body.chapters) || body.chapters.length > 60) throw new HttpError(400, "chapters must be a list of at most 60 chapters");
+    const chapters = body.chapters.map((c, i) => {
+      if (!c || typeof c !== "object") throw new HttpError(400, `chapter ${i + 1} must be an object`);
+      const item = c as Record<string, unknown>;
+      const keywords = item.keywords ?? [];
+      if (!Array.isArray(keywords) || keywords.some((k) => typeof k !== "string")) throw new HttpError(400, `chapter ${i + 1}: keywords must be a list of strings`);
+      return { title: stringField(item, "title", { max: 200 })!, keywords: keywords as string[] };
+    });
+    return { chapters: await setChapters(app.db, params.course, chapters) };
+  });
 
   router.get("/api/profile/notes", async ({ url }) => {
     const kind = url.searchParams.get("kind");

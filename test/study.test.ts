@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
-import { addNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes } from "../src/app/profile.js";
+import { type Chapter, addNotes, chapterOf, chapterSummaries, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
 
@@ -97,6 +97,31 @@ test("corrections: photos are checked, kept in order, then corrected with a vali
   assert.equal(await deleteCorrection(db!, c.id), true);
 });
 
+test("profile: chapters get one of four statuses from the notes they claim", () => {
+  const chapters: Chapter[] = [
+    { id: 1, course: "MAD", position: 1, title: "1. Ensembles", keywords: ["inclusion-exclusion", "cardinal"] },
+    { id: 2, course: "MAD", position: 2, title: "2. Relations", keywords: ["diagramme de Hasse"] },
+    { id: 3, course: "MAD", position: 3, title: "3. Fonctions", keywords: [] },
+  ];
+  assert.equal(chapterOf({ topic: "Cardinal", chapter: undefined }, chapters)?.position, 1);
+  assert.equal(chapterOf({ topic: "x", chapter: "relations" }, chapters)?.position, 2);
+  assert.equal(chapterOf({ topic: "x", chapter: "3" }, chapters)?.position, 3);
+  assert.equal(chapterOf({ topic: "récurrence" }, chapters), undefined);
+  const { chapters: out, unassigned } = chapterSummaries(chapters, [
+    { topic: "inclusion-exclusion", kind: "mistake", severity: 3 },
+    { topic: "cardinal", kind: "strength", severity: 1 },
+    { topic: "diagramme de Hasse", kind: "strength", severity: 2 },
+    { topic: "diagramme de Hasse", kind: "weakness", severity: 1 },
+    { topic: "récurrence", kind: "weakness", severity: 2 },
+    { topic: "méthode", kind: "note", severity: 2 },
+  ]);
+  assert.deepEqual(out.map((c) => c.status), ["struggling", "fragile", "unassessed"]);
+  assert.equal(out[0].mistakes, 1);
+  assert.equal(out[1].level, 2 / 3);
+  assert.equal(out[2].level, 0.5);
+  assert.deepEqual(unassigned, ["récurrence"]);
+});
+
 test("profile: notes aggregate into weaknesses, mistakes and topics to revise", { skip: !db && "no local database" }, async () => {
   const notes = await addNotes(db!, [
     { course: "MAD", topic: "inclusion-exclusion", kind: "mistake", text: "Oublie de retirer l'intersection", severity: 3 },
@@ -105,9 +130,13 @@ test("profile: notes aggregate into weaknesses, mistakes and topics to revise", 
     { course: "ANA1", topic: "limites", kind: "weakness", text: "Forme 0/0 mal reconnue", severity: 1 },
   ]);
   assert.equal(notes.length, 4);
+  await setChapters(db!, "mad", [{ title: "1. Ensembles", keywords: ["inclusion-exclusion"] }, { title: "2. Relations" }]);
   const summary = await profileSummary(db!);
   const mad = summary.courses.find((c) => c.course === "MAD")!;
   assert.equal(mad.mistakes[0].topic, "inclusion-exclusion");
+  assert.deepEqual(mad.chapters.map((c) => [c.course, c.status]), [["MAD", "struggling"], ["MAD", "unassessed"]]);
+  assert.deepEqual(mad.unassigned, ["diagramme de Hasse"]);
+  assert.match(formatProfile(summary), /1\. Ensembles: struggling/);
   assert.equal(mad.strengths.length, 1);
   assert.equal(summary.toRevise[0].topic, "inclusion-exclusion");
   assert.match(formatProfile(summary), /To revise first/);

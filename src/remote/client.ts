@@ -113,6 +113,9 @@ export class RemoteClient {
   post<T>(path: string, body?: unknown): Promise<T> {
     return this.json<T>("POST", path, body);
   }
+  put<T>(path: string, body?: unknown): Promise<T> {
+    return this.json<T>("PUT", path, body);
+  }
   patch<T>(path: string, body?: unknown): Promise<T> {
     return this.json<T>("PATCH", path, body);
   }

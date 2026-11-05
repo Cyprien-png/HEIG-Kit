@@ -16,6 +16,7 @@
  *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …]      names it while the student photographs
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
+ *                      | chapters [<COURSE>] [--file chapters.json]   (sets them: { "chapters": [ { "title": "…", "keywords": ["…"] } ] })
  *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -310,8 +311,18 @@ async function profile(api: HeigApi): Promise<void> {
     }
     case "resolve":
       return out((await api.resolveNote(Number(rest[0]))) ? "Note resolved." : "No such note.");
+    case "chapters": {
+      const course = rest[0] ?? values.course;
+      if (values.file) {
+        if (!course) throw new Error("Give the course: npm run profile -- chapters MAD --file chapters.json");
+        const list = readJsonFile<{ chapters?: unknown[] } | unknown[]>(values.file, "chapters");
+        return out(values.json ? await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never) : `${(await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never)).length} chapters set for ${course.toUpperCase()}.`);
+      }
+      const chapters = await api.chapters(course);
+      return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${c.position}. ${c.title}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}`).join("\n"));
+    }
     default:
-      throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve");
+      throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve | chapters");
   }
 }
 
