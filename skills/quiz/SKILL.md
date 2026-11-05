@@ -14,7 +14,8 @@ the MCP tools when available (`list_quizzes`, `create_quiz`, `start_quiz`, `answ
 
 1. Read the material first (`heig:teacher`: `kb -- search`, `kb -- document`, the chapter's exercises and the class
    quizzes when the course has some). Cover the chapters the user names, or those of the next exam.
-2. 10 to 25 statements, **about half true, half false**, in random order. False statements come from the real pitfalls
+2. As many statements as the material calls for (10 at least; a hundred or more when several chapters are covered: the user
+   decides the size, never shorten a quiz to fit a number), **about half true, half false**, in random order. False statements come from the real pitfalls
    of the course: a definition swapped with its neighbour, a value off by one, an inverted condition, a property
    attributed to the wrong layer or the wrong object. Never a trick on wording alone.
 3. Each statement is **one sentence that reads well aloud**: numbers and units in words when a voice would stumble
