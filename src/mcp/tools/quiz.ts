@@ -63,7 +63,8 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
       description:
         "Creates a true/false quiz from the course material (search it first): 10 to 25 statements, about half true and half false, " +
         "false ones built on the real pitfalls of the course (swapped definitions, off-by-one values, inverted conditions), each with " +
-        "an explanation and a source. Statements must read well aloud: spell units and symbols out, no LaTeX.",
+        "an explanation and a source. Statements must read well aloud: spell units and symbols out, no LaTeX; a quiz meant for the " +
+        "screen only may use LaTeX, a Markdown table or a small ```mermaid / ```svg figure in a statement.",
       inputSchema: {
         title: z.string(),
         course: z.string().optional().describe("Course code, e.g. RXI"),

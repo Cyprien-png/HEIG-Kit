@@ -48,6 +48,9 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Some courses keep their material on GitHub: add_course_repo indexes a repository (read with git: the user's account
   on this computer, the server's token on a remote server), update_course_repos refreshes it; it is then searched like
   any other course material.
+- Every text shown on the web app (cards, quiz statements, corrections) is Markdown: LaTeX between $…$, GFM tables,
+  \`\`\`mermaid diagrams and charts, \`\`\`svg drawings. Use them for anything visual: a Hasse diagram, an automaton, a graph,
+  a table of values, a sketch.
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).

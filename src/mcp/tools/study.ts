@@ -44,9 +44,12 @@ async function pickCalendar(api: HeigApi, ref: string | number | undefined): Pro
   return found;
 }
 
+/** What the web app renders in every Markdown field (cards, quiz statements, corrections). */
+export const RICH_MARKDOWN = "Markdown: LaTeX between $…$, GFM tables, ```mermaid diagrams and charts (graph, flowchart, xychart-beta, pie…), ```svg drawings (viewBox, currentColor or black strokes)";
+
 const cardSchema = z.object({
-  front: z.string().describe("Question or notion (Markdown, LaTeX between $…$)"),
-  back: z.string().describe("Answer (Markdown, LaTeX)"),
+  front: z.string().describe(`Question or notion (${RICH_MARKDOWN})`),
+  back: z.string().describe("Answer (same Markdown: a small diagram or table when the notion is visual)"),
   hint: z.string().optional(),
   tags: z.array(z.string()).optional(),
   source: z.string().optional().describe("Where it comes from, e.g. 'Cours MAD ch. 1 p. 32'"),
@@ -54,13 +57,13 @@ const cardSchema = z.object({
 
 const exerciseSchema = z.object({
   number: z.string().describe("As numbered on the sheet, e.g. '2' or '3b'"),
-  title: z.string().optional(),
-  statement: z.string().optional().describe("The statement, when known from the course material (Markdown, LaTeX)"),
-  answer: z.string().describe("The student's answer transcribed as written, mistakes included (Markdown, LaTeX)"),
+  title: z.string().optional().describe("Plain text, no Markdown"),
+  statement: z.string().optional().describe(`The statement, when known from the course material (${RICH_MARKDOWN})`),
+  answer: z.string().describe(`The student's answer transcribed as written, mistakes included; their tables as Markdown tables, their drawings, graphs and diagrams redrawn faithfully as \`\`\`svg or \`\`\`mermaid, mistakes included (${RICH_MARKDOWN})`),
   verdict: z.enum(VERDICTS),
   points: z.object({ obtained: z.number(), total: z.number() }).optional(),
-  feedback: z.string().describe("What is wrong and how it should have been done, step by step; 'Juste.' with a short confirmation when correct"),
-  solution: z.string().optional().describe("The complete correct solution"),
+  feedback: z.string().describe("What is wrong and how it should have been done, step by step; 'Juste.' with a short confirmation when correct (same Markdown)"),
+  solution: z.string().optional().describe("The complete correct solution, with the correct drawing, graph or table when the exercise has one (same Markdown)"),
   cause: z.string().optional().describe("Probable cause of the mistake, e.g. 'confusion entre ⊆ et ∈'"),
   topics: z.array(z.string()).describe("Course topics involved, short and reusable, e.g. 'inclusion-exclusion'"),
 });
@@ -528,7 +531,7 @@ export function registerStudyPrompts(server: McpServer): void {
 export const CORRECTION_METHOD = `Corrige mon travail photographié (correction {id}) toujours de la même manière :
 
 1. Lis la correction avec get_correction (les photos y sont). Si l'état est encore "capture", dis-moi d'envoyer les photos et attends.
-2. Pour chaque exercice visible, transcris EXACTEMENT ce que j'ai écrit (champ answer, Markdown et LaTeX), erreurs comprises, sans corriger en transcrivant. Si une partie est illisible, écris [illisible] et dis-le dans le feedback.
+2. Pour chaque exercice visible, transcris EXACTEMENT ce que j'ai écrit (champ answer, Markdown et LaTeX), erreurs comprises, sans corriger en transcrivant : mes tableaux en tableaux Markdown, mes dessins, graphes, diagrammes (Hasse, automates, courbes, schémas) redessinés fidèlement dans un bloc \`\`\`svg (viewBox, traits en currentColor) ou \`\`\`mermaid (graph, flowchart, xychart-beta…), avec mes erreurs. Si une partie est illisible, écris [illisible] et dis-le dans le feedback. La solution contient le dessin, le graphe ou le tableau correct quand l'exercice en a un.
 3. Retrouve l'énoncé et la solution de référence dans mes supports de cours (get_exercise, search_course_material) quand l'exercice vient du cours ; sinon résous-le toi-même en suivant la méthode du cours.
 4. Juge chaque exercice : correct (résultat et démarche justes), partial (démarche juste mais erreur de calcul, étape manquante ou justification insuffisante), wrong (méthode fausse ou résultat faux), missing (non traité).
 5. Pour chaque exercice non correct : dans feedback, montre précisément où est l'erreur (cite ma ligne fautive) et comment il fallait faire, étape par étape ; dans solution, la solution complète ; dans cause, la cause probable en quelques mots (confusion de notions, oubli d'un cas, erreur de calcul, lecture d'énoncé, méthode non maîtrisée…). Pour les exercices corrects, confirme en une phrase et signale une amélioration possible de rédaction s'il y en a.
