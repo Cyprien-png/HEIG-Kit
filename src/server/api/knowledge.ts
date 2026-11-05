@@ -3,7 +3,7 @@ import path from "node:path";
 import { LocalKnowledge } from "../../app/knowledge.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { CONTENT_TYPES, HttpError, intParam, sendFile } from "./util.js";
+import { CONTENT_TYPES, HttpError, intParam, readJson, sendFile, stringField } from "./util.js";
 
 const DOC_TYPES = new Set(["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"]);
 
@@ -45,6 +45,39 @@ export function registerKnowledgeRoutes(router: Router, app: App): void {
     if (!image) throw new HttpError(404, "no such figure");
     res.writeHead(200, { "Content-Type": "image/png", "Content-Length": image.length, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" });
     res.end(req.method === "HEAD" ? undefined : image);
+  });
+
+  /** The GitHub repositories the server indexes (RemoteRepos, the MCP tools of the server). */
+  router.get("/api/kb/repos", async () => ({ repos: await app.repos.list() }));
+
+  router.post("/api/kb/repos", async ({ req }) => {
+    const body = await readJson(req);
+    const exclude = body.exclude === undefined ? [] : body.exclude;
+    if (!Array.isArray(exclude) || exclude.some((f) => typeof f !== "string")) throw new HttpError(400, "exclude must be a list of folders");
+    try {
+      return { message: await app.repos.add(stringField(body, "url", { max: 500 })!, stringField(body, "course", { max: 40 })!, stringField(body, "branch", { optional: true, max: 200 }), exclude as string[]) };
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  router.delete("/api/kb/repos", async ({ url }) => {
+    const address = url.searchParams.get("url")?.trim();
+    if (!address) throw new HttpError(400, "missing url");
+    try {
+      return { message: await app.repos.remove(address) };
+    } catch (error) {
+      throw new HttpError(/not an indexed/.test(String(error)) ? 404 : 400, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  /** Fetches and indexes the repositories now; answers when done (minutes when much changed). */
+  router.post("/api/kb/repos/update", async () => {
+    try {
+      return { message: await app.repos.update() };
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : String(error));
+    }
   });
 
   /** The original document, shown in the browser (PDF) or downloaded (other types). */

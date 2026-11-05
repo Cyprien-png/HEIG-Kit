@@ -11,14 +11,22 @@ import { fetchContinuousGrades, fetchTranscript } from "../gaps/grades.js";
 import { fetchStudentRecord } from "../gaps/student.js";
 import type { Lesson } from "../gaps/client.js";
 import type { Db } from "../rag/db.js";
+import { ensureEmbeddingModel } from "../rag/embed.js";
+import { isDoclingAvailable, needsExtractor } from "../rag/extract.js";
+import { ingestSource } from "../rag/ingest.js";
 import { CyberlearnSource } from "../rag/sources/cyberlearn.js";
+import { GitHubSource, readCourseRepos } from "../rag/sources/github.js";
 import { CYBERLEARN_TOKEN_FILE, OVERDUE_WINDOW_DAYS, PENDING_MFA_FILE, SESSION_FILE, loginGaps, withCyberlearn } from "../services.js";
 import { scheduleCourses } from "../table.js";
 import { type SyncResult, deadlinesToEvents, lessonsToEvents, syncSourceEvents } from "./calendar.js";
 import { type CourseContents, lessonNotes } from "./lessons.js";
 import { latestSnapshot, saveSnapshot } from "./snapshots.js";
 
-export type RunKind = "gaps" | "cyberlearn" | "ingest-check";
+export type RunKind = "gaps" | "cyberlearn" | "ingest-check" | "github";
+export const RUN_KINDS: RunKind[] = ["gaps", "cyberlearn", "ingest-check", "github"];
+
+/** The advisory lock every ingestion takes, here and in `npm run ingest`: one at a time on the same database. */
+const INGEST_LOCK = 7310;
 
 export interface SyncRun {
   id: number;
@@ -78,7 +86,7 @@ export class Syncer {
     return this.running !== undefined;
   }
 
-  /** GAPS, then Cyberlearn, then the ingestion check; a run already going on is awaited instead. */
+  /** GAPS, then Cyberlearn, the ingestion check, then the GitHub repositories; a run already going on is awaited instead. */
   runAll(mfaCode?: string): Promise<void> {
     if (this.running) return this.running;
     this.running = (async () => {
@@ -86,6 +94,7 @@ export class Syncer {
         await this.run("gaps", () => this.gaps(mfaCode));
         await this.run("cyberlearn", () => this.cyberlearn(mfaCode));
         await this.run("ingest-check", () => this.ingestCheck());
+        await this.run("github", () => this.github());
       } finally {
         this.running = undefined;
       }
@@ -96,7 +105,13 @@ export class Syncer {
   /** One kind only, from the status page. */
   async runOne(kind: RunKind, mfaCode?: string): Promise<SyncRun> {
     if (this.running) await this.running;
-    const work = kind === "gaps" ? () => this.gaps(mfaCode) : kind === "cyberlearn" ? () => this.cyberlearn(mfaCode) : () => this.ingestCheck();
+    const works: Record<RunKind, () => Promise<Record<string, unknown>>> = {
+      gaps: () => this.gaps(mfaCode),
+      cyberlearn: () => this.cyberlearn(mfaCode),
+      "ingest-check": () => this.ingestCheck(),
+      github: () => this.github(),
+    };
+    const work = works[kind];
     let result!: SyncRun;
     this.running = this.run(kind, work).then((run) => {
       result = run;
@@ -199,6 +214,40 @@ export class Syncer {
     const removed = rows.filter((r) => !listed.has(r.external_id) && r.course_code && selected.includes(r.course_code)).length;
     const check: IngestCheck = { checkedAt: new Date(), added, changed, removed, indexed: rows.length, courses: selected, examples };
     return check as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Fetches the course repositories of data/github-repos.json and indexes what changed, here on the server: git reads
+   * them with HEIG_GITHUB_TOKEN. Documents that need the extraction service wait for it when it is off (the daily
+   * `npm run ingest` on the machine starts it); code, Markdown and text are indexed right away.
+   */
+  private async github(): Promise<Record<string, unknown>> {
+    const repos = await readCourseRepos();
+    const lock = await this.db.connect();
+    try {
+      if (!(await lock.query<{ ok: boolean }>(`SELECT pg_try_advisory_lock(${INGEST_LOCK}) AS ok`)).rows[0].ok) throw new Error("Another ingestion is already running");
+      try {
+        const source = new GitHubSource(repos, undefined, this.log);
+        const documents = await source.list();
+        if (repos.length > 0 && source.failed.length === repos.length) {
+          const [label, reason] = [...source.errors.entries()][0];
+          throw new Error(`could not fetch ${source.failed.join(", ")} (${label}: ${reason}); check the addresses and HEIG_GITHUB_TOKEN`);
+        }
+        const extractor = await isDoclingAvailable();
+        if (documents.length > 0) await ensureEmbeddingModel();
+        const stats = await ingestSource(this.db, "github", documents, {
+          // A repository that could not be fetched lists nothing: its documents must not be removed for that.
+          removalScope: source.failed.length > 0 ? [] : "all",
+          skip: extractor ? undefined : (doc) => (needsExtractor(doc.filename) ? "the extraction service is off" : undefined),
+          log: this.log,
+        });
+        return { repos: repos.length, ...stats, unreachable: source.failed, extractor };
+      } finally {
+        await lock.query(`SELECT pg_advisory_unlock(${INGEST_LOCK})`);
+      }
+    } finally {
+      lock.release();
+    }
   }
 }
 

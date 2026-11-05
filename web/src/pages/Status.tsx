@@ -7,7 +7,7 @@ import type { RequestEntry, StatusReport, SyncRun } from "../lib/types";
 
 const STATE_TONE = { up: "ok", down: "bad", warning: "warn", off: "neutral" } as const;
 const STATE_LABEL = { up: "actif", down: "arrêté", warning: "à vérifier", off: "inactif" } as const;
-const RUN_LABEL: Record<string, string> = { gaps: "GAPS (horaire, notes, plan)", cyberlearn: "Cyberlearn (cours, rendus)", "ingest-check": "Vérification Cyberlearn ↔ index" };
+const RUN_LABEL: Record<string, string> = { gaps: "GAPS (horaire, notes, plan)", cyberlearn: "Cyberlearn (cours, rendus)", "ingest-check": "Vérification Cyberlearn ↔ index", github: "GitHub (dépôts de cours)" };
 
 export function Status() {
   const status = useApi<StatusReport>("/api/status", [], { refreshMs: 20_000 });
@@ -95,7 +95,7 @@ export function Status() {
           <div className="grid md:grid-cols-2 gap-4">
             <Card title="Synchronisations" padded={false}>
               <ul className="divide-y divide-line">
-                {(["gaps", "cyberlearn", "ingest-check"] as const).map((kind) => {
+                {(["gaps", "cyberlearn", "ingest-check", "github"] as const).map((kind) => {
                   const run = s.syncs.find((r) => r.kind === kind);
                   return (
                     <li key={kind} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -168,5 +168,13 @@ function runSummary(run: SyncRun): string {
   if (run.kind === "gaps") return `${s.lessons ?? 0} leçons`;
   if (run.kind === "cyberlearn") return `${s.courses ?? 0} cours, ${s.deadlines ?? 0} rendus`;
   if (run.kind === "ingest-check") return `${s.indexed ?? 0} indexés`;
+  if (run.kind === "github") {
+    const parts = [`${s.repos ?? 0} dépôts`, `${s.indexed ?? 0} indexés`, `${s.unchanged ?? 0} inchangés`];
+    if (Number(s.removed) > 0) parts.push(`${s.removed} retirés`);
+    if (Number(s.failed) > 0) parts.push(`${s.failed} échecs`);
+    if (Number(s.skipped) > 0) parts.push(`${s.skipped} en attente de l'extraction`);
+    if (Array.isArray(s.unreachable) && s.unreachable.length > 0) parts.push(`injoignable : ${s.unreachable.join(", ")}`);
+    return parts.join(", ");
+  }
   return "";
 }

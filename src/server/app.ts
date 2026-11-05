@@ -1,4 +1,5 @@
 import type { Db } from "../rag/db.js";
+import { type CourseRepos, LocalRepos, describeGithubRun } from "../app/repos.js";
 import { RequestLog } from "../app/requests.js";
 import { Syncer } from "../app/sync.js";
 import { Auth, LoginLimiter } from "./auth.js";
@@ -14,8 +15,11 @@ export interface App {
   limiter: LoginLimiter;
   requests: RequestLog;
   syncer: Syncer;
+  /** The GitHub repositories the server indexes itself (sync run `github`). */
+  repos: CourseRepos;
 }
 
 export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, auth = new Auth(config)): App {
-  return { config, auth, db, queue, limiter: new LoginLimiter(), requests: new RequestLog(db), syncer: new Syncer(db, config.syncMinutes) };
+  const syncer = new Syncer(db, config.syncMinutes);
+  return { config, auth, db, queue, limiter: new LoginLimiter(), requests: new RequestLog(db), syncer, repos: new LocalRepos(async () => describeGithubRun(await syncer.runOne("github"))) };
 }

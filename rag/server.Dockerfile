@@ -9,6 +9,8 @@ COPY web/ ./
 RUN npm run build
 
 FROM node:22-bookworm-slim
+# git: the course repositories on GitHub are fetched (bare, shallow, never checked out) with HEIG_GITHUB_TOKEN.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund

@@ -1,10 +1,8 @@
 import { collectStatus } from "../../app/status.js";
-import { type RunKind, recentRuns } from "../../app/sync.js";
+import { RUN_KINDS, type RunKind, recentRuns } from "../../app/sync.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, readJson, stringField } from "./util.js";
-
-const RUN_KINDS: RunKind[] = ["gaps", "cyberlearn", "ingest-check"];
 
 export function registerStatusRoutes(router: Router, app: App): void {
   router.get("/api/status", async () => collectStatus({ db: app.db, requests: app.requests, queue: app.queue, jobsDir: app.config.jobsDir, syncing: app.syncer.busy }));

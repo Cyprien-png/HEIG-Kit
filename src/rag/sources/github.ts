@@ -62,7 +62,7 @@ function mirrorName(r: CourseRepo): string {
   return safeName(`${r.owner}__${r.repo}__${r.branch ?? "HEAD"}`);
 }
 
-function repoLabel(r: CourseRepo): string {
+export function repoLabel(r: CourseRepo): string {
   return `${r.owner}/${r.repo}${r.branch ? `@${r.branch}` : ""}${r.folder ? `/${r.folder}` : ""}`;
 }
 
@@ -83,13 +83,29 @@ export function codeToMarkdown(file: string, code: string): string {
   return `# ${file}\n\n${fence}${language}\n${code.replace(/\n+$/, "")}\n${fence}\n`;
 }
 
+/**
+ * How git authenticates to GitHub: with HEIG_GITHUB_TOKEN when set (a token of the account reading the course
+ * repositories, the only way on the remote server, whose container has no git account), through the environment so
+ * that the token shows in no command line; otherwise with the computer's own git account (credential helper, keychain).
+ */
+export function gitAuthEnv(token = process.env.HEIG_GITHUB_TOKEN): NodeJS.ProcessEnv {
+  // A missing authentication fails instead of waiting for a password nobody types during an unattended update.
+  const env: NodeJS.ProcessEnv = { GIT_TERMINAL_PROMPT: "0" };
+  const secret = token?.trim();
+  if (secret) {
+    env.GIT_CONFIG_COUNT = "1";
+    env.GIT_CONFIG_KEY_0 = "http.https://github.com/.extraheader";
+    env.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${Buffer.from(`x-access-token:${secret}`).toString("base64")}`;
+  }
+  return env;
+}
+
 async function git(mirror: string, args: string[]): Promise<Buffer> {
   const { stdout } = await run("git", ["-C", mirror, ...args], {
     encoding: "buffer",
     maxBuffer: MAX_BYTES * 2,
     timeout: 5 * 60_000,
-    // A missing authentication fails instead of waiting for a password nobody types during the daily update.
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: { ...process.env, ...gitAuthEnv() },
   });
   return stdout;
 }
@@ -103,6 +119,8 @@ export class GitHubSource implements Source {
   readonly name = "github";
   /** Repositories the last `list()` could not fetch: their documents must not be taken as removed. */
   failed: string[] = [];
+  /** Why, per repository label. */
+  readonly errors = new Map<string, string>();
 
   constructor(
     private readonly repos: CourseRepo[],
@@ -112,13 +130,16 @@ export class GitHubSource implements Source {
 
   async list(): Promise<SourceDocument[]> {
     this.failed = [];
+    this.errors.clear();
     const documents: SourceDocument[] = [];
     for (const repo of this.repos) {
       try {
         documents.push(...(await this.repoDocuments(repo)));
       } catch (error) {
         const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
+        const reason = (stderr || (error instanceof Error ? error.message : String(error))).split("\n").at(-1) ?? "";
         this.failed.push(repoLabel(repo));
+        this.errors.set(repoLabel(repo), reason);
         this.log(`${repoLabel(repo)}: FAILED, ${stderr || (error instanceof Error ? error.message : error)}`);
       }
     }

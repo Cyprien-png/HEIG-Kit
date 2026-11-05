@@ -17,6 +17,7 @@ import { DATA_DIR } from "../paths.js";
 import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
 import { captureUrl } from "../app/corrections.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
+import { type CourseRepos, RemoteRepos } from "../app/repos.js";
 import { migrate, openDb } from "../rag/db.js";
 import { RemoteClient } from "../remote/client.js";
 import { createApp } from "../server/app.js";
@@ -29,7 +30,7 @@ import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerLibraryTools } from "./tools/library.js";
 import { registerOutputTools } from "./tools/output.js";
 import { registerRemoteOutputTools } from "./tools/remote.js";
-import { registerRepoTools } from "./tools/repos.js";
+import { localRepos, registerRepoTools } from "./tools/repos.js";
 import { registerQuizTools } from "./tools/quiz.js";
 import { registerStudyPrompts, registerStudyTools } from "./tools/study.js";
 
@@ -44,8 +45,9 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - As a teacher, answer directly and completely, grounded in the course material (search_course_material, get_exercise,
   get_document; course material is mostly in French), following the course's notation, with concrete examples, and cite
   the documents (title, course, pages, link). Say when something does not come from the course.
-- Some courses keep their material on GitHub: add_course_repo indexes a repository with the user's local git account,
-  update_course_repos refreshes it; it is then searched like any other course material.
+- Some courses keep their material on GitHub: add_course_repo indexes a repository (read with git: the user's account
+  on this computer, the server's token on a remote server), update_course_repos refreshes it; it is then searched like
+  any other course material.
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).
@@ -56,13 +58,15 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
   corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
   the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;
 
-const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace(/- Some courses keep[\s\S]*?course material\.\n/, "").replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
+const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
 - This server is remote: render_document and render_animation queue a job, followed with get_job, which gives download
   links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
 
 /** How the server exposes files and rendering: on this computer by default. */
 let registerOutputs: (server: McpServer) => void = registerOutputTools;
 let instructions = INSTRUCTIONS;
+/** Where the GitHub repositories of courses are listed and indexed: here, on the remote server, or the server itself. */
+let repos: { store: CourseRepos; where: "this computer" | "the server" } = { store: localRepos(), where: "this computer" };
 
 async function buildServer(): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
@@ -73,8 +77,7 @@ async function buildServer(): Promise<McpServer> {
   registerQuizTools(server, study);
   registerLibraryTools(server, study);
   registerStudyPrompts(server);
-  // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
-  if (registerOutputs === registerOutputTools) registerRepoTools(server);
+  registerRepoTools(server, repos.store, repos.where);
 
   server.registerPrompt(
     "teacher",
@@ -133,6 +136,7 @@ const remote = await RemoteClient.fromEnv().catch((error: unknown) => {
 });
 let knowledge: KnowledgeBase = remote ? new RemoteKnowledge(remote) : new LocalKnowledge(db);
 let study: HeigApi = remote ? new RemoteApi(remote) : new LocalApi(db);
+if (remote) repos = { store: new RemoteRepos(remote), where: "the server" };
 // The study tables, for a stand-alone computer; a database that is down only disables the knowledge and study tools.
 if (!remote) await migrate(db).catch(() => undefined);
 const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, server: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
@@ -148,6 +152,7 @@ if (values.server) {
   knowledge = new LocalKnowledge(db);
   study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
   if (config.syncMinutes > 0) app.syncer.start();
+  repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;
   registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
   createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));

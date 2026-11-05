@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { GitHubSource, addCourseRepo, codeToMarkdown, isIndexable, parseRepoUrl, readCourseRepos, removeCourseRepo } from "../src/rag/sources/github.js";
+import { LocalRepos, describeGithubRun } from "../src/app/repos.js";
+import { GitHubSource, addCourseRepo, codeToMarkdown, gitAuthEnv, isIndexable, parseRepoUrl, readCourseRepos, removeCourseRepo } from "../src/rag/sources/github.js";
 
 const dir = mkdtempSync(path.join(tmpdir(), "heig-github-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -44,6 +45,33 @@ test("the repository list adds, replaces and removes", async () => {
   await removeCourseRepo("heig/prg1", file);
   assert.deepEqual(await readCourseRepos(file), []);
   await assert.rejects(removeCourseRepo("heig/prg1", file), /not an indexed/);
+});
+
+test("gitAuthEnv passes the token to git through the environment, for github.com only", () => {
+  assert.deepEqual(gitAuthEnv(""), { GIT_TERMINAL_PROMPT: "0" });
+  assert.deepEqual(gitAuthEnv(undefined), { GIT_TERMINAL_PROMPT: "0" });
+  const env = gitAuthEnv(" ghp_secret ");
+  assert.equal(env.GIT_CONFIG_COUNT, "1");
+  assert.equal(env.GIT_CONFIG_KEY_0, "http.https://github.com/.extraheader");
+  assert.equal(env.GIT_CONFIG_VALUE_0, `Authorization: Basic ${Buffer.from("x-access-token:ghp_secret").toString("base64")}`);
+});
+
+test("LocalRepos manages a list and delegates the update; describeGithubRun sums up a run", async () => {
+  const file = path.join(dir, "local-repos.json");
+  let updates = 0;
+  const repos = new LocalRepos(async () => `updated ${++updates}`, file);
+  assert.match(await repos.add("heig/prg1", "PRG"), /added to PRG/);
+  assert.deepEqual(await repos.list(), [{ owner: "heig", repo: "prg1", course: "PRG" }]);
+  assert.equal(await repos.update(), "updated 1");
+  assert.match(await repos.remove("heig/prg1"), /1 repository removed/);
+  assert.deepEqual(await repos.list(), []);
+
+  const run = { id: 1, kind: "github" as const, startedAt: new Date(), ok: true, stats: { repos: 2, listed: 10, indexed: 3, chunks: 12, unchanged: 6, removed: 0, failed: 0, skipped: 1, unreachable: ["a/b"] } };
+  const text = describeGithubRun(run);
+  assert.match(text, /2 repositories, 10 documents listed, 3 indexed \(12 chunks\), 6 unchanged/);
+  assert.match(text, /1 PDF\/DOCX left/);
+  assert.match(text, /Could not fetch a\/b/);
+  assert.throws(() => describeGithubRun({ ...run, ok: false, message: "could not fetch a/b" }), /could not fetch/);
 });
 
 test("GitHubSource follows the updates of a repository and reports failures", async () => {

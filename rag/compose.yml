@@ -82,6 +82,9 @@ services:
       HEIG_JOBS_DIR: /jobs
       RAG_DATABASE_URL: postgres://heigkit:heigkit@db:5432/heigkit
       RAG_OLLAMA_URL: http://embedder:11434
+      # The extraction service, when `npm run ingest` on the machine has it running: the server then indexes the PDFs
+      # of the GitHub repositories too (otherwise they wait for the daily indexing).
+      RAG_DOCLING_URL: http://docling:5001
     volumes:
       - ../.env:/app/.env:ro
       - ../data:/app/data

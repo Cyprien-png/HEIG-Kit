@@ -19,6 +19,8 @@ export interface IngestStats {
   linked: number;
   removed: number;
   failed: number;
+  /** Left for a later run (see `IngestOptions.skip`); still listed, so not taken as removed. */
+  skipped: number;
   chunks: number;
   /** Bytes of the documents processed (not the unchanged ones), and the time it took. */
   bytes: number;
@@ -35,6 +37,8 @@ export interface IngestOptions {
   dryRun?: boolean;
   /** Starts the extraction service again when a document made it run out of memory. */
   restartExtractor?: () => Promise<void>;
+  /** Documents to leave for a later run, with the reason (e.g. the extraction service is off). */
+  skip?: (doc: SourceDocument) => string | undefined;
   log?: (line: string) => void;
 }
 
@@ -51,7 +55,7 @@ interface Existing {
  */
 export async function ingestSource(db: Db, source: string, documents: SourceDocument[], options: IngestOptions): Promise<IngestStats> {
   const log = options.log ?? (() => {});
-  const stats: IngestStats = { listed: documents.length, unchanged: 0, indexed: 0, linked: 0, removed: 0, failed: 0, chunks: 0, bytes: 0, ms: 0 };
+  const stats: IngestStats = { listed: documents.length, unchanged: 0, indexed: 0, linked: 0, removed: 0, failed: 0, skipped: 0, chunks: 0, bytes: 0, ms: 0 };
   const existing = new Map(
     (
       await db.query<Existing>(
@@ -86,6 +90,12 @@ export async function ingestSource(db: Db, source: string, documents: SourceDocu
 
     let loaded: number | undefined;
     try {
+      const reason = options.skip?.(doc);
+      if (reason) {
+        stats.skipped++;
+        log(`${label}: left for later, ${reason}`);
+        continue;
+      }
       const bytes = await doc.load();
       loaded = bytes.length;
       if (!path.isAbsolute(doc.localPath)) {
