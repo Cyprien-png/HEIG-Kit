@@ -200,6 +200,26 @@ body {
 .prose-kit img {
   @apply max-w-full rounded;
 }
+.prose-kit svg {
+  @apply max-w-full h-auto;
+}
+/* A drawing (```svg): on paper, whatever the theme, so black strokes and currentColor both show. */
+.prose-kit figure.drawing {
+  @apply my-2 mx-auto w-fit max-w-full rounded-lg border border-line bg-white p-2 text-[#1c1a17] overflow-x-auto;
+}
+.prose-kit figure.drawing svg {
+  @apply block mx-auto;
+}
+/* A diagram or chart (```mermaid), drawn in the theme's colours once mounted. */
+.prose-kit figure.mermaid {
+  @apply my-2 overflow-x-auto;
+}
+.prose-kit figure.mermaid svg {
+  @apply mx-auto;
+}
+.prose-kit figure.mermaid-error .mermaid-message {
+  @apply text-xs text-bad mt-1;
+}
 /* Figures of an extracted course page, and the raw text of a formula the extraction could not read. */
 .prose-kit.doc-page img {
   @apply block my-2 mx-auto max-h-[28rem] border border-line bg-white;
