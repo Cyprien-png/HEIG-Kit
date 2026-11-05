@@ -1,19 +1,28 @@
-import { CheckIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { type FormEvent, useState } from "react";
+import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Badge, Button, Card, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Segmented, Select, Stat, Textarea, cx } from "../components/ui";
+import { LevelRadar } from "../components/Radar";
+import { Badge, Button, Card, Disclosure, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Segmented, Select, Stat, Textarea, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { dateTime, relative } from "../lib/format";
-import type { ProfileNote, ProfileSummary, TopicSummary } from "../lib/types";
+import type { ChapterStatus, ChapterSummary, ProfileNote, ProfileSummary, TopicSummary } from "../lib/types";
 
 const KIND_LABEL = { weakness: "faiblesse", strength: "point fort", mistake: "erreur", note: "note" } as const;
 const KIND_TONE = { weakness: "warn", strength: "ok", mistake: "bad", note: "info" } as const;
+/** The four states of a chapter. */
+const STATUS: Record<ChapterStatus, { label: string; tone: "ok" | "warn" | "bad" | "neutral" }> = {
+  mastered: { label: "maîtrisé", tone: "ok" },
+  fragile: { label: "fragile", tone: "warn" },
+  struggling: { label: "en difficulté", tone: "bad" },
+  unassessed: { label: "non évalué", tone: "neutral" },
+};
 
 export function Profile() {
   const summary = useApi<ProfileSummary>("/api/profile");
   const [tab, setTab] = useState<"summary" | "notes">("summary");
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string>();
   const s = summary.data;
   const totals = s?.courses.reduce((acc, c) => ({ correct: acc.correct + (c.verdicts?.correct ?? 0), total: acc.total + (c.verdicts ? c.verdicts.correct + c.verdicts.partial + c.verdicts.wrong + c.verdicts.missing : 0) }), { correct: 0, total: 0 });
 
@@ -58,26 +67,121 @@ export function Profile() {
 
           <div className="grid lg:grid-cols-2 gap-4">
             {s.courses.map((c) => (
-              <Card key={c.course ?? "-"} title={<span className="flex items-center gap-2">{c.course ? <CourseChip code={c.course} /> : "Général"}{c.verdicts && <span className="text-xs font-normal text-ink-2 tabular-nums">{c.verdicts.correct} justes · {c.verdicts.partial} partiels · {c.verdicts.wrong + c.verdicts.missing} faux ({c.verdicts.corrections} correction{c.verdicts.corrections > 1 ? "s" : ""})</span>}</span>}>
-                {c.verdicts && (
-                  <div className="h-2 rounded-full overflow-hidden flex bg-surface-2 mb-4">
-                    {(["correct", "partial", "wrong"] as const).map((k) => {
-                      const total = c.verdicts!.correct + c.verdicts!.partial + c.verdicts!.wrong + c.verdicts!.missing;
-                      const n = k === "wrong" ? c.verdicts!.wrong + c.verdicts!.missing : c.verdicts![k];
-                      return <div key={k} className={cx(k === "correct" ? "bg-ok" : k === "partial" ? "bg-warn" : "bg-bad")} style={{ width: `${(n / total) * 100}%` }} />;
-                    })}
-                  </div>
-                )}
-                <TopicList title="Erreurs fréquentes" tone="bad" list={c.mistakes} />
-                <TopicList title="Faiblesses" tone="warn" list={c.weaknesses} />
-                <TopicList title="Points forts" tone="ok" list={c.strengths} />
-              </Card>
+              <CourseCard key={c.course ?? "-"} c={c} onEdit={() => setEditing(c.course ?? "")} />
             ))}
           </div>
         </>
       )}
       {adding && <NoteEditor onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void summary.reload(); setTab("notes"); }} />}
+      {editing && <ChapterEditor course={editing} chapters={s?.courses.find((c) => c.course === editing)?.chapters ?? []} onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); void summary.reload(); }} />}
     </div>
+  );
+}
+
+/** A course of the profile: its chapters on a radar with their status, then the topics behind them. */
+function CourseCard({ c, onEdit }: { c: ProfileSummary["courses"][number]; onEdit: () => void }) {
+  const total = c.verdicts ? c.verdicts.correct + c.verdicts.partial + c.verdicts.wrong + c.verdicts.missing : 0;
+  const assessed = c.chapters.filter((ch) => ch.status !== "unassessed").length;
+  return (
+    <Card
+      title={<span className="flex items-center gap-2 min-w-0">{c.course ? <CourseChip code={c.course} /> : "Général"}{c.verdicts && <span className="text-xs font-normal text-ink-2 tabular-nums truncate">{c.verdicts.correct} justes · {c.verdicts.partial} partiels · {c.verdicts.wrong + c.verdicts.missing} faux</span>}</span>}
+      actions={c.course ? <IconButton label="Chapitres" onClick={onEdit}><PencilSquareIcon className="h-4 w-4" /></IconButton> : undefined}
+    >
+      {c.verdicts && total > 0 && (
+        <div className="h-1.5 rounded-full overflow-hidden flex bg-surface-2 mb-4">
+          {(["correct", "partial", "wrong"] as const).map((k) => {
+            const n = k === "wrong" ? c.verdicts!.wrong + c.verdicts!.missing : c.verdicts![k];
+            return <div key={k} className={cx(k === "correct" ? "bg-ok" : k === "partial" ? "bg-warn" : "bg-bad")} style={{ width: `${(n / total) * 100}%` }} />;
+          })}
+        </div>
+      )}
+      {c.chapters.length === 0 ? (
+        c.course && (
+          <div className="rounded-lg border border-dashed border-line px-3 py-3 text-sm text-ink-2 flex items-center justify-between gap-3 mb-4">
+            <span>Pas encore de chapitres : définissez-les pour voir votre niveau chapitre par chapitre.</span>
+            <Button size="sm" variant="secondary" onClick={onEdit}>Définir</Button>
+          </div>
+        )
+      ) : (
+        <div className="mb-4">
+          {c.chapters.length >= 3 && (
+            <LevelRadar axes={c.chapters.map((ch) => ({ label: String(ch.position), value: ch.level, tone: STATUS[ch.status].tone, muted: ch.status === "unassessed" }))} label={`Niveau par chapitre, ${c.course}`} />
+          )}
+          <ul className="divide-y divide-line">
+            {c.chapters.map((ch) => (
+              <ChapterRow key={ch.id} ch={ch} />
+            ))}
+          </ul>
+          <p className="text-[11px] text-ink-3 mt-2">{assessed} chapitre{assessed > 1 ? "s" : ""} évalué{assessed > 1 ? "s" : ""} sur {c.chapters.length}.{c.unassigned.length > 0 && <> Sans chapitre : {c.unassigned.join(", ")}.</>}</p>
+        </div>
+      )}
+      {c.mistakes.length + c.weaknesses.length + c.strengths.length > 0 && (
+        <Disclosure level={2} className="-mx-4 -mb-4 border-t" title={<span className="text-ink-2 font-normal">Thèmes</span>} aside={<span className="text-xs text-ink-3 tabular-nums">{c.mistakes.length + c.weaknesses.length + c.strengths.length}</span>}>
+          <div className="px-4 py-3">
+            <TopicList title="Erreurs fréquentes" tone="bad" list={c.mistakes} />
+            <TopicList title="Faiblesses" tone="warn" list={c.weaknesses} />
+            <TopicList title="Points forts" tone="ok" list={c.strengths} />
+          </div>
+        </Disclosure>
+      )}
+    </Card>
+  );
+}
+
+function ChapterRow({ ch }: { ch: ChapterSummary }) {
+  const st = STATUS[ch.status];
+  const counts = [ch.strengths && `${ch.strengths} fort${ch.strengths > 1 ? "s" : ""}`, ch.weaknesses && `${ch.weaknesses} faible${ch.weaknesses > 1 ? "s" : ""}`, ch.mistakes && `${ch.mistakes} erreur${ch.mistakes > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+  return (
+    <li className="flex items-center gap-3 py-2 text-sm">
+      <span className="font-mono text-xs text-ink-3 tabular-nums w-5 shrink-0 text-right">{ch.position}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate">{ch.title.replace(/^\d+[.:)\s-]+/, "")}</span>
+        {(counts || ch.topics.length > 0) && <span className="block text-[11px] text-ink-3 truncate">{[counts, ch.topics.join(", ")].filter(Boolean).join(" · ")}</span>}
+      </span>
+      {ch.status !== "unassessed" && <span className={cx("font-mono text-xs tabular-nums shrink-0", st.tone === "ok" ? "text-ok" : st.tone === "warn" ? "text-warn" : "text-bad")}>{Math.round(ch.level * 100)} %</span>}
+      <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
+    </li>
+  );
+}
+
+/** The chapters of a course, one per line: « Titre | mot-clé, mot-clé », prefilled from the course's documents when empty. */
+function ChapterEditor({ course, chapters, onClose, onSaved }: { course: string; chapters: ChapterSummary[]; onClose: () => void; onSaved: () => void }) {
+  const [text, setText] = useState(chapters.map((c) => `${c.title}${c.keywords.length ? ` | ${c.keywords.join(", ")}` : ""}`).join("\n"));
+  const [busy, setBusy] = useState(false);
+  const docs = useApi<{ documents: { chapter: string | null }[] }>(chapters.length === 0 ? `/api/kb/courses/${encodeURIComponent(course)}/documents` : null, [course]);
+  useEffect(() => {
+    if (chapters.length > 0 || !docs.data) return;
+    const seen = [...new Set(docs.data.documents.map((d) => d.chapter).filter((c): c is string => Boolean(c)))];
+    if (seen.length > 0) setText(seen.join("\n"));
+  }, [docs.data, chapters.length]);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const list = text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+      const [title, keywords = ""] = l.split("|");
+      return { title: title.trim(), keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean) };
+    });
+    try {
+      await api(`/api/profile/chapters/${encodeURIComponent(course)}`, { method: "PUT", json: { chapters: list } });
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Chapitres de ${course}`}>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-ink-2">Un chapitre par ligne, dans l'ordre du cours. Après « | », les thèmes qu'il couvre, séparés par des virgules : les observations portant ces thèmes comptent pour ce chapitre.</p>
+        <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder={"1. Ensembles | cardinal, inclusion-exclusion\n2. Relations | relation d'ordre, diagramme de Hasse"} className="font-mono text-[13px]" />
+        <div className="flex justify-between items-center gap-2">
+          <span className="text-xs text-ink-3">{chapters.length === 0 && docs.data ? "Pré-rempli avec les chapitres des documents du cours." : ""}</span>
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
+            <Button type="submit" variant="primary" disabled={busy}>Enregistrer</Button>
+          </div>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -135,6 +239,7 @@ function Notes({ onChanged }: { onChanged: () => void }) {
                     <CourseChip code={n.course} />
                     <Badge tone={KIND_TONE[n.kind]}>{KIND_LABEL[n.kind]}</Badge>
                     <span className="font-medium text-sm">{n.topic}</span>
+                    {n.chapter && <span className="text-xs text-ink-3">· {n.chapter}</span>}
                     {n.severity === 3 && <Badge tone="bad">sévérité 3</Badge>}
                     {n.correctionId && <Link to={`/corrections/${n.correctionId}`} className="text-xs text-accent">correction{n.exercise ? ` ex. ${n.exercise}` : ""}</Link>}
                   </div>
@@ -155,6 +260,7 @@ function Notes({ onChanged }: { onChanged: () => void }) {
 function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [course, setCourse] = useState("");
   const [topic, setTopic] = useState("");
+  const [chapter, setChapter] = useState("");
   const [kind, setKind] = useState<keyof typeof KIND_LABEL>("note");
   const [text, setText] = useState("");
   const [severity, setSeverity] = useState(2);
@@ -162,7 +268,7 @@ function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    await api("/api/profile/notes", { method: "POST", json: { notes: [{ course: course || undefined, topic, kind, text, severity }] } });
+    await api("/api/profile/notes", { method: "POST", json: { notes: [{ course: course || undefined, chapter: chapter || undefined, topic, kind, text, severity }] } });
     onSaved();
   };
   return (
@@ -183,7 +289,10 @@ function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </Select>
           </Field>
         </div>
-        <Field label="Thème"><Input value={topic} onChange={(e) => setTopic(e.target.value)} required placeholder="inclusion-exclusion" /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Thème"><Input value={topic} onChange={(e) => setTopic(e.target.value)} required placeholder="inclusion-exclusion" /></Field>
+          <Field label="Chapitre"><Input value={chapter} onChange={(e) => setChapter(e.target.value)} placeholder="1. Ensembles" /></Field>
+        </div>
         <Field label="Observation"><Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} required placeholder="Je confonds ⊆ et ∈ quand…" /></Field>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>

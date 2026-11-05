@@ -258,6 +258,7 @@ export interface Correction {
 export interface ProfileNote {
   id: number;
   course?: string;
+  chapter?: string;
   topic: string;
   kind: "weakness" | "strength" | "mistake" | "note";
   text: string;
@@ -277,6 +278,25 @@ export interface TopicSummary {
   examples: string[];
 }
 
+export type ChapterStatus = "mastered" | "fragile" | "struggling" | "unassessed";
+
+export interface Chapter {
+  id: number;
+  course: string;
+  position: number;
+  title: string;
+  keywords: string[];
+}
+
+export interface ChapterSummary extends Chapter {
+  status: ChapterStatus;
+  level: number;
+  strengths: number;
+  weaknesses: number;
+  mistakes: number;
+  topics: string[];
+}
+
 export interface ProfileSummary {
   courses: {
     course: string | null;
@@ -284,6 +304,8 @@ export interface ProfileSummary {
     strengths: TopicSummary[];
     mistakes: TopicSummary[];
     verdicts?: { corrections: number; correct: number; partial: number; wrong: number; missing: number };
+    chapters: ChapterSummary[];
+    unassigned: string[];
   }[];
   toRevise: (TopicSummary & { score: number })[];
   openNotes: number;
