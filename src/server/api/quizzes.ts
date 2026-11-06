@@ -16,6 +16,7 @@ function questionFrom(value: unknown, index: number): QuestionInput {
     explanation: stringField(body, "explanation", { optional: true, max: 2000 }),
     source: stringField(body, "source", { optional: true, max: 300 }),
     topic: stringField(body, "topic", { optional: true, max: 100 }),
+    chapter: stringField(body, "chapter", { optional: true, max: 200 }),
   };
 }
 

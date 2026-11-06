@@ -113,7 +113,9 @@ and returns the next question, the last one returns the result as lines to read)
 terminal. An attempt may shuffle the questions (the « Mélanger » switch of the Quiz page, `shuffle` of `start_quiz`,
 `--shuffle` of `play`): the order is kept with the attempt (`question_order`) and the questions are numbered in that order.
 Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
-and source; an attempt stopped early counts the rest as wrong.
+and source; an attempt stopped early counts the rest as wrong. Each question may name its `chapter`: the last finished
+attempt of every quiz then counts in the profile, one point for or against the chapter per answer (a question without
+a chapter is filed by its topic, by the chapter number of its source, or by a chapter keyword in its statement).
 
 ## Corrections
 
@@ -136,7 +138,8 @@ a course in order (set by the agent from the unit sheet with `set_course_chapter
 the topics it covers as keywords. The profile page shows, per course, a radar with one axis per chapter and the
 chapter's status, one of four: **maîtrisé** (70 % or more of the severity-weighted observations are strengths),
 **fragile** (40 to 70 %), **en difficulté** (below) or **non évalué** (no observation yet). A note counts for the chapter
-it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». Setting the
+it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». The last
+attempt of each quiz of the course counts too, one point per answer (see Quizzes). Setting the
 chapters also writes its chapter on each existing note without one (`POST /api/profile/chapters/:course/file` with
 `{"all": true}` refiles every note; `PATCH /api/profile/notes/:id` moves a single note). Below the radar:
 weak and strong topics, frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a

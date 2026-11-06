@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
-import { type Chapter, addNotes, chapterOf, chapterSummaries, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
+import { type Chapter, addNotes, chapterOf, chapterOfAnswer, chapterSummaries, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
 
@@ -120,6 +120,16 @@ test("profile: chapters get one of four statuses from the notes they claim", () 
   assert.equal(out[1].level, 2 / 3);
   assert.equal(out[2].level, 0.5);
   assert.deepEqual(unassigned, ["récurrence"]);
+  // Quiz answers count one point each: by the question's chapter, topic, source number or a keyword in the statement.
+  const { chapters: withQuiz } = chapterSummaries(chapters, [], [
+    { chapter: "3", statement: "Une fonction injective…", correct: true },
+    { topic: "diagramme de Hasse", statement: "…", correct: false },
+    { statement: "…", source: "Cours MAD ch. 2 p. 53", correct: false },
+    { statement: "Le cardinal de A union B vaut…", correct: true },
+    { statement: "Rien de connu", correct: true },
+  ]);
+  assert.deepEqual(withQuiz.map((c) => [c.quizCorrect, c.quizWrong, c.status]), [[1, 0, "mastered"], [0, 2, "struggling"], [1, 0, "mastered"]]);
+  assert.equal(chapterOfAnswer({ statement: "Les cardinaux…" }, chapters), undefined);
 });
 
 test("profile: notes aggregate into weaknesses, mistakes and topics to revise", { skip: !db && "no local database" }, async () => {

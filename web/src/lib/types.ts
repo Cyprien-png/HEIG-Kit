@@ -294,6 +294,8 @@ export interface ChapterSummary extends Chapter {
   strengths: number;
   weaknesses: number;
   mistakes: number;
+  quizCorrect: number;
+  quizWrong: number;
   topics: string[];
 }
 
@@ -366,6 +368,7 @@ export interface QuizQuestion {
   explanation?: string;
   source?: string;
   topic?: string;
+  chapter?: string;
 }
 
 export interface QuizAttempt {

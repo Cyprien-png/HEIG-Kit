@@ -6,6 +6,7 @@ import type { Db } from "../rag/db.js";
 import { toVector } from "../rag/db.js";
 import { embed } from "../rag/embed.js";
 import { verdictStats } from "./corrections.js";
+import { type QuizAnswer, latestQuizAnswers } from "./quizzes.js";
 
 export type NoteKind = "weakness" | "strength" | "mistake" | "note";
 
@@ -153,6 +154,9 @@ export interface ChapterSummary extends Chapter {
   strengths: number;
   weaknesses: number;
   mistakes: number;
+  /** Answers of the last attempt of each quiz that fell in this chapter. */
+  quizCorrect: number;
+  quizWrong: number;
   topics: string[];
 }
 
@@ -231,10 +235,46 @@ export function chapterOf(note: Pick<NoteInput, "chapter" | "topic">, chapters: 
 /** "3. Fonctions" when the title already starts with its number, else built from the position. */
 export const chapterLabel = (c: Pick<Chapter, "position" | "title">) => (/^\d+[.:)\s-]/.test(c.title) ? c.title : `${c.position}. ${c.title}`);
 
-/** The status of each chapter of a course from its open notes, severity-weighted; chapters without notes are unassessed. */
-export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[]): { chapters: ChapterSummary[]; unassigned: string[] } {
-  const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, topics: new Set<string>() }]));
+/**
+ * The chapter a quiz question belongs to: the one it names, the one a keyword names exactly as its topic, the one its
+ * source numbers (« Cours MAD ch. 2 p. 53 »), the one a keyword of which is part of its topic, else the one whose keyword
+ * appears as a word in the statement.
+ */
+export function chapterOfAnswer(answer: Pick<QuizAnswer, "chapter" | "topic" | "statement" | "source">, chapters: Chapter[]): Chapter | undefined {
+  const named = answer.chapter ? chapterNamed(answer.chapter, chapters) : undefined;
+  if (named) return named;
+  const topic = answer.topic ? fold(answer.topic) : "";
+  const exact = topic ? chapters.find((c) => c.keywords.some((k) => fold(k) === topic)) : undefined;
+  if (exact) return exact;
+  const numbered = answer.source && /\b(?:ch(?:ap(?:itre)?)?\.?|chapter)\s*(\d+)/i.exec(answer.source);
+  const byNumber = numbered ? chapters.find((c) => c.position === Number(numbered[1])) : undefined;
+  if (byNumber) return byNumber;
+  const byTopic = topic ? chapterOf({ topic }, chapters) : undefined;
+  if (byTopic) return byTopic;
+  const words = (text: string) => ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const statement = words(answer.statement);
+  return chapters.find((c) => c.keywords.some((k) => statement.includes(words(k))));
+}
+
+/**
+ * The status of each chapter of a course from its open notes, severity-weighted, and from the last attempt of each quiz
+ * (one point for or against the chapter per answer); chapters without any are unassessed.
+ */
+export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[], answers: Pick<QuizAnswer, "chapter" | "topic" | "statement" | "source" | "correct">[] = []): { chapters: ChapterSummary[]; unassigned: string[] } {
+  const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, quizCorrect: 0, quizWrong: 0, topics: new Set<string>() }]));
   const unassigned = new Set<string>();
+  for (const a of answers) {
+    const chapter = chapterOfAnswer(a, chapters);
+    if (!chapter) continue;
+    const t = tally.get(chapter.id)!;
+    if (a.correct) {
+      t.pos += 1;
+      t.quizCorrect++;
+    } else {
+      t.neg += 1;
+      t.quizWrong++;
+    }
+  }
   for (const n of notes) {
     if (n.kind === "note") continue;
     const chapter = chapterOf(n, chapters);
@@ -260,7 +300,7 @@ export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "ch
       const total = t.pos + t.neg;
       const level = total === 0 ? 0.5 : t.pos / total;
       const status: ChapterStatus = total === 0 ? "unassessed" : level >= 0.7 ? "mastered" : level >= 0.4 ? "fragile" : "struggling";
-      return { ...c, status, level, strengths: t.strengths, weaknesses: t.weaknesses, mistakes: t.mistakes, topics: [...t.topics] };
+      return { ...c, status, level, strengths: t.strengths, weaknesses: t.weaknesses, mistakes: t.mistakes, quizCorrect: t.quizCorrect, quizWrong: t.quizWrong, topics: [...t.topics] };
     }),
     unassigned: [...unassigned],
   };
@@ -306,20 +346,25 @@ async function topics(db: Db, kind: NoteKind, course?: string): Promise<TopicSum
 }
 
 export async function profileSummary(db: Db, course?: string): Promise<ProfileSummary> {
-  const [weaknesses, strengths, mistakes, verdicts, chapters, openNotes] = await Promise.all([
+  const [weaknesses, strengths, mistakes, verdicts, chapters, openNotes, answers] = await Promise.all([
     topics(db, "weakness", course),
     topics(db, "strength", course),
     topics(db, "mistake", course),
     verdictStats(db, course),
     listChapters(db, course),
     listNotes(db, { course, limit: 5000 }),
+    latestQuizAnswers(db, course),
   ]);
   const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? ""), ...chapters.map((c) => c.course)])].sort();
   const courses = courseKeys.map((key) => {
     const c = key || null;
     const v = verdicts.find((x) => (x.course ?? null) === c);
     const own = chapters.filter((x) => x.course.toLowerCase() === (c ?? "").toLowerCase());
-    const perChapter = chapterSummaries(own, openNotes.filter((n) => (n.course ?? null)?.toLowerCase() === (c ?? "").toLowerCase() || (!n.course && c === null)));
+    const perChapter = chapterSummaries(
+      own,
+      openNotes.filter((n) => (n.course ?? null)?.toLowerCase() === (c ?? "").toLowerCase() || (!n.course && c === null)),
+      answers.filter((a) => a.course?.toLowerCase() === (c ?? "").toLowerCase()),
+    );
     return {
       course: c,
       weaknesses: weaknesses.filter((t) => (t.course ?? null) === c),
@@ -351,7 +396,7 @@ export function formatProfile(summary: ProfileSummary): string {
     if (c.verdicts) lines.push(`Corrected exercises: ${c.verdicts.correct} correct, ${c.verdicts.partial} partial, ${c.verdicts.wrong} wrong, ${c.verdicts.missing} missing (${c.verdicts.corrections} corrections)`);
     if (c.chapters.length > 0) {
       lines.push("Chapters:");
-      for (const ch of c.chapters) lines.push(`- ${chapterLabel(ch)}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes)`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
+      for (const ch of c.chapters) lines.push(`- ${chapterLabel(ch)}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes${ch.quizCorrect + ch.quizWrong > 0 ? `, quiz ${ch.quizCorrect}/${ch.quizCorrect + ch.quizWrong}` : ""})`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
       if (c.unassigned.length > 0) lines.push(`- Topics under no chapter: ${c.unassigned.join(", ")} (add them to a chapter's keywords with set_course_chapters)`);
     } else if (c.course) {
       lines.push("Chapters: none set yet (set_course_chapters, from the unit sheet or the course page)");

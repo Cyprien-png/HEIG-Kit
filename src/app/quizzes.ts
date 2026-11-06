@@ -28,6 +28,8 @@ export interface QuestionInput {
   explanation?: string;
   source?: string;
   topic?: string;
+  /** Chapter of the course (title or number), so the answer counts in the profile's chapter status. */
+  chapter?: string;
 }
 
 export interface Question extends QuestionInput {
@@ -94,6 +96,7 @@ const toQuestion = (r: Record<string, unknown>): Question => ({
   explanation: (r.explanation as string | null) ?? undefined,
   source: (r.source as string | null) ?? undefined,
   topic: (r.topic as string | null) ?? undefined,
+  chapter: (r.chapter as string | null) ?? undefined,
 });
 
 const toAttempt = (r: Record<string, unknown>): Attempt => ({
@@ -134,7 +137,7 @@ function checkQuestion(q: QuestionInput, index: number): QuestionInput {
   const statement = q.statement?.trim();
   if (!statement || statement.length > 1000) throw new Error(`question ${index + 1}: statement must be 1 to 1000 characters`);
   if (typeof q.answer !== "boolean") throw new Error(`question ${index + 1}: answer must be true or false`);
-  return { statement, answer: q.answer, explanation: q.explanation?.trim() || undefined, source: q.source?.trim() || undefined, topic: q.topic?.trim() || undefined };
+  return { statement, answer: q.answer, explanation: q.explanation?.trim() || undefined, source: q.source?.trim() || undefined, topic: q.topic?.trim() || undefined, chapter: q.chapter?.trim() || undefined };
 }
 
 export async function createQuiz(db: Db, input: { title: string; course?: string; description?: string }, questions: QuestionInput[]): Promise<QuizSummary & { questionList: Question[] }> {
@@ -144,9 +147,42 @@ export async function createQuiz(db: Db, input: { title: string; course?: string
   const { rows } = await db.query("INSERT INTO quizzes (title, course, description) VALUES ($1, $2, $3) RETURNING id", [input.title.trim(), input.course?.trim() || null, input.description?.trim() || null]);
   const id = Number(rows[0].id);
   for (const [i, q] of checked.entries()) {
-    await db.query("INSERT INTO quiz_questions (quiz_id, position, statement, answer, explanation, source, topic) VALUES ($1, $2, $3, $4, $5, $6, $7)", [id, i + 1, q.statement, q.answer, q.explanation ?? null, q.source ?? null, q.topic ?? null]);
+    await db.query("INSERT INTO quiz_questions (quiz_id, position, statement, answer, explanation, source, topic, chapter) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [id, i + 1, q.statement, q.answer, q.explanation ?? null, q.source ?? null, q.topic ?? null, q.chapter ?? null]);
   }
   return (await getQuiz(db, id))!;
+}
+
+/** An answer of the last finished attempt of a quiz, with what the question says about its chapter: the profile's input. */
+export interface QuizAnswer {
+  course?: string;
+  quizId: number;
+  chapter?: string;
+  topic?: string;
+  statement: string;
+  source?: string;
+  correct: boolean;
+}
+
+/** The answers of the last finished attempt of every quiz (of a course), so that retaking a quiz replaces its weight in the profile. */
+export async function latestQuizAnswers(db: Db, course?: string): Promise<QuizAnswer[]> {
+  const { rows } = await db.query(
+    `SELECT z.course, z.id AS quiz_id, q.chapter, q.topic, q.statement, q.source, x.correct
+     FROM quizzes z
+     JOIN LATERAL (SELECT id FROM quiz_attempts a WHERE a.quiz_id = z.id AND a.finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1) l ON true
+     JOIN quiz_answers x ON x.attempt_id = l.id
+     JOIN quiz_questions q ON q.id = x.question_id
+     WHERE $1::text IS NULL OR lower(z.course) = lower($1)`,
+    [course ?? null],
+  );
+  return rows.map((r) => ({
+    course: (r.course as string | null) ?? undefined,
+    quizId: Number(r.quiz_id),
+    chapter: (r.chapter as string | null) ?? undefined,
+    topic: (r.topic as string | null) ?? undefined,
+    statement: r.statement as string,
+    source: (r.source as string | null) ?? undefined,
+    correct: Boolean(r.correct),
+  }));
 }
 
 export async function deleteQuiz(db: Db, id: number): Promise<boolean> {

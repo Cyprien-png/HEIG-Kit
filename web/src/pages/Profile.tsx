@@ -130,7 +130,8 @@ function CourseCard({ c, onEdit }: { c: ProfileSummary["courses"][number]; onEdi
 
 function ChapterRow({ ch }: { ch: ChapterSummary }) {
   const st = STATUS[ch.status];
-  const counts = [ch.strengths && `${ch.strengths} fort${ch.strengths > 1 ? "s" : ""}`, ch.weaknesses && `${ch.weaknesses} faible${ch.weaknesses > 1 ? "s" : ""}`, ch.mistakes && `${ch.mistakes} erreur${ch.mistakes > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+  const quiz = ch.quizCorrect + ch.quizWrong;
+  const counts = [ch.strengths && `${ch.strengths} fort${ch.strengths > 1 ? "s" : ""}`, ch.weaknesses && `${ch.weaknesses} faible${ch.weaknesses > 1 ? "s" : ""}`, ch.mistakes && `${ch.mistakes} erreur${ch.mistakes > 1 ? "s" : ""}`, quiz && `quiz ${ch.quizCorrect}/${quiz}`].filter(Boolean).join(" · ");
   return (
     <li className="flex items-center gap-3 py-2 text-sm">
       <span className="font-mono text-xs text-ink-3 tabular-nums w-5 shrink-0 text-right">{ch.position}</span>

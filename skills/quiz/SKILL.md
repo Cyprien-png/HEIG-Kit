@@ -24,9 +24,11 @@ the MCP tools when available (`list_quizzes`, `create_quiz`, `start_quiz`, `answ
    must not. Each has an `explanation` (why, with the course's words, two sentences at most) and a `source`
    (document, chapter, page).
 4. `topic`: short and reusable, the same words as the flashcards and the profile (« trame Ethernet », « relation
-   d'ordre »), so mistakes can later feed the profile.
+   d'ordre »). `chapter`: the chapter of the course as the profile names it (`profile -- chapters RXI`, or
+   `get_profile`; define them first with `heig:profile` if the course has none): the last attempt of the quiz then
+   counts in the profile, one point for or against the chapter per answer.
 5. JSON for the command line:
-   `{"title": "RXI · Réseaux locaux", "course": "RXI", "description": "Chapitre 4", "questions": [{"statement": "…", "answer": false, "explanation": "…", "source": "Cours RXI ch. 4 p. 7", "topic": "trame Ethernet"}]}`
+   `{"title": "RXI · Réseaux locaux", "course": "RXI", "description": "Chapitre 4", "questions": [{"statement": "…", "answer": false, "explanation": "…", "source": "Cours RXI ch. 4 p. 7", "topic": "trame Ethernet", "chapter": "4. Réseaux locaux"}]}`
 
 ## Running it aloud (voice mode, or any chat)
 

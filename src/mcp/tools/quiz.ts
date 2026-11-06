@@ -14,6 +14,7 @@ const questionSchema = z.object({
   explanation: z.string().optional().describe("Why, in one or two sentences, with the course's words"),
   source: z.string().optional().describe("e.g. 'Cours RXI ch. 4 p. 12'"),
   topic: z.string().optional().describe("Short reusable topic, e.g. 'trame Ethernet'"),
+  chapter: z.string().optional().describe("Chapter of the course as set_course_chapters names it (title or number, e.g. '2. Relations' or '2'): the answer then counts in the profile's chapter status"),
 });
 
 const VOICE_RULES =
