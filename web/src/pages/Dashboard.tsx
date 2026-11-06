@@ -45,12 +45,18 @@ export function semesterCourses(plan: PlanUnit[] | undefined, now = new Date()):
   return followed.filter((u) => u.year === year && u.credits.some((c) => c.period === period && c.credits > 0)).map((u) => u.unit.code);
 }
 
-/** Strengths and weaknesses per course on a common scale: counts weighted by severity, relative to the largest. */
+/**
+ * Strengths and weaknesses per course on a common scale, relative to the largest: the profile notes weighted by
+ * severity (strengths for, weaknesses and mistakes against) plus the quiz answers counted in the chapters (one point
+ * each, right or wrong), the same tally as the chapter statuses of the Profile page.
+ */
 export function radarAxes(courses: string[], profile: ProfileSummary | undefined): RadarAxis[] {
   const weight = (list: { count: number; severity: number }[]) => list.reduce((s, t) => s + t.count * Math.max(1, t.severity), 0);
   const raw = courses.map((code) => {
     const c = profile?.courses.find((x) => x.course?.toUpperCase() === code.toUpperCase());
-    return { label: code, strong: c ? weight(c.strengths) : 0, weak: c ? weight([...c.weaknesses, ...c.mistakes]) : 0 };
+    const quizRight = c?.chapters.reduce((s, ch) => s + ch.quizCorrect, 0) ?? 0;
+    const quizWrong = c?.chapters.reduce((s, ch) => s + ch.quizWrong, 0) ?? 0;
+    return { label: code, strong: c ? weight(c.strengths) + quizRight : 0, weak: c ? weight([...c.weaknesses, ...c.mistakes]) + quizWrong : 0 };
   });
   const max = Math.max(1, ...raw.flatMap((a) => [a.strong, a.weak]));
   return raw.map((a) => ({ label: a.label, strong: a.strong / max, weak: a.weak / max }));
@@ -111,10 +117,10 @@ export function Dashboard() {
                 <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-ok" /> points forts</span>
                 <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-bad" /> points faibles</span>
               </div>
-              {!hasProfile && <p className="text-xs text-ink-3 text-center mt-2">Encore vide : faites corriger vos exercices pour le remplir.</p>}
+              {!hasProfile && <p className="text-xs text-ink-3 text-center mt-2">Encore vide : faites un quiz ou faites corriger vos exercices pour le remplir.</p>}
             </Link>
           ) : (
-            <Empty title="Pas encore de profil" hint="Faites corriger vos exercices : chaque correction note vos points forts et vos erreurs par cours." action={<Link to="/profile"><Button size="sm">Profil</Button></Link>} />
+            <Empty title="Pas encore de profil" hint="Faites un quiz ou faites corriger vos exercices : chaque réponse compte pour ou contre un chapitre du cours." action={<Link to="/profile"><Button size="sm">Profil</Button></Link>} />
           )}
         </Card>
 
