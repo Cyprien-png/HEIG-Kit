@@ -183,6 +183,9 @@ export function chapterOf(note: Pick<NoteInput, "chapter" | "topic">, chapters: 
 }
 
 /** The status of each chapter of a course from its open notes, severity-weighted; chapters without notes are unassessed. */
+/** "3. Fonctions" when the title already starts with its number, else "3. Fonctions" built from the position. */
+export const chapterLabel = (c: Pick<Chapter, "position" | "title">) => (/^\d+[.:)\s-]/.test(c.title) ? c.title : `${c.position}. ${c.title}`);
+
 export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[]): { chapters: ChapterSummary[]; unassigned: string[] } {
   const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, topics: new Set<string>() }]));
   const unassigned = new Set<string>();
@@ -302,7 +305,7 @@ export function formatProfile(summary: ProfileSummary): string {
     if (c.verdicts) lines.push(`Corrected exercises: ${c.verdicts.correct} correct, ${c.verdicts.partial} partial, ${c.verdicts.wrong} wrong, ${c.verdicts.missing} missing (${c.verdicts.corrections} corrections)`);
     if (c.chapters.length > 0) {
       lines.push("Chapters:");
-      for (const ch of c.chapters) lines.push(`- ${ch.position}. ${ch.title}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes)`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
+      for (const ch of c.chapters) lines.push(`- ${chapterLabel(ch)}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes)`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
       if (c.unassigned.length > 0) lines.push(`- Topics under no chapter: ${c.unassigned.join(", ")} (add them to a chapter's keywords with set_course_chapters)`);
     } else if (c.course) {
       lines.push("Chapters: none set yet (set_course_chapters, from the unit sheet or the course page)");

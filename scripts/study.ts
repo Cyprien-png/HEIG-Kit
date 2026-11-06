@@ -25,7 +25,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import QRCode from "qrcode";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
-import { formatProfile } from "../src/app/profile.js";
+import { chapterLabel, formatProfile } from "../src/app/profile.js";
 import { TIME_ZONE } from "../src/dates.js";
 import { migrate, openDb } from "../src/rag/db.js";
 import { RemoteClient } from "../src/remote/client.js";
@@ -319,7 +319,7 @@ async function profile(api: HeigApi): Promise<void> {
         return out(values.json ? await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never) : `${(await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never)).length} chapters set for ${course.toUpperCase()}.`);
       }
       const chapters = await api.chapters(course);
-      return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${c.position}. ${c.title}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}`).join("\n"));
+      return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${chapterLabel(c)}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}`).join("\n"));
     }
     default:
       throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve | chapters");
