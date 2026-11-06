@@ -14,6 +14,8 @@ export interface NoteInput {
   course?: string;
   /** Chapter of the course the topic belongs to (title or number of a course chapter). */
   chapter?: string;
+  /** Section of that chapter (title or number), when known. */
+  section?: string;
   topic: string;
   kind: NoteKind;
   text: string;
@@ -37,6 +39,7 @@ function row(r: Record<string, unknown>): ProfileNote {
     id: Number(r.id),
     course: (r.course as string | null) ?? undefined,
     chapter: (r.chapter as string | null) ?? undefined,
+    section: (r.section as string | null) ?? undefined,
     topic: r.topic as string,
     kind: r.kind as NoteKind,
     text: r.text as string,
@@ -67,9 +70,9 @@ export async function addNotes(db: Db, notes: NoteInput[]): Promise<ProfileNote[
   const out: ProfileNote[] = [];
   for (const [i, n] of notes.entries()) {
     const { rows } = await db.query(
-      `INSERT INTO profile_notes (course, chapter, topic, kind, text, severity, correction_id, exercise, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector) RETURNING *`,
-      [n.course ?? null, n.chapter?.trim() || null, n.topic.trim(), n.kind, n.text.trim(), n.severity ?? 2, n.correctionId ?? null, n.exercise ?? null, embeddings[i]],
+      `INSERT INTO profile_notes (course, chapter, section, topic, kind, text, severity, correction_id, exercise, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector) RETURNING *`,
+      [n.course ?? null, n.chapter?.trim() || null, n.section?.trim() || null, n.topic.trim(), n.kind, n.text.trim(), n.severity ?? 2, n.correctionId ?? null, n.exercise ?? null, embeddings[i]],
     );
     out.push(row(rows[0]));
   }
@@ -92,16 +95,20 @@ export async function resolveNote(db: Db, id: number, resolved = true): Promise<
   return rows[0] ? row(rows[0]) : undefined;
 }
 
-/** Changes the chapter (its title, its number or null to clear it) or the topic of a note. */
-export async function updateNote(db: Db, id: number, patch: { chapter?: string | null; topic?: string }): Promise<ProfileNote | undefined> {
+/** Changes the chapter, the section (title or number, null to clear) or the topic of a note. */
+export async function updateNote(db: Db, id: number, patch: { chapter?: string | null; section?: string | null; topic?: string }): Promise<ProfileNote | undefined> {
   if (patch.topic !== undefined && !patch.topic.trim()) throw new Error("topic cannot be empty");
-  const current = (await db.query("SELECT course FROM profile_notes WHERE id = $1", [id])).rows[0] as { course: string | null } | undefined;
+  const current = (await db.query("SELECT course, chapter FROM profile_notes WHERE id = $1", [id])).rows[0] as { course: string | null; chapter: string | null } | undefined;
   if (!current) return undefined;
-  let chapter = patch.chapter?.trim() || null;
-  if (chapter && current.course) chapter = chapterNamed(chapter, await listChapters(db, current.course))?.title ?? chapter;
+  const chapters = current.course ? await listChapters(db, current.course) : [];
+  let chapter = patch.chapter === undefined ? current.chapter : patch.chapter?.trim() || null;
+  const named = chapter ? chapterNamed(chapter, chapters) : undefined;
+  if (named) chapter = named.title;
+  let section = patch.section?.trim() || null;
+  if (section && named) section = sectionNamed(section, named)?.title ?? section;
   const { rows } = await db.query(
-    "UPDATE profile_notes SET chapter = CASE WHEN $2 THEN $3 ELSE chapter END, topic = COALESCE($4, topic) WHERE id = $1 RETURNING *",
-    [id, patch.chapter !== undefined, chapter, patch.topic?.trim() ?? null],
+    `UPDATE profile_notes SET chapter = $2, section = CASE WHEN $3 THEN $4 ELSE section END, topic = COALESCE($5, topic) WHERE id = $1 RETURNING *`,
+    [id, chapter, patch.section !== undefined || patch.chapter !== undefined, section, patch.topic?.trim() ?? null],
   );
   return rows[0] ? row(rows[0]) : undefined;
 }
@@ -131,10 +138,24 @@ export async function searchNotes(db: Db, query: string, course?: string, limit 
 
 // Chapters
 
+export interface SectionInput {
+  title: string;
+  /** Topics of the section, as the notes name them. */
+  keywords?: string[];
+}
+
+export interface Section extends SectionInput {
+  /** 1-based, within the chapter. */
+  position: number;
+  keywords: string[];
+}
+
 export interface ChapterInput {
   title: string;
   /** Topics of the chapter, as the notes name them. */
   keywords?: string[];
+  /** Its sub-chapters, in order. */
+  sections?: SectionInput[];
 }
 
 export interface Chapter extends ChapterInput {
@@ -142,41 +163,66 @@ export interface Chapter extends ChapterInput {
   course: string;
   position: number;
   keywords: string[];
+  sections: Section[];
 }
 
 /** The four states of a chapter: from the open notes filed under it, or none yet. */
 export type ChapterStatus = "mastered" | "fragile" | "struggling" | "unassessed";
 
-export interface ChapterSummary extends Chapter {
+/** What the notes and quiz answers filed under a chapter or a section say about it. */
+export interface Assessment {
   status: ChapterStatus;
   /** Share of positive observations, 0 to 1 (0.5 when unassessed, for the drawing). */
   level: number;
   strengths: number;
   weaknesses: number;
   mistakes: number;
-  /** Answers of the last attempt of each quiz that fell in this chapter. */
+  /** Answers of the last attempt of each quiz that fell here. */
   quizCorrect: number;
   quizWrong: number;
   topics: string[];
+}
+
+export interface SectionSummary extends Section, Assessment {}
+
+export interface ChapterSummary extends Chapter, Assessment {
+  sections: SectionSummary[];
+  /** Topics of the chapter's notes that fell in no section. */
+  unsectioned: string[];
 }
 
 export const CHAPTER_STATUSES: ChapterStatus[] = ["mastered", "fragile", "struggling", "unassessed"];
 
 export async function listChapters(db: Db, course?: string): Promise<Chapter[]> {
   const { rows } = await db.query("SELECT * FROM course_chapters WHERE ($1::text IS NULL OR lower(course) = lower($1)) ORDER BY course, position", [course ?? null]);
-  return rows.map((r) => ({ id: Number(r.id), course: r.course as string, position: r.position as number, title: r.title as string, keywords: r.keywords as string[] }));
+  return rows.map((r) => ({
+    id: Number(r.id),
+    course: r.course as string,
+    position: r.position as number,
+    title: r.title as string,
+    keywords: r.keywords as string[],
+    sections: ((r.sections as SectionInput[] | null) ?? []).map((x, i) => ({ position: i + 1, title: x.title, keywords: x.keywords ?? [] })),
+  }));
 }
+
+const cleanKeywords = (keywords: string[] | undefined) => [...new Set((keywords ?? []).map((k) => k.trim()).filter(Boolean))];
 
 /** Replaces the chapters of a course, in the given order (an empty list removes them). */
 export async function setChapters(db: Db, course: string, chapters: ChapterInput[]): Promise<Chapter[]> {
   const code = course.trim().toUpperCase();
   if (!code) throw new Error("A course code is required");
-  const clean = chapters.map((c) => ({ title: c.title.trim(), keywords: [...new Set((c.keywords ?? []).map((k) => k.trim()).filter(Boolean))] })).filter((c) => c.title);
+  const clean = chapters
+    .map((c) => ({
+      title: c.title.trim(),
+      keywords: cleanKeywords(c.keywords),
+      sections: (c.sections ?? []).map((x) => ({ title: x.title.trim(), keywords: cleanKeywords(x.keywords) })).filter((x) => x.title),
+    }))
+    .filter((c) => c.title);
   const client = await db.connect();
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM course_chapters WHERE lower(course) = lower($1)", [code]);
-    for (const [i, c] of clean.entries()) await client.query("INSERT INTO course_chapters (course, position, title, keywords) VALUES ($1, $2, $3, $4)", [code, i + 1, c.title, c.keywords]);
+    for (const [i, c] of clean.entries()) await client.query("INSERT INTO course_chapters (course, position, title, keywords, sections) VALUES ($1, $2, $3, $4, $5)", [code, i + 1, c.title, c.keywords, JSON.stringify(c.sections)]);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -207,14 +253,23 @@ export async function fileNotes(db: Db, course: string, all = false): Promise<{ 
       unassigned.add(n.topic);
       continue;
     }
-    if (n.chapter === chapter.title) continue;
-    await db.query("UPDATE profile_notes SET chapter = $2 WHERE id = $1", [n.id, chapter.title]);
+    const section = sectionOf({ topic: n.topic, section: all ? undefined : n.section }, chapter);
+    if (n.chapter === chapter.title && (n.section ?? null) === (section?.title ?? null)) continue;
+    await db.query("UPDATE profile_notes SET chapter = $2, section = $3 WHERE id = $1", [n.id, chapter.title, section?.title ?? null]);
     filed++;
   }
   return { filed, unassigned: [...unassigned].sort() };
 }
 
-const fold = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+/** Lowercase, without accents, apostrophes as spaces: « Relation d’ordre » and « relation d ordre » compare equal. */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/['’`]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /** The chapter a name designates: its title, its number, the start of its title or its title without the number. */
 export function chapterNamed(name: string, chapters: Chapter[]): Chapter | undefined {
@@ -223,13 +278,46 @@ export function chapterNamed(name: string, chapters: Chapter[]): Chapter | undef
   return chapters.find((c) => fold(c.title) === named || String(c.position) === named || fold(c.title).startsWith(named) || fold(c.title).replace(/^\d+[.:)\s-]*/, "") === named);
 }
 
+/** The keywords of a chapter and of all its sections. */
+const allKeywords = (c: Chapter) => [...c.keywords, ...c.sections.flatMap((x) => x.keywords)];
+
+/** The item whose keyword equals the topic, else the one with the longest keyword that is part of the topic or the reverse. */
+function byKeywords<T>(items: T[], keywordsOf: (item: T) => string[], topic: string): T | undefined {
+  if (!topic) return undefined;
+  const exact = items.find((c) => keywordsOf(c).some((k) => fold(k) === topic));
+  if (exact) return exact;
+  let best: { item: T; length: number } | undefined;
+  for (const item of items) {
+    for (const k of keywordsOf(item)) {
+      const key = fold(k);
+      if (key && (topic.includes(key) || key.includes(topic)) && key.length > (best?.length ?? 0)) best = { item, length: key.length };
+    }
+  }
+  return best?.item;
+}
+
 /** The chapter a note belongs to: the one it names (title, number or start of the title), else the one whose keywords match its topic. */
 export function chapterOf(note: Pick<NoteInput, "chapter" | "topic">, chapters: Chapter[]): Chapter | undefined {
   const byName = note.chapter ? chapterNamed(note.chapter, chapters) : undefined;
   if (byName) return byName;
-  const topic = fold(note.topic);
-  if (!topic) return undefined;
-  return chapters.find((c) => c.keywords.some((k) => fold(k) === topic)) ?? chapters.find((c) => c.keywords.some((k) => topic.includes(fold(k)) || fold(k).includes(topic)));
+  return byKeywords(chapters, allKeywords, fold(note.topic));
+}
+
+/** The section a name designates within a chapter: its title, its number (« 3 » or « 2.3 »), the start of its title, or a word of it (« équivalence »). */
+export function sectionNamed(name: string, chapter: Chapter): Section | undefined {
+  const named = fold(name).replace(new RegExp(`^${chapter.position}\\.`), "");
+  if (!named) return undefined;
+  return (
+    chapter.sections.find((x) => fold(x.title) === named || String(x.position) === named || fold(x.title).startsWith(named) || fold(x.title).replace(/^\d+(\.\d+)*[.:)\s-]*/, "") === named) ??
+    (named.length >= 4 ? chapter.sections.find((x) => words(x.title).includes(` ${named} `)) : undefined)
+  );
+}
+
+/** The section of its chapter a note belongs to: the one it names, else the one whose keywords match its topic. */
+export function sectionOf(note: Pick<NoteInput, "section" | "topic">, chapter: Chapter): Section | undefined {
+  const byName = note.section ? sectionNamed(note.section, chapter) : undefined;
+  if (byName) return byName;
+  return byKeywords(chapter.sections, (x) => x.keywords, fold(note.topic));
 }
 
 /** "3. Fonctions" when the title already starts with its number, else built from the position. */
@@ -244,35 +332,50 @@ export function chapterOfAnswer(answer: Pick<QuizAnswer, "chapter" | "topic" | "
   const named = answer.chapter ? chapterNamed(answer.chapter, chapters) : undefined;
   if (named) return named;
   const topic = answer.topic ? fold(answer.topic) : "";
-  const exact = topic ? chapters.find((c) => c.keywords.some((k) => fold(k) === topic)) : undefined;
+  const exact = topic ? chapters.find((c) => allKeywords(c).some((k) => fold(k) === topic)) : undefined;
   if (exact) return exact;
   const numbered = answer.source && /\b(?:ch(?:ap(?:itre)?)?\.?|chapter)\s*(\d+)/i.exec(answer.source);
   const byNumber = numbered ? chapters.find((c) => c.position === Number(numbered[1])) : undefined;
   if (byNumber) return byNumber;
   const byTopic = topic ? chapterOf({ topic }, chapters) : undefined;
   if (byTopic) return byTopic;
-  const words = (text: string) => ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
   const statement = words(answer.statement);
-  return chapters.find((c) => c.keywords.some((k) => statement.includes(words(k))));
+  return chapters.find((c) => allKeywords(c).some((k) => statement.includes(words(k))));
+}
+
+const words = (text: string) => ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+
+/** The section of its chapter a quiz question belongs to: named, by topic keywords, else by a keyword in the statement. */
+export function sectionOfAnswer(answer: Pick<QuizAnswer, "section" | "topic" | "statement">, chapter: Chapter): Section | undefined {
+  const bySection = sectionOf({ section: answer.section, topic: answer.topic ?? "" }, chapter);
+  if (bySection) return bySection;
+  const statement = words(answer.statement);
+  return chapter.sections.find((x) => x.keywords.some((k) => statement.includes(words(k))));
 }
 
 /**
  * The status of each chapter of a course from its open notes, severity-weighted, and from the last attempt of each quiz
  * (one point for or against the chapter per answer); chapters without any are unassessed.
  */
-export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[], answers: Pick<QuizAnswer, "chapter" | "topic" | "statement" | "source" | "correct">[] = []): { chapters: ChapterSummary[]; unassigned: string[] } {
-  const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, quizCorrect: 0, quizWrong: 0, topics: new Set<string>() }]));
+export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "section" | "topic" | "kind" | "severity">[], answers: Pick<QuizAnswer, "chapter" | "section" | "topic" | "statement" | "source" | "correct">[] = []): { chapters: ChapterSummary[]; unassigned: string[] } {
+  const blank = () => ({ pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, quizCorrect: 0, quizWrong: 0, topics: new Set<string>() });
+  type Tally = ReturnType<typeof blank>;
+  const tally = new Map(chapters.map((c) => [c.id, { own: blank(), sections: new Map(c.sections.map((x) => [x.position, blank()])), unsectioned: new Set<string>() }]));
   const unassigned = new Set<string>();
   for (const a of answers) {
     const chapter = chapterOfAnswer(a, chapters);
     if (!chapter) continue;
     const t = tally.get(chapter.id)!;
-    if (a.correct) {
-      t.pos += 1;
-      t.quizCorrect++;
-    } else {
-      t.neg += 1;
-      t.quizWrong++;
+    const section = sectionOfAnswer(a, chapter);
+    for (const x of [t.own, section && t.sections.get(section.position)]) {
+      if (!x) continue;
+      if (a.correct) {
+        x.pos += 1;
+        x.quizCorrect++;
+      } else {
+        x.neg += 1;
+        x.quizWrong++;
+      }
     }
   }
   for (const n of notes) {
@@ -283,24 +386,32 @@ export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "ch
       continue;
     }
     const t = tally.get(chapter.id)!;
+    const section = sectionOf(n, chapter);
+    if (!section && chapter.sections.length > 0) t.unsectioned.add(n.topic);
     const weight = Math.max(1, n.severity ?? 2);
-    if (n.kind === "strength") {
-      t.pos += weight;
-      t.strengths++;
-    } else {
-      t.neg += weight;
-      if (n.kind === "weakness") t.weaknesses++;
-      else t.mistakes++;
+    for (const x of [t.own, section && t.sections.get(section.position)]) {
+      if (!x) continue;
+      if (n.kind === "strength") {
+        x.pos += weight;
+        x.strengths++;
+      } else {
+        x.neg += weight;
+        if (n.kind === "weakness") x.weaknesses++;
+        else x.mistakes++;
+      }
+      x.topics.add(n.topic);
     }
-    t.topics.add(n.topic);
   }
+  const assess = (t: Tally): Assessment => {
+    const total = t.pos + t.neg;
+    const level = total === 0 ? 0.5 : t.pos / total;
+    const status: ChapterStatus = total === 0 ? "unassessed" : level >= 0.7 ? "mastered" : level >= 0.4 ? "fragile" : "struggling";
+    return { status, level, strengths: t.strengths, weaknesses: t.weaknesses, mistakes: t.mistakes, quizCorrect: t.quizCorrect, quizWrong: t.quizWrong, topics: [...t.topics] };
+  };
   return {
     chapters: chapters.map((c) => {
       const t = tally.get(c.id)!;
-      const total = t.pos + t.neg;
-      const level = total === 0 ? 0.5 : t.pos / total;
-      const status: ChapterStatus = total === 0 ? "unassessed" : level >= 0.7 ? "mastered" : level >= 0.4 ? "fragile" : "struggling";
-      return { ...c, status, level, strengths: t.strengths, weaknesses: t.weaknesses, mistakes: t.mistakes, quizCorrect: t.quizCorrect, quizWrong: t.quizWrong, topics: [...t.topics] };
+      return { ...c, ...assess(t.own), sections: c.sections.map((x) => ({ ...x, ...assess(t.sections.get(x.position)!) })), unsectioned: [...t.unsectioned] };
     }),
     unassigned: [...unassigned],
   };
@@ -396,7 +507,12 @@ export function formatProfile(summary: ProfileSummary): string {
     if (c.verdicts) lines.push(`Corrected exercises: ${c.verdicts.correct} correct, ${c.verdicts.partial} partial, ${c.verdicts.wrong} wrong, ${c.verdicts.missing} missing (${c.verdicts.corrections} corrections)`);
     if (c.chapters.length > 0) {
       lines.push("Chapters:");
-      for (const ch of c.chapters) lines.push(`- ${chapterLabel(ch)}: ${ch.status}${ch.status === "unassessed" ? "" : ` (${Math.round(ch.level * 100)} %, ${ch.strengths} strengths, ${ch.weaknesses} weaknesses, ${ch.mistakes} mistakes${ch.quizCorrect + ch.quizWrong > 0 ? `, quiz ${ch.quizCorrect}/${ch.quizCorrect + ch.quizWrong}` : ""})`}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
+      const assessed = (a: Assessment) => (a.status === "unassessed" ? "unassessed" : `${a.status} (${Math.round(a.level * 100)} %, ${a.strengths} strengths, ${a.weaknesses} weaknesses, ${a.mistakes} mistakes${a.quizCorrect + a.quizWrong > 0 ? `, quiz ${a.quizCorrect}/${a.quizCorrect + a.quizWrong}` : ""})`);
+      for (const ch of c.chapters) {
+        lines.push(`- ${chapterLabel(ch)}: ${assessed(ch)}${ch.keywords.length > 0 ? ` · keywords: ${ch.keywords.join(", ")}` : ""}`);
+        for (const x of ch.sections) lines.push(`  - ${ch.position}.${x.position} ${x.title}: ${assessed(x)}${x.keywords.length > 0 ? ` · keywords: ${x.keywords.join(", ")}` : ""}`);
+        if (ch.unsectioned.length > 0) lines.push(`  - under no section: ${ch.unsectioned.join(", ")}`);
+      }
       if (c.unassigned.length > 0) lines.push(`- Topics under no chapter: ${c.unassigned.join(", ")} (add them to a chapter's keywords with set_course_chapters)`);
     } else if (c.course) {
       lines.push("Chapters: none set yet (set_course_chapters, from the unit sheet or the course page)");

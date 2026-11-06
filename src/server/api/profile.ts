@@ -13,6 +13,7 @@ export function noteFrom(value: unknown, index: number): NoteInput {
   return {
     course: stringField(body, "course", { optional: true, max: 40 }),
     chapter: stringField(body, "chapter", { optional: true, max: 200 }),
+    section: stringField(body, "section", { optional: true, max: 200 }),
     topic: stringField(body, "topic", { max: 200 })!,
     kind: kind as NoteKind,
     text: stringField(body, "text", { max: 2000 })!,
@@ -34,9 +35,22 @@ export function registerProfileRoutes(router: Router, app: App): void {
     const chapters = body.chapters.map((c, i) => {
       if (!c || typeof c !== "object") throw new HttpError(400, `chapter ${i + 1} must be an object`);
       const item = c as Record<string, unknown>;
-      const keywords = item.keywords ?? [];
-      if (!Array.isArray(keywords) || keywords.some((k) => typeof k !== "string")) throw new HttpError(400, `chapter ${i + 1}: keywords must be a list of strings`);
-      return { title: stringField(item, "title", { max: 200 })!, keywords: keywords as string[] };
+      const keywords = (item: Record<string, unknown>, where: string) => {
+        const list = item.keywords ?? [];
+        if (!Array.isArray(list) || list.some((k) => typeof k !== "string")) throw new HttpError(400, `${where}: keywords must be a list of strings`);
+        return list as string[];
+      };
+      const sections = item.sections ?? [];
+      if (!Array.isArray(sections) || sections.length > 40) throw new HttpError(400, `chapter ${i + 1}: sections must be a list of at most 40 sections`);
+      return {
+        title: stringField(item, "title", { max: 200 })!,
+        keywords: keywords(item, `chapter ${i + 1}`),
+        sections: sections.map((x, j) => {
+          if (!x || typeof x !== "object") throw new HttpError(400, `chapter ${i + 1}, section ${j + 1} must be an object`);
+          const sec = x as Record<string, unknown>;
+          return { title: stringField(sec, "title", { max: 200 })!, keywords: keywords(sec, `chapter ${i + 1}, section ${j + 1}`) };
+        }),
+      };
     });
     return { chapters: await setChapters(app.db, params.course, chapters) };
   });
@@ -73,8 +87,12 @@ export function registerProfileRoutes(router: Router, app: App): void {
   /** `{"chapter": "2. Relations" | null, "topic": "…"}`: refiles or renames a note. */
   router.patch("/api/profile/notes/:id", async ({ req, params }) => {
     const body = await readJson(req);
-    const patch = { chapter: body.chapter === null ? null : stringField(body, "chapter", { optional: true, max: 200 }), topic: stringField(body, "topic", { optional: true, max: 200 }) };
-    if (patch.chapter === undefined && patch.topic === undefined) throw new HttpError(400, "give a chapter or a topic");
+    const patch = {
+      chapter: body.chapter === null ? null : stringField(body, "chapter", { optional: true, max: 200 }),
+      section: body.section === null ? null : stringField(body, "section", { optional: true, max: 200 }),
+      topic: stringField(body, "topic", { optional: true, max: 200 }),
+    };
+    if (patch.chapter === undefined && patch.section === undefined && patch.topic === undefined) throw new HttpError(400, "give a chapter, a section or a topic");
     const note = await updateNote(app.db, intParam(params.id, "id"), patch);
     if (!note) throw new HttpError(404, "no such note");
     return note;

@@ -15,6 +15,7 @@ const questionSchema = z.object({
   source: z.string().optional().describe("e.g. 'Cours RXI ch. 4 p. 12'"),
   topic: z.string().optional().describe("Short reusable topic, e.g. 'trame Ethernet'"),
   chapter: z.string().optional().describe("Chapter of the course as set_course_chapters names it (title or number, e.g. '2. Relations' or '2'): the answer then counts in the profile's chapter status"),
+  section: z.string().optional().describe("Section of that chapter (title or number, e.g. 'Relation d'ordre' or '2.3')"),
 });
 
 const VOICE_RULES =

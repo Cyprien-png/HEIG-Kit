@@ -73,7 +73,7 @@ export interface HeigApi {
   addNotes(notes: profile.NoteInput[]): Promise<ProfileNote[]>;
   resolveNote(id: number, resolved?: boolean): Promise<ProfileNote | undefined>;
   /** Changes the chapter (null clears it) or the topic of a note. */
-  updateNote(id: number, patch: { chapter?: string | null; topic?: string }): Promise<ProfileNote | undefined>;
+  updateNote(id: number, patch: { chapter?: string | null; section?: string | null; topic?: string }): Promise<ProfileNote | undefined>;
   /** The chapters of a course (of every course without one), the axes of the profile. */
   chapters(course?: string): Promise<profile.Chapter[]>;
   setChapters(course: string, chapters: profile.ChapterInput[]): Promise<profile.Chapter[]>;
@@ -237,7 +237,7 @@ export class LocalApi implements HeigApi {
   async resolveNote(id: number, resolved = true) {
     return json(await profile.resolveNote(this.db, id, resolved));
   }
-  async updateNote(id: number, patch: { chapter?: string | null; topic?: string }) {
+  async updateNote(id: number, patch: { chapter?: string | null; section?: string | null; topic?: string }) {
     return json(await profile.updateNote(this.db, id, patch));
   }
   chapters(course?: string) {
@@ -411,7 +411,7 @@ export class RemoteApi implements HeigApi {
   async resolveNote(id: number, resolved = true) {
     return this.client.post<ProfileNote>(`/api/profile/notes/${id}/resolve`, { resolved }).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
-  async updateNote(id: number, patch: { chapter?: string | null; topic?: string }) {
+  async updateNote(id: number, patch: { chapter?: string | null; section?: string | null; topic?: string }) {
     return this.client.patch<ProfileNote>(`/api/profile/notes/${id}`, patch).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
   async chapters(course?: string) {

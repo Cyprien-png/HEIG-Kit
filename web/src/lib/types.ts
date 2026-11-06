@@ -259,6 +259,7 @@ export interface ProfileNote {
   id: number;
   course?: string;
   chapter?: string;
+  section?: string;
   topic: string;
   kind: "weakness" | "strength" | "mistake" | "note";
   text: string;
@@ -280,15 +281,23 @@ export interface TopicSummary {
 
 export type ChapterStatus = "mastered" | "fragile" | "struggling" | "unassessed";
 
+export interface Section {
+  position: number;
+  title: string;
+  keywords: string[];
+}
+
 export interface Chapter {
   id: number;
   course: string;
   position: number;
   title: string;
   keywords: string[];
+  sections: Section[];
 }
 
-export interface ChapterSummary extends Chapter {
+/** What the notes and quiz answers say about a chapter or a section. */
+export interface Assessment {
   status: ChapterStatus;
   level: number;
   strengths: number;
@@ -297,6 +306,13 @@ export interface ChapterSummary extends Chapter {
   quizCorrect: number;
   quizWrong: number;
   topics: string[];
+}
+
+export interface SectionSummary extends Section, Assessment {}
+
+export interface ChapterSummary extends Chapter, Assessment {
+  sections: SectionSummary[];
+  unsectioned: string[];
 }
 
 export interface ProfileSummary {
@@ -369,6 +385,7 @@ export interface QuizQuestion {
   source?: string;
   topic?: string;
   chapter?: string;
+  section?: string;
 }
 
 export interface QuizAttempt {

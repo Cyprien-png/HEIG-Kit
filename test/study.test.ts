@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
-import { type Chapter, addNotes, chapterOf, chapterOfAnswer, chapterSummaries, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
+import { type Chapter, addNotes, chapterOf, chapterOfAnswer, chapterSummaries, sectionOf, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
 
@@ -99,36 +99,60 @@ test("corrections: photos are checked, kept in order, then corrected with a vali
 
 test("profile: chapters get one of four statuses from the notes they claim", () => {
   const chapters: Chapter[] = [
-    { id: 1, course: "MAD", position: 1, title: "1. Ensembles", keywords: ["inclusion-exclusion", "cardinal"] },
-    { id: 2, course: "MAD", position: 2, title: "2. Relations", keywords: ["diagramme de Hasse"] },
-    { id: 3, course: "MAD", position: 3, title: "3. Fonctions", keywords: [] },
+    { id: 1, course: "MAD", position: 1, title: "1. Ensembles", keywords: ["inclusion-exclusion", "cardinal"], sections: [] },
+    {
+      id: 2,
+      course: "MAD",
+      position: 2,
+      title: "2. Relations",
+      keywords: ["diagramme de Hasse"],
+      sections: [
+        { position: 1, title: "Propriétés", keywords: ["réflexivité", "transitivité"] },
+        { position: 2, title: "Relation d'ordre", keywords: ["ordre partiel", "ordre total", "Hasse"] },
+        { position: 3, title: "Relation d'équivalence", keywords: ["classe d'équivalence"] },
+      ],
+    },
+    { id: 3, course: "MAD", position: 3, title: "3. Fonctions", keywords: [], sections: [] },
   ];
   assert.equal(chapterOf({ topic: "Cardinal", chapter: undefined }, chapters)?.position, 1);
   assert.equal(chapterOf({ topic: "x", chapter: "relations" }, chapters)?.position, 2);
   assert.equal(chapterOf({ topic: "x", chapter: "3" }, chapters)?.position, 3);
   assert.equal(chapterOf({ topic: "récurrence" }, chapters), undefined);
+  // A section's keyword also files the note in the chapter; the note then lands in that section.
+  assert.equal(chapterOf({ topic: "ordre total" }, chapters)?.position, 2);
+  assert.equal(sectionOf({ topic: "ordre total" }, chapters[1])?.position, 2);
+  assert.equal(sectionOf({ topic: "x", section: "2.3" }, chapters[1])?.position, 3);
+  assert.equal(sectionOf({ topic: "x", section: "propriétés" }, chapters[1])?.position, 1);
+  assert.equal(sectionOf({ topic: "composition" }, chapters[1]), undefined);
   const { chapters: out, unassigned } = chapterSummaries(chapters, [
     { topic: "inclusion-exclusion", kind: "mistake", severity: 3 },
     { topic: "cardinal", kind: "strength", severity: 1 },
     { topic: "diagramme de Hasse", kind: "strength", severity: 2 },
     { topic: "diagramme de Hasse", kind: "weakness", severity: 1 },
+    { topic: "composition", kind: "mistake", severity: 1, chapter: "2" },
     { topic: "récurrence", kind: "weakness", severity: 2 },
     { topic: "méthode", kind: "note", severity: 2 },
   ]);
   assert.deepEqual(out.map((c) => c.status), ["struggling", "fragile", "unassessed"]);
   assert.equal(out[0].mistakes, 1);
-  assert.equal(out[1].level, 2 / 3);
+  assert.equal(out[1].level, 2 / 4);
   assert.equal(out[2].level, 0.5);
   assert.deepEqual(unassigned, ["récurrence"]);
+  // Inside chapter 2: the Hasse notes fall in the order section, the composition mistake in no section.
+  assert.deepEqual(out[1].sections.map((x) => [x.status, x.strengths, x.weaknesses]), [["unassessed", 0, 0], ["fragile", 1, 1], ["unassessed", 0, 0]]);
+  assert.deepEqual(out[1].unsectioned, ["composition"]);
   // Quiz answers count one point each: by the question's chapter, topic, source number or a keyword in the statement.
   const { chapters: withQuiz } = chapterSummaries(chapters, [], [
     { chapter: "3", statement: "Une fonction injective…", correct: true },
     { topic: "diagramme de Hasse", statement: "…", correct: false },
+    { chapter: "2", section: "équivalence", statement: "…", correct: true },
+    { statement: "Une relation d'ordre total compare tout.", source: "Cours MAD ch. 2", correct: true },
     { statement: "…", source: "Cours MAD ch. 2 p. 53", correct: false },
     { statement: "Le cardinal de A union B vaut…", correct: true },
     { statement: "Rien de connu", correct: true },
   ]);
-  assert.deepEqual(withQuiz.map((c) => [c.quizCorrect, c.quizWrong, c.status]), [[1, 0, "mastered"], [0, 2, "struggling"], [1, 0, "mastered"]]);
+  assert.deepEqual(withQuiz.map((c) => [c.quizCorrect, c.quizWrong, c.status]), [[1, 0, "mastered"], [2, 2, "fragile"], [1, 0, "mastered"]]);
+  assert.deepEqual(withQuiz[1].sections.map((x) => [x.quizCorrect, x.quizWrong]), [[0, 0], [1, 1], [1, 0]]);
   assert.equal(chapterOfAnswer({ statement: "Les cardinaux…" }, chapters), undefined);
 });
 

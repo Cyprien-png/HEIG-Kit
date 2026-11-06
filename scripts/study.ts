@@ -16,7 +16,7 @@
  *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …]      names it while the student photographs
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
- *                      | set <id> --chapter "2. Relations" [--topic …]      refiles or renames a note
+ *                      | set <id> --chapter "2. Relations" [--section "Ordre"] [--topic …]   refiles or renames a note
  *                      | file <COURSE> [--all]                               writes its chapter on each note without one (every note with --all)
  *                      | chapters [<COURSE>] [--file chapters.json]   (sets them: { "chapters": [ { "title": "…", "keywords": ["…"] } ] })
  *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>
@@ -60,6 +60,7 @@ const { values, positionals } = parseArgs({
     "all-day": { type: "boolean", default: false },
     all: { type: "boolean", default: false },
     chapter: { type: "string" },
+    section: { type: "string" },
     shuffle: { type: "boolean", default: false },
   },
 });
@@ -316,9 +317,9 @@ async function profile(api: HeigApi): Promise<void> {
     case "resolve":
       return out((await api.resolveNote(Number(rest[0]))) ? "Note resolved." : "No such note.");
     case "set": {
-      if (!rest[0] || (values.chapter === undefined && values.topic === undefined)) throw new Error("Usage: npm run profile -- set <id> --chapter \"2. Relations\" [--topic …]");
-      const note = await api.updateNote(Number(rest[0]), { chapter: values.chapter === "" ? null : values.chapter, topic: values.topic });
-      return out(values.json ? note : note ? `Note ${note.id}: ${note.topic}${note.chapter ? ` · ${note.chapter}` : ""}` : "No such note.");
+      if (!rest[0] || (values.chapter === undefined && values.section === undefined && values.topic === undefined)) throw new Error("Usage: npm run profile -- set <id> --chapter \"2. Relations\" [--section \"Ordre\"] [--topic …]");
+      const note = await api.updateNote(Number(rest[0]), { chapter: values.chapter === "" ? null : values.chapter, section: values.section === "" ? null : values.section, topic: values.topic });
+      return out(values.json ? note : note ? `Note ${note.id}: ${note.topic}${note.chapter ? ` · ${note.chapter}` : ""}${note.section ? ` › ${note.section}` : ""}` : "No such note.");
     }
     case "file": {
       const course = rest[0] ?? values.course;
@@ -334,7 +335,7 @@ async function profile(api: HeigApi): Promise<void> {
         return out(values.json ? await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never) : `${(await api.setChapters(course, (Array.isArray(list) ? list : (list.chapters ?? [])) as never)).length} chapters set for ${course.toUpperCase()}.`);
       }
       const chapters = await api.chapters(course);
-      return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${chapterLabel(c)}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}`).join("\n"));
+      return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${chapterLabel(c)}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}${c.sections.map((x) => `\n         ${c.position}.${x.position} ${x.title}${x.keywords.length ? `  (${x.keywords.join(", ")})` : ""}`).join("")}`).join("\n"));
     }
     default:
       throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve | set | file | chapters");

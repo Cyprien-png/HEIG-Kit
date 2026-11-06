@@ -1,4 +1,4 @@
-import { CheckIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ChevronRightIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
@@ -6,7 +6,7 @@ import { LevelRadar } from "../components/Radar";
 import { Badge, Button, Card, Disclosure, Empty, ErrorBox, Field, IconButton, Input, Loading, Modal, PageHeader, Segmented, Select, Stat, Textarea, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { dateTime, relative } from "../lib/format";
-import type { ChapterStatus, ChapterSummary, ProfileNote, ProfileSummary, TopicSummary } from "../lib/types";
+import type { Assessment, ChapterStatus, ChapterSummary, ProfileNote, ProfileSummary, SectionSummary, TopicSummary } from "../lib/types";
 
 const KIND_LABEL = { weakness: "faiblesse", strength: "point fort", mistake: "erreur", note: "note" } as const;
 const KIND_TONE = { weakness: "warn", strength: "ok", mistake: "bad", note: "info" } as const;
@@ -128,26 +128,102 @@ function CourseCard({ c, onEdit }: { c: ProfileSummary["courses"][number]; onEdi
   );
 }
 
-function ChapterRow({ ch }: { ch: ChapterSummary }) {
-  const st = STATUS[ch.status];
-  const quiz = ch.quizCorrect + ch.quizWrong;
-  const counts = [ch.strengths && `${ch.strengths} fort${ch.strengths > 1 ? "s" : ""}`, ch.weaknesses && `${ch.weaknesses} faible${ch.weaknesses > 1 ? "s" : ""}`, ch.mistakes && `${ch.mistakes} erreur${ch.mistakes > 1 ? "s" : ""}`, quiz && `quiz ${ch.quizCorrect}/${quiz}`].filter(Boolean).join(" · ");
+/** « 2 forts · 1 erreur · quiz 9/10 », then the topics. */
+function assessmentLine(a: Assessment): string {
+  const quiz = a.quizCorrect + a.quizWrong;
+  const counts = [a.strengths && `${a.strengths} fort${a.strengths > 1 ? "s" : ""}`, a.weaknesses && `${a.weaknesses} faible${a.weaknesses > 1 ? "s" : ""}`, a.mistakes && `${a.mistakes} erreur${a.mistakes > 1 ? "s" : ""}`, quiz && `quiz ${a.quizCorrect}/${quiz}`].filter(Boolean).join(" · ");
+  return [counts, a.topics.join(", ")].filter(Boolean).join(" · ");
+}
+
+/** The percentage and the status badge of a chapter or a section. */
+function Verdict({ a }: { a: Assessment }) {
+  const st = STATUS[a.status];
   return (
-    <li className="flex items-center gap-3 py-2 text-sm">
+    <>
+      {a.status !== "unassessed" && <span className={cx("font-mono text-xs tabular-nums shrink-0", st.tone === "ok" ? "text-ok" : st.tone === "warn" ? "text-warn" : "text-bad")}>{Math.round(a.level * 100)} %</span>}
+      <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
+    </>
+  );
+}
+
+const untitled = (title: string) => title.replace(/^\d+(\.\d+)*[.:)\s-]+/, "");
+
+/** A chapter of the radar; with sections, it opens on their own radar and list. */
+function ChapterRow({ ch }: { ch: ChapterSummary }) {
+  const [open, setOpen] = useState(false);
+  const details = assessmentLine(ch);
+  const assessed = ch.sections.filter((x) => x.status !== "unassessed").length;
+  const row = (
+    <>
       <span className="font-mono text-xs text-ink-3 tabular-nums w-5 shrink-0 text-right">{ch.position}</span>
       <span className="flex-1 min-w-0">
-        <span className="block truncate">{ch.title.replace(/^\d+[.:)\s-]+/, "")}</span>
-        {(counts || ch.topics.length > 0) && <span className="block text-[11px] text-ink-3 truncate">{[counts, ch.topics.join(", ")].filter(Boolean).join(" · ")}</span>}
+        <span className="block truncate">{untitled(ch.title)}</span>
+        {details && <span className="block text-[11px] text-ink-3 truncate">{details}</span>}
       </span>
-      {ch.status !== "unassessed" && <span className={cx("font-mono text-xs tabular-nums shrink-0", st.tone === "ok" ? "text-ok" : st.tone === "warn" ? "text-warn" : "text-bad")}>{Math.round(ch.level * 100)} %</span>}
-      <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
+      <Verdict a={ch} />
+    </>
+  );
+  if (ch.sections.length === 0) return <li className="flex items-center gap-3 py-2 text-sm">{row}</li>;
+  return (
+    <li className="py-2 text-sm">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center gap-3 text-left -mx-1 px-1 rounded-md hover:bg-surface-2/60">
+        {row}
+        <ChevronRightIcon className={cx("h-4 w-4 shrink-0 text-ink-3 transition-transform", open && "rotate-90")} />
+      </button>
+      {open && (
+        <div className="mt-2 ml-8 pl-3 border-l border-line">
+          {ch.sections.length >= 3 && <LevelRadar size={200} axes={ch.sections.map((x) => ({ label: `${ch.position}.${x.position}`, value: x.level, tone: STATUS[x.status].tone, muted: x.status === "unassessed" }))} label={`Niveau par section, ${untitled(ch.title)}`} />}
+          <ul className="divide-y divide-line">
+            {ch.sections.map((x) => (
+              <SectionRow key={x.position} chapter={ch.position} x={x} />
+            ))}
+          </ul>
+          <p className="text-[11px] text-ink-3 mt-2">{assessed} section{assessed > 1 ? "s" : ""} évaluée{assessed > 1 ? "s" : ""} sur {ch.sections.length}.{ch.unsectioned.length > 0 && <> Hors section : {ch.unsectioned.join(", ")}.</>}</p>
+        </div>
+      )}
     </li>
   );
 }
 
-/** The chapters of a course, one per line: « Titre | mot-clé, mot-clé », prefilled from the course's documents when empty. */
+function SectionRow({ chapter, x }: { chapter: number; x: SectionSummary }) {
+  const details = assessmentLine(x);
+  return (
+    <li className="flex items-center gap-3 py-1.5 text-sm">
+      <span className="font-mono text-[11px] text-ink-3 tabular-nums w-7 shrink-0 text-right">{chapter}.{x.position}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate">{untitled(x.title)}</span>
+        {details && <span className="block text-[11px] text-ink-3 truncate">{details}</span>}
+      </span>
+      <Verdict a={x} />
+    </li>
+  );
+}
+
+const line = (title: string, keywords: string[]) => `${title}${keywords.length ? ` | ${keywords.join(", ")}` : ""}`;
+
+/** The chapters as text: one per line, « Titre | mot-clé, mot-clé », each section on an indented « - » line below its chapter. */
+function chaptersToText(chapters: { title: string; keywords: string[]; sections: { title: string; keywords: string[] }[] }[]): string {
+  return chapters.map((c) => [line(c.title, c.keywords), ...c.sections.map((x) => `  - ${line(x.title, x.keywords)}`)].join("\n")).join("\n");
+}
+
+/** The reverse of chaptersToText; a section line before any chapter is ignored. */
+function textToChapters(text: string): { title: string; keywords: string[]; sections: { title: string; keywords: string[] }[] }[] {
+  const out: { title: string; keywords: string[]; sections: { title: string; keywords: string[] }[] }[] = [];
+  for (const raw of text.split("\n")) {
+    if (!raw.trim()) continue;
+    const isSection = /^\s+|^\s*[-–•>]/.test(raw);
+    const [title, keywords = ""] = raw.replace(/^\s*[-–•>]\s*/, "").split("|");
+    const item = { title: title.trim(), keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean) };
+    if (!item.title) continue;
+    if (isSection && out.length > 0) out[out.length - 1].sections.push(item);
+    else out.push({ ...item, sections: [] });
+  }
+  return out;
+}
+
+/** The chapters of a course, one per line: « Titre | mot-clé, mot-clé », their sections indented below, prefilled from the course's documents when empty. */
 function ChapterEditor({ course, chapters, onClose, onSaved }: { course: string; chapters: ChapterSummary[]; onClose: () => void; onSaved: () => void }) {
-  const [text, setText] = useState(chapters.map((c) => `${c.title}${c.keywords.length ? ` | ${c.keywords.join(", ")}` : ""}`).join("\n"));
+  const [text, setText] = useState(chaptersToText(chapters));
   const [busy, setBusy] = useState(false);
   const docs = useApi<{ documents: { chapter: string | null }[] }>(chapters.length === 0 ? `/api/kb/courses/${encodeURIComponent(course)}/documents` : null, [course]);
   useEffect(() => {
@@ -158,12 +234,8 @@ function ChapterEditor({ course, chapters, onClose, onSaved }: { course: string;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const list = text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-      const [title, keywords = ""] = l.split("|");
-      return { title: title.trim(), keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean) };
-    });
     try {
-      await api(`/api/profile/chapters/${encodeURIComponent(course)}`, { method: "PUT", json: { chapters: list } });
+      await api(`/api/profile/chapters/${encodeURIComponent(course)}`, { method: "PUT", json: { chapters: textToChapters(text) } });
       onSaved();
     } finally {
       setBusy(false);
@@ -172,8 +244,8 @@ function ChapterEditor({ course, chapters, onClose, onSaved }: { course: string;
   return (
     <Modal open onClose={onClose} title={`Chapitres de ${course}`}>
       <form onSubmit={submit} className="space-y-3">
-        <p className="text-sm text-ink-2">Un chapitre par ligne, dans l'ordre du cours. Après « | », les thèmes qu'il couvre, séparés par des virgules : les observations portant ces thèmes comptent pour ce chapitre.</p>
-        <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder={"1. Ensembles | cardinal, inclusion-exclusion\n2. Relations | relation d'ordre, diagramme de Hasse"} className="font-mono text-[13px]" />
+        <p className="text-sm text-ink-2">Un chapitre par ligne, dans l'ordre du cours. Après « | », les thèmes qu'il couvre, séparés par des virgules : les observations portant ces thèmes comptent pour ce chapitre. Une ligne indentée commençant par « - » sous un chapitre est une de ses sections, évaluée à part.</p>
+        <Textarea rows={14} value={text} onChange={(e) => setText(e.target.value)} placeholder={"1. Ensembles | cardinal, inclusion-exclusion\n2. Relations | relation\n  - Propriétés | réflexivité, symétrie, transitivité\n  - Relation d'ordre | ordre partiel, ordre total, diagramme de Hasse\n  - Relation d'équivalence | classes d'équivalence, partition"} className="font-mono text-[13px]" />
         <div className="flex justify-between items-center gap-2">
           <span className="text-xs text-ink-3">{chapters.length === 0 && docs.data ? "Pré-rempli avec les chapitres des documents du cours." : ""}</span>
           <div className="flex gap-2">
@@ -240,7 +312,7 @@ function Notes({ onChanged }: { onChanged: () => void }) {
                     <CourseChip code={n.course} />
                     <Badge tone={KIND_TONE[n.kind]}>{KIND_LABEL[n.kind]}</Badge>
                     <span className="font-medium text-sm">{n.topic}</span>
-                    {n.chapter && <span className="text-xs text-ink-3">· {n.chapter}</span>}
+                    {n.chapter && <span className="text-xs text-ink-3">· {n.chapter}{n.section ? ` › ${n.section}` : ""}</span>}
                     {n.severity === 3 && <Badge tone="bad">sévérité 3</Badge>}
                     {n.correctionId && <Link to={`/corrections/${n.correctionId}`} className="text-xs text-accent">correction{n.exercise ? ` ex. ${n.exercise}` : ""}</Link>}
                   </div>
@@ -262,6 +334,7 @@ function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [course, setCourse] = useState("");
   const [topic, setTopic] = useState("");
   const [chapter, setChapter] = useState("");
+  const [section, setSection] = useState("");
   const [kind, setKind] = useState<keyof typeof KIND_LABEL>("note");
   const [text, setText] = useState("");
   const [severity, setSeverity] = useState(2);
@@ -269,7 +342,7 @@ function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    await api("/api/profile/notes", { method: "POST", json: { notes: [{ course: course || undefined, chapter: chapter || undefined, topic, kind, text, severity }] } });
+    await api("/api/profile/notes", { method: "POST", json: { notes: [{ course: course || undefined, chapter: chapter || undefined, section: section || undefined, topic, kind, text, severity }] } });
     onSaved();
   };
   return (
@@ -290,9 +363,10 @@ function NoteEditor({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </Select>
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Thème"><Input value={topic} onChange={(e) => setTopic(e.target.value)} required placeholder="inclusion-exclusion" /></Field>
           <Field label="Chapitre"><Input value={chapter} onChange={(e) => setChapter(e.target.value)} placeholder="1. Ensembles" /></Field>
+          <Field label="Section"><Input value={section} onChange={(e) => setSection(e.target.value)} placeholder="Opérations" /></Field>
         </div>
         <Field label="Observation"><Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} required placeholder="Je confonds ⊆ et ∈ quand…" /></Field>
         <div className="flex justify-end gap-2">

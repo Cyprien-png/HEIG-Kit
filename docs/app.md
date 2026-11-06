@@ -133,13 +133,18 @@ a chapter is filed by its topic, by the chapter number of its source, or by a ch
 ## Profile
 
 `profile_notes`: observations about the student per course and topic (`weakness`, `strength`, `mistake`, `note`),
-with an embedding so the agent can search them, and the chapter they belong to. `course_chapters` lists the chapters of
-a course in order (set by the agent from the unit sheet with `set_course_chapters`, or on the profile page), each with
-the topics it covers as keywords. The profile page shows, per course, a radar with one axis per chapter and the
+with an embedding so the agent can search them, and the chapter and section they belong to. `course_chapters` lists the
+chapters of a course in order (set by the agent from the unit sheet with `set_course_chapters`, or on the profile page),
+each with the topics it covers as keywords and its sections (`sections`, the sub-chapters of the lecture, each with its
+own keywords). The profile page shows, per course, a radar with one axis per chapter and the
 chapter's status, one of four: **maîtrisé** (70 % or more of the severity-weighted observations are strengths),
 **fragile** (40 to 70 %), **en difficulté** (below) or **non évalué** (no observation yet). A note counts for the chapter
 it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». The last
-attempt of each quiz of the course counts too, one point per answer (see Quizzes). Setting the
+attempt of each quiz of the course counts too, one point per answer (see Quizzes). Inside a chapter, the same
+assessment is made per section (a note's `section`, else a section keyword matching its topic; for a quiz question, a
+keyword in its statement as well): a chapter with sections opens on their own radar and list, with the topics that fell
+in no section. On the profile page, the chapter editor takes one chapter per line, « Titre | mot-clé, mot-clé », and
+each section on an indented line starting with « - » below its chapter. Setting the
 chapters also writes its chapter on each existing note without one (`POST /api/profile/chapters/:course/file` with
 `{"all": true}` refiles every note; `PATCH /api/profile/notes/:id` moves a single note). Below the radar:
 weak and strong topics, frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a
