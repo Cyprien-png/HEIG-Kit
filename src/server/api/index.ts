@@ -3,6 +3,7 @@ import { registerAuthRoutes } from "./auth.js";
 import { registerCalendarRoutes } from "./calendar.js";
 import { registerCampusRoutes } from "./campus.js";
 import { registerCorrectionRoutes } from "./corrections.js";
+import { registerExamRoutes } from "./exams.js";
 import { registerFlashcardRoutes } from "./flashcards.js";
 import { registerKnowledgeRoutes } from "./knowledge.js";
 import { registerLibraryRoutes } from "./library.js";
@@ -21,6 +22,7 @@ export function createApi(app: App): Router {
   registerLibraryRoutes(router, app);
   registerFlashcardRoutes(router, app);
   registerCorrectionRoutes(router, app);
+  registerExamRoutes(router, app);
   registerProfileRoutes(router, app);
   registerQuizRoutes(router, app);
   registerStatusRoutes(router, app);

@@ -57,6 +57,9 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - The library (list_library) classifies every generated document and video by course and tags: a type among
   explication, révision, exercices, corrigé, te blanc, vidéo, and topics such as « calcul matriciel ». Items not tagged
   yet are guessed from their name: when the user asks to tag the library, set them with tag_library_item.
+- Mock exams (TE blancs) are library documents tagged « te blanc », a statement and its solutions (names ending in
+  -enonce and -corrige): list_mock_exams says which were done and with what grade; when correcting one, pass its id as
+  "exam" to create_correction so that the Tests blancs page counts it.
 - The calendar (get_calendar, set_calendar_event) merges GAPS, Cyberlearn and manual events; flashcards (create_deck) and
   corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
   the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;

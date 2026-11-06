@@ -7,7 +7,8 @@ import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, Segme
 import { api, useApi } from "../lib/api";
 import { dateTime } from "../lib/format";
 import type { CorrectedExercise, Correction, Verdict } from "../lib/types";
-import { STATE_LABEL, STATE_TONE, VerdictBar, verdictCounts } from "./Corrections";
+import { STATE_LABEL, STATE_TONE, VerdictBar, swissGrade, verdictCounts } from "./Corrections";
+import { Grade } from "./MockExams";
 
 type Level = 0 | 1 | 2;
 
@@ -53,7 +54,7 @@ export function CorrectionDetail() {
     <div className="space-y-4">
       <PageHeader
         title={<span className="flex items-center gap-3"><CourseChip code={c.course} /> {c.title}</span>}
-        subtitle={<span className="flex items-center gap-2 flex-wrap"><Badge tone={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>{c.topic && <span>{c.topic}</span>}<span>· créée {dateTime(c.createdAt)}</span>{c.correctedAt && <span>· corrigée {dateTime(c.correctedAt)}</span>}</span>}
+        subtitle={<span className="flex items-center gap-2 flex-wrap"><Badge tone={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>{c.topic && <span>{c.topic}</span>}{c.exam && <Link to="/exams" className="text-accent">· test blanc</Link>}<span>· créée {dateTime(c.createdAt)}</span>{c.correctedAt && <span>· corrigée {dateTime(c.correctedAt)}</span>}</span>}
         actions={
           c.state === "corrected" ? (
             <Segmented<Level> value={level} onChange={setLevelKeep} options={[{ value: 0, label: <span className="inline-flex items-center gap-1"><EyeSlashIcon className="h-4 w-4" /> Sans correction</span> }, { value: 1, label: "Verdicts" }, { value: 2, label: <span className="inline-flex items-center gap-1"><EyeIcon className="h-4 w-4" /> Détails</span> }]} />
@@ -78,7 +79,7 @@ export function CorrectionDetail() {
               <div className="flex-1 min-w-[12rem]">
                 {level >= 1 ? (
                   <>
-                    <div className="text-3xl font-semibold tabular-nums">{v.percent} %<span className="text-ink-3 text-lg font-normal"> de réussite</span></div>
+                    <div className="text-3xl font-semibold tabular-nums">{v.percent} %<span className="text-ink-3 text-lg font-normal"> de réussite</span>{c.exam && swissGrade(c) !== undefined && <span className="text-ink-3 text-lg font-normal"> · note <Grade grade={swissGrade(c)!} className="text-3xl" /></span>}</div>
                     <div className="mt-2"><VerdictBar c={c} /></div>
                     <div className="mt-1.5 text-xs text-ink-2 tabular-nums">{v.correct} juste{v.correct > 1 ? "s" : ""}{v.partial ? ` · ${v.partial} partiel${v.partial > 1 ? "s" : ""}` : ""}{v.wrong ? ` · ${v.wrong} faux` : ""} · {v.total} exercice{v.total > 1 ? "s" : ""}</div>
                   </>

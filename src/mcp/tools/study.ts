@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import QRCode from "qrcode";
 import { z } from "zod";
 import type { HeigApi } from "../../app/api.js";
+import { formatMockExams } from "../../app/exams.js";
 import { formatProfile } from "../../app/profile.js";
 import { TIME_ZONE } from "../../dates.js";
 import { respond } from "../common.js";
@@ -312,11 +313,12 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         course: z.string().optional(),
         topic: z.string().optional(),
         notes: z.string().optional().describe("What the student should photograph, shown on the capture page"),
+        exam: z.string().optional().describe("When the work is a mock exam of the library (list_mock_exams): the statement's id, document:<name>, so that the Tests blancs page shows it as done with its grade"),
       },
     },
     async (a) => {
       try {
-        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes });
+        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam });
         const qr = await QRCode.toString(c.captureUrl, { type: "terminal", small: true });
         const png = (await QRCode.toDataURL(c.captureUrl, { margin: 1, width: 360 })).split(",")[1];
         const text =
@@ -332,6 +334,21 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
   );
 
   server.registerTool(
+    "list_mock_exams",
+    {
+      title: "The mock exams (TE blancs) of the library and what the student did with them",
+      description:
+        "Lists the practice exams of the library (documents tagged « te blanc », statement paired with its solutions) with " +
+        "the corrections that answer them: to do, correction pending, or done with the grade on the Swiss scale (1 to 6). " +
+        "Use it before generating a new mock exam (to avoid a duplicate and to vary the exercises) and when correcting one: " +
+        "pass its id as `exam` to create_correction or update_correction so that it counts as done.",
+      inputSchema: { course: z.string().optional().describe("Only this course code") },
+      annotations: { readOnlyHint: true },
+    },
+    async (a) => respond(async () => formatMockExams(await api.mockExams(a.course))),
+  );
+
+  server.registerTool(
     "update_correction",
     {
       title: "Name and describe a correction",
@@ -344,12 +361,13 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         course: z.string().nullable().optional(),
         topic: z.string().nullable().optional(),
         notes: z.string().nullable().optional().describe("What the student should photograph, shown on the capture page"),
+        exam: z.string().nullable().optional().describe("The mock exam this work answers (list_mock_exams id, document:<name>); null unlinks it"),
       },
     },
     async (a) =>
       respond(async () => {
-        const c = await api.updateCorrection(a.id, { title: a.title, course: a.course, topic: a.topic, notes: a.notes });
-        return `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course}${c.topic ? `, ${c.topic}` : ""})` : ""}, state ${c.state}.`;
+        const c = await api.updateCorrection(a.id, { title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam });
+        return `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course}${c.topic ? `, ${c.topic}` : ""})` : ""}, state ${c.state}${c.exam ? `, exam ${c.exam}` : ""}.`;
       }),
   );
 
@@ -373,7 +391,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       try {
         const c = await api.correction(a.id);
         if (!c) return { content: [{ type: "text" as const, text: `No correction ${a.id}` }], isError: true };
-        const header = `Correction ${c.id}: ${c.title} (${c.course ?? "no course"}${c.topic ? `, ${c.topic}` : ""}), state ${c.state}, ${c.photos.length} photos${c.sentAt ? `, sent ${c.sentAt}` : ""}.${c.notes ? `\nNotes: ${c.notes}` : ""}`;
+        const header = `Correction ${c.id}: ${c.title} (${c.course ?? "no course"}${c.topic ? `, ${c.topic}` : ""}), state ${c.state}, ${c.photos.length} photos${c.sentAt ? `, sent ${c.sentAt}` : ""}${c.exam ? `, mock exam ${c.exam}` : ""}.${c.notes ? `\nNotes: ${c.notes}` : ""}`;
         if (c.state === "capture") return { content: [{ type: "text" as const, text: `${header}\nThe student has not sent the photos yet: ask them to open the capture link and press Envoyer, then call again.` }] };
         const content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] = [{ type: "text", text: header }];
         if (a.with_photos !== false) {

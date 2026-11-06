@@ -44,6 +44,8 @@ export interface Correction {
   topic?: string;
   state: CorrectionState;
   notes?: string;
+  /** The mock exam this work answers: the library item of its statement (`document:<name>`, src/app/exams.ts). */
+  exam?: string;
   result?: CorrectionResult;
   createdAt: Date;
   updatedAt: Date;
@@ -83,6 +85,7 @@ function row(r: Record<string, unknown>, photos: PhotoMeta[] = []): Correction {
     topic: (r.topic as string | null) ?? undefined,
     state: r.state as CorrectionState,
     notes: (r.notes as string | null) ?? undefined,
+    exam: (r.exam as string | null) ?? undefined,
     result: (r.result as CorrectionResult | null) ?? undefined,
     createdAt: r.created_at as Date,
     updatedAt: r.updated_at as Date,
@@ -100,19 +103,46 @@ async function photosOf(db: Db, id: string): Promise<PhotoMeta[]> {
 /** Title of a correction created before the agent has named it (it names it while the student photographs). */
 export const PENDING_TITLE = "Correction en cours";
 
-export async function createCorrection(db: Db, input: { title?: string; course?: string; topic?: string; notes?: string } = {}): Promise<Correction> {
+export interface CorrectionInput {
+  title?: string;
+  course?: string;
+  topic?: string;
+  notes?: string;
+  /** The mock exam being corrected, as a library item key (`document:<name>`). */
+  exam?: string;
+}
+
+export interface CorrectionPatch {
+  title?: string;
+  course?: string | null;
+  topic?: string | null;
+  notes?: string | null;
+  exam?: string | null;
+}
+
+const EXAM_KEY = /^document:[^/\\]{1,200}$/;
+
+/** Checks an exam reference (`document:<name>`); throws a readable message otherwise. */
+export function checkExam(exam: string | null | undefined): string | null | undefined {
+  if (exam === undefined || exam === null) return exam;
+  const text = exam.trim();
+  if (!EXAM_KEY.test(text)) throw new Error("exam must be the library item of the statement, document:<name>");
+  return text;
+}
+
+export async function createCorrection(db: Db, input: CorrectionInput = {}): Promise<Correction> {
   const id = randomUUID();
-  await db.query("INSERT INTO corrections (id, title, course, topic, notes) VALUES ($1, $2, $3, $4, $5)", [id, input.title?.trim() || PENDING_TITLE, input.course ?? null, input.topic ?? null, input.notes ?? null]);
+  await db.query("INSERT INTO corrections (id, title, course, topic, notes, exam) VALUES ($1, $2, $3, $4, $5, $6)", [id, input.title?.trim() || PENDING_TITLE, input.course ?? null, input.topic ?? null, input.notes ?? null, checkExam(input.exam) ?? null]);
   return (await getCorrection(db, id))!;
 }
 
-export async function listCorrections(db: Db, options: { course?: string; state?: CorrectionState; limit?: number } = {}): Promise<Correction[]> {
+export async function listCorrections(db: Db, options: { course?: string; state?: CorrectionState; exam?: string; limit?: number } = {}): Promise<Correction[]> {
   const { rows } = await db.query(
     `SELECT c.*, coalesce(json_agg(json_build_object('id', p.id, 'position', p.position, 'contentType', p.content_type, 'bytes', p.bytes, 'createdAt', p.created_at) ORDER BY p.position) FILTER (WHERE p.id IS NOT NULL), '[]') AS photos
      FROM corrections c LEFT JOIN correction_photos p ON p.correction_id = c.id
-     WHERE ($1::text IS NULL OR lower(c.course) = lower($1)) AND ($2::text IS NULL OR c.state = $2)
+     WHERE ($1::text IS NULL OR lower(c.course) = lower($1)) AND ($2::text IS NULL OR c.state = $2) AND ($4::text IS NULL OR c.exam = $4)
      GROUP BY c.id ORDER BY c.created_at DESC LIMIT $3`,
-    [options.course ?? null, options.state ?? null, options.limit ?? 100],
+    [options.course ?? null, options.state ?? null, options.limit ?? 100, options.exam ?? null],
   );
   return rows.map((r) => row(r, (r.photos as PhotoMeta[]).map((p) => ({ ...p, id: Number(p.id), createdAt: new Date(p.createdAt) }))));
 }
@@ -123,14 +153,16 @@ export async function getCorrection(db: Db, id: string): Promise<Correction | un
   return rows[0] ? row(rows[0], await photosOf(db, id)) : undefined;
 }
 
-export async function updateCorrection(db: Db, id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }): Promise<Correction | undefined> {
+export async function updateCorrection(db: Db, id: string, patch: CorrectionPatch): Promise<Correction | undefined> {
+  const exam = checkExam(patch.exam);
   await db.query(
     `UPDATE corrections SET title = coalesce($2, title),
        course = CASE WHEN $3::boolean THEN $4 ELSE course END,
        topic = CASE WHEN $5::boolean THEN $6 ELSE topic END,
        notes = CASE WHEN $7::boolean THEN $8 ELSE notes END,
+       exam = CASE WHEN $9::boolean THEN $10 ELSE exam END,
        updated_at = now() WHERE id = $1`,
-    [id, patch.title ?? null, patch.course !== undefined, patch.course ?? null, patch.topic !== undefined, patch.topic ?? null, patch.notes !== undefined, patch.notes ?? null],
+    [id, patch.title ?? null, patch.course !== undefined, patch.course ?? null, patch.topic !== undefined, patch.topic ?? null, patch.notes !== undefined, patch.notes ?? null, exam !== undefined, exam ?? null],
   );
   return getCorrection(db, id);
 }

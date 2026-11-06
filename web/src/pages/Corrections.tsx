@@ -29,6 +29,15 @@ export function verdictCounts(c: Correction) {
   };
 }
 
+/** The Swiss grade (1 to 6, to a tenth) of a corrected piece of work: by points when every exercise has some, by verdicts otherwise. */
+export function swissGrade(c: Correction): number | undefined {
+  const ex = c.result?.exercises ?? [];
+  if (ex.length === 0) return undefined;
+  const pointed = ex.every((e) => e.points && e.points.total > 0);
+  const ratio = pointed ? ex.reduce((s, e) => s + Math.max(0, Math.min(e.points!.total, e.points!.obtained)), 0) / ex.reduce((s, e) => s + e.points!.total, 0) : verdictCounts(c).percent / 100;
+  return Math.round((1 + 5 * Math.max(0, Math.min(1, ratio))) * 10) / 10;
+}
+
 /** Success as a share of the bar; the colour follows the score. */
 export function VerdictBar({ c }: { c: Correction }) {
   const v = verdictCounts(c);

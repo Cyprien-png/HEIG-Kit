@@ -7,11 +7,13 @@
  *   npm run library -- sync            both ways
  *   … --dry-run                        only show what would be copied
  *   npm run library -- items [--course MAD] [--tag exercices]        the library by course, with its tags
+ *   npm run library -- exams [--course MAD]                          the mock exams (TE blancs): done or not, grade, corrections
  *   npm run library -- tag <item> [--course MAD] [--tags "a,b"] [--add a] [--remove b]
  *                                      (item: document:name, documents/name.pdf or the title; local database without HEIG_REMOTE_URL)
  */
 import { parseArgs } from "node:util";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
+import { formatMockExams } from "../src/app/exams.js";
 import { migrate, openDb } from "../src/rag/db.js";
 import { RemoteClient } from "../src/remote/client.js";
 import { type Direction, formatReport, remoteFiles, syncLibrary } from "../src/remote/library.js";
@@ -43,6 +45,9 @@ async function openApi(): Promise<{ api: HeigApi; close: () => Promise<void> }> 
 async function tagging(): Promise<void> {
   const { api, close } = await openApi();
   try {
+    if (action === "exams") {
+      return console.log(formatMockExams(await api.mockExams(values.course)));
+    }
     if (action === "items") {
       const course = values.course?.toUpperCase();
       const items = (await api.library()).filter((i) => (!course || i.course === course) && (!values.tag || i.tags.includes(values.tag.toLowerCase())));
@@ -59,7 +64,7 @@ async function tagging(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (action === "items" || action === "tag") return tagging();
+  if (action === "items" || action === "tag" || action === "exams") return tagging();
   const client = await RemoteClient.fromEnv();
   if (!client) throw new Error("Set HEIG_REMOTE_URL in .env and run `npm run remote -- login` first");
   if (action === "list") {
@@ -69,7 +74,7 @@ async function main(): Promise<void> {
     return;
   }
   const direction: Direction | undefined = action === "push" || action === "pull" ? action : action === "sync" ? "both" : undefined;
-  if (!direction) throw new Error("Usage: npm run library -- list | push | pull | sync [--dry-run] | items | tag <item>");
+  if (!direction) throw new Error("Usage: npm run library -- list | push | pull | sync [--dry-run] | items | exams | tag <item>");
   const report = await syncLibrary(client, direction, values["dry-run"], (line) => console.log(line));
   console.log(formatReport(report, direction, values["dry-run"]));
 }

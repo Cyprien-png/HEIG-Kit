@@ -89,6 +89,19 @@ Each item carries a course code and tags (`library_tags`): a type among `explica
 without saved tags is classified from its name and title (the course codes come from the GAPS snapshots). The web app
 lists the library by course then by type, and filters it by course, type and tags; `list_library` gives the same view.
 
+## Mock exams (« Tests blancs »)
+
+The practice exams the agent generates (`heig:teacher`, « TE blanc ») are library documents tagged `te blanc`: a
+statement and its solutions, whose names differ only by `-enonce` / `-corrige` (or `solutions`, `bareme`…), so that
+`src/app/exams.ts` pairs them into one exam. The **Tests blancs** page (`/exams`, `GET /api/exams`, `list_mock_exams`,
+`npm run library -- exams`) lists them by course with what the student did: to do, correction pending, or done with the
+grade. A correction answers an exam when its `exam` column names the statement's item (`document:<name>`): the agent
+passes it to `create_correction` (`npm run correction -- new --exam …`) when correcting a mock exam, the page's
+« Photographier » button creates such a correction itself (capture link at once, the agent then corrects it), and
+« Lier » attaches an existing correction. The grade follows the Swiss scale, 1 + 5 × the success ratio to a tenth: by
+points when the agent gave points to every exercise, otherwise one point per exercise (half for a partial one). The last
+corrected attempt gives the exam's grade, the best one is kept too.
+
 ## Flashcards
 
 Decks (`decks`) of cards (`cards`, Markdown on both faces, see below) per course. Studying follows a small spaced

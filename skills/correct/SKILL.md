@@ -30,7 +30,11 @@ The student must never wait for you, nor you for them. Two steps, in this order:
    ```
 
    (or `update_correction`). The title names the work ("Série 3 MAD", "TE blanc ANA1 problème 2"); the capture page
-   on the phone picks the new title up by itself. Use this time to also look up the statements and the reference
+   on the phone picks the new title up by itself. When the work is a **mock exam of the library** (a TE blanc generated
+   earlier), add `--exam document:<name>` with the statement's item from `npm --prefix <root> run -s library -- exams
+   [--course <CODE>]` (MCP: `list_mock_exams`, then `exam` of `create_correction` / `update_correction`): the Tests blancs
+   page of the web app then shows it as done, with its grade on the Swiss scale and a link to the correction. Give every
+   exercise its `points` (`obtained`, `total`, from the barème of the corrigé) so that the grade is exact. Use this time to also look up the statements and the reference
    solutions in the course material (step 3.2), so that the correction starts as soon as the photos arrive.
 
 ## 2. Wait for the photos, then read them

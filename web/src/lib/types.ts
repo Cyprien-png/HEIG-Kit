@@ -247,12 +247,50 @@ export interface Correction {
   topic?: string;
   state: "capture" | "received" | "corrected";
   notes?: string;
+  /** The mock exam this work answers: the library item of its statement (`document:<name>`). */
+  exam?: string;
   result?: { summary: string; exercises: CorrectedExercise[]; toRevise?: string[] };
   createdAt: string;
   updatedAt: string;
   sentAt?: string;
   correctedAt?: string;
   photos: { id: number; position: number; contentType: string; bytes: number; createdAt: string }[];
+}
+
+// Mock exams (mirrors src/app/exams.ts)
+
+export type ExamStatus = "todo" | "pending" | "done";
+
+export interface ExamScore {
+  obtained: number;
+  total: number;
+  percent: number;
+  /** Swiss grade, 1 to 6, to a tenth. */
+  grade: number;
+}
+
+export interface ExamAttempt {
+  id: string;
+  title: string;
+  state: Correction["state"];
+  createdAt: string;
+  correctedAt?: string;
+  score?: ExamScore;
+}
+
+export interface MockExam {
+  /** The statement's item key (`document:<name>`). */
+  key: string;
+  course?: string;
+  title: string;
+  statement?: LibraryItem;
+  solutions?: LibraryItem;
+  items: LibraryItem[];
+  createdAt: string;
+  attempts: ExamAttempt[];
+  status: ExamStatus;
+  last?: ExamAttempt;
+  best?: ExamScore;
 }
 
 export interface ProfileNote {

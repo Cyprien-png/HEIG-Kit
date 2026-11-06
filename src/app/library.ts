@@ -146,7 +146,7 @@ export function classify(item: Pick<LibraryItem, "kind" | "name" | "title">, cou
   if (/revision|fiche|resume|recap|memo|synthese|formulaire/.test(text)) tags.push("révision");
   if (/exercice|exos?\b|serie|entrainement|probleme/.test(text)) tags.push("exercices");
   if (/corrig|solution/.test(text)) tags.push("corrigé");
-  if (/\bte\b.{0,3}blanc|examen blanc|\bte\s*\d|\bte\b/.test(text)) tags.push("te blanc");
+  if (/\bte\b.{0,3}blanc|examen blanc|test blanc|\bte\s*\d|\bte\b/.test(text)) tags.push("te blanc");
   if (item.kind === "video") tags.push("vidéo");
   return { course: course?.toUpperCase(), tags };
 }

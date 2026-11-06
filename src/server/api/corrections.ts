@@ -17,18 +17,24 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
   router.get("/api/corrections", async ({ url }) => {
     const state = url.searchParams.get("state");
     if (state && !STATES.has(state as CorrectionState)) throw new HttpError(400, "invalid state");
-    return { corrections: await listCorrections(app.db, { course: url.searchParams.get("course") ?? undefined, state: (state as CorrectionState) ?? undefined }) };
+    return { corrections: await listCorrections(app.db, { course: url.searchParams.get("course") ?? undefined, state: (state as CorrectionState) ?? undefined, exam: url.searchParams.get("exam") ?? undefined }) };
   });
 
   /** Creates a correction and gives the capture link for the phone (valid a few hours). */
   router.post("/api/corrections", async ({ req }) => {
     const body = await readJson(req);
-    const correction = await createCorrection(app.db, {
+    let correction;
+    try {
+      correction = await createCorrection(app.db, {
       title: stringField(body, "title", { optional: true, max: 200 }),
       course: stringField(body, "course", { optional: true, max: 40 }),
       topic: stringField(body, "topic", { optional: true, max: 200 }),
       notes: stringField(body, "notes", { optional: true, max: 4000 }),
+      exam: stringField(body, "exam", { optional: true, max: 220 }),
     });
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
     const token = await app.auth.issueCaptureToken(correction.id);
     return { ...correction, captureUrl: captureUrl(app.config.publicUrl, correction.id, token) };
   });
@@ -52,7 +58,12 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
   router.patch("/api/corrections/:id", async ({ req, params }) => {
     const body = await readJson(req);
     const nullable = (name: string, max: number) => (body[name] === null ? null : stringField(body, name, { optional: true, max }));
-    const correction = await updateCorrection(app.db, params.id, { title: stringField(body, "title", { optional: true, max: 200 }), course: nullable("course", 40), topic: nullable("topic", 200), notes: nullable("notes", 4000) });
+    let correction;
+    try {
+      correction = await updateCorrection(app.db, params.id, { title: stringField(body, "title", { optional: true, max: 200 }), course: nullable("course", 40), topic: nullable("topic", 200), notes: nullable("notes", 4000), exam: nullable("exam", 220) });
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
     if (!correction) throw new HttpError(404, "no such correction");
     return correction;
   });

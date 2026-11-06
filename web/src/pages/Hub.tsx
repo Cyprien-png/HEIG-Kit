@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ETUDES, type NavItem, REVISION } from "../components/Shell";
 import { PageHeader } from "../components/ui";
 import { useApi } from "../lib/api";
-import type { Correction, Deck, StudyStats } from "../lib/types";
+import type { Correction, Deck, MockExam, StudyStats } from "../lib/types";
 
 /** A list of places to go, one row each, with a count when something waits there. */
 function Hub({ title, items, counts = {} }: { title: string; items: NavItem[]; counts?: Record<string, number | undefined> }) {
@@ -34,8 +34,10 @@ function Hub({ title, items, counts = {} }: { title: string; items: NavItem[]; c
 export function Revision() {
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections");
+  const exams = useApi<{ exams: MockExam[] }>("/api/exams");
   const open = (corrections.data?.corrections ?? []).filter((c) => c.state !== "corrected").length;
-  return <Hub title="Révision" items={REVISION} counts={{ "/cards": decks.data?.stats.due, "/corrections": open }} />;
+  const todo = (exams.data?.exams ?? []).filter((e) => e.status === "todo").length;
+  return <Hub title="Révision" items={REVISION} counts={{ "/cards": decks.data?.stats.due, "/corrections": open, "/exams": todo }} />;
 }
 
 export function Etudes() {

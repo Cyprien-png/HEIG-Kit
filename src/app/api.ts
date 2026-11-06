@@ -7,6 +7,7 @@ import type { Db } from "../rag/db.js";
 import type { RemoteClient } from "../remote/client.js";
 import * as calendar from "./calendar.js";
 import * as corrections from "./corrections.js";
+import * as exams from "./exams.js";
 import * as flashcards from "./flashcards.js";
 import * as library from "./library.js";
 import * as profile from "./profile.js";
@@ -24,6 +25,7 @@ export type ListOptions = calendar.ListOptions;
 export type Deck = Json<flashcards.Deck>;
 export type Card = Json<flashcards.Card>;
 export type Correction = Json<corrections.Correction>;
+export type MockExam = Json<exams.MockExam>;
 export type ProfileNote = Json<profile.ProfileNote>;
 export type ProfileSummary = Json<profile.ProfileSummary>;
 export type QuizSummary = Json<quizzes.QuizSummary>;
@@ -58,10 +60,12 @@ export interface HeigApi {
   review(cardId: number, grade: flashcards.Grade): Promise<Card | undefined>;
   studyStats(): Promise<Json<flashcards.StudyStats>>;
 
-  corrections(options?: { course?: string; state?: corrections.CorrectionState }): Promise<Correction[]>;
+  corrections(options?: { course?: string; state?: corrections.CorrectionState; exam?: string }): Promise<Correction[]>;
   correction(id: string): Promise<Correction | undefined>;
-  createCorrection(input?: { title?: string; course?: string; topic?: string; notes?: string }): Promise<Correction & { captureUrl: string }>;
-  updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }): Promise<Correction>;
+  createCorrection(input?: corrections.CorrectionInput): Promise<Correction & { captureUrl: string }>;
+  updateCorrection(id: string, patch: corrections.CorrectionPatch): Promise<Correction>;
+  /** The mock exams of the library with the student's attempts and grades (src/app/exams.ts). */
+  mockExams(course?: string): Promise<MockExam[]>;
   captureLink(id: string): Promise<string>;
   correctionPhotos(id: string): Promise<{ id: number; contentType: string; data: Buffer }[]>;
   submitCorrection(id: string, result: corrections.CorrectionResult): Promise<Correction>;
@@ -187,18 +191,21 @@ export class LocalApi implements HeigApi {
     return json(await flashcards.studyStats(this.db));
   }
 
-  async corrections(options: { course?: string; state?: corrections.CorrectionState } = {}) {
+  async corrections(options: { course?: string; state?: corrections.CorrectionState; exam?: string } = {}) {
     return json(await corrections.listCorrections(this.db, options));
+  }
+  async mockExams(course?: string) {
+    return json(await exams.listMockExams(this.db, course));
   }
   async correction(id: string) {
     return json(await corrections.getCorrection(this.db, id));
   }
-  async createCorrection(input: { title?: string; course?: string; topic?: string; notes?: string } = {}) {
+  async createCorrection(input: corrections.CorrectionInput = {}) {
     if (!this.options.captureUrl) throw new Error("Corrections need the remote server: the phone must reach it to send photos (HEIG_REMOTE_URL, docs/app.md)");
     const created = await corrections.createCorrection(this.db, input);
     return { ...json(created), captureUrl: await this.options.captureUrl(created.id) };
   }
-  async updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }) {
+  async updateCorrection(id: string, patch: corrections.CorrectionPatch) {
     const updated = await corrections.updateCorrection(this.db, id, patch);
     if (!updated) throw new Error(`No correction ${id}`);
     return json(updated);
@@ -364,16 +371,19 @@ export class RemoteApi implements HeigApi {
     return (await this.client.get<{ stats: Json<flashcards.StudyStats> }>("/api/decks")).stats;
   }
 
-  async corrections(options: { course?: string; state?: corrections.CorrectionState } = {}) {
+  async corrections(options: { course?: string; state?: corrections.CorrectionState; exam?: string } = {}) {
     return (await this.client.get<{ corrections: Correction[] }>(`/api/corrections${qs(options)}`)).corrections;
+  }
+  async mockExams(course?: string) {
+    return (await this.client.get<{ exams: MockExam[] }>(`/api/exams${qs({ course })}`)).exams;
   }
   async correction(id: string) {
     return this.client.get<Correction>(`/api/corrections/${id}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
-  createCorrection(input: { title?: string; course?: string; topic?: string; notes?: string } = {}) {
+  createCorrection(input: corrections.CorrectionInput = {}) {
     return this.client.post<Correction & { captureUrl: string }>("/api/corrections", input);
   }
-  updateCorrection(id: string, patch: { title?: string; course?: string | null; topic?: string | null; notes?: string | null }) {
+  updateCorrection(id: string, patch: corrections.CorrectionPatch) {
     return this.client.patch<Correction>(`/api/corrections/${id}`, patch);
   }
   async captureLink(id: string) {
