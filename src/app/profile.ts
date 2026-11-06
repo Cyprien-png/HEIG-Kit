@@ -91,6 +91,20 @@ export async function resolveNote(db: Db, id: number, resolved = true): Promise<
   return rows[0] ? row(rows[0]) : undefined;
 }
 
+/** Changes the chapter (its title, its number or null to clear it) or the topic of a note. */
+export async function updateNote(db: Db, id: number, patch: { chapter?: string | null; topic?: string }): Promise<ProfileNote | undefined> {
+  if (patch.topic !== undefined && !patch.topic.trim()) throw new Error("topic cannot be empty");
+  const current = (await db.query("SELECT course FROM profile_notes WHERE id = $1", [id])).rows[0] as { course: string | null } | undefined;
+  if (!current) return undefined;
+  let chapter = patch.chapter?.trim() || null;
+  if (chapter && current.course) chapter = chapterNamed(chapter, await listChapters(db, current.course))?.title ?? chapter;
+  const { rows } = await db.query(
+    "UPDATE profile_notes SET chapter = CASE WHEN $2 THEN $3 ELSE chapter END, topic = COALESCE($4, topic) WHERE id = $1 RETURNING *",
+    [id, patch.chapter !== undefined, chapter, patch.topic?.trim() ?? null],
+  );
+  return rows[0] ? row(rows[0]) : undefined;
+}
+
 export async function deleteNote(db: Db, id: number): Promise<boolean> {
   return (await db.query("DELETE FROM profile_notes WHERE id = $1", [id])).rowCount === 1;
 }
@@ -166,26 +180,58 @@ export async function setChapters(db: Db, course: string, chapters: ChapterInput
   } finally {
     client.release();
   }
-  return listChapters(db, code);
+  const saved = await listChapters(db, code);
+  if (saved.length > 0) await fileNotes(db, code);
+  return saved;
+}
+
+/**
+ * Writes on each note of a course the chapter it belongs to (the one its topic matches by keyword, or the one it already
+ * names), so the notes keep their chapter when the keywords change. Notes without a chapter only, or every note with `all`.
+ */
+export async function fileNotes(db: Db, course: string, all = false): Promise<{ filed: number; unassigned: string[] }> {
+  const chapters = await listChapters(db, course);
+  const notes = await listNotes(db, { course, resolved: true, limit: 5000 });
+  let filed = 0;
+  const unassigned = new Set<string>();
+  for (const n of notes) {
+    if (n.kind === "note") continue;
+    const named = n.chapter ? chapterNamed(n.chapter, chapters) : undefined;
+    if (named && !all) continue;
+    const chapter = chapterOf({ topic: n.topic }, chapters) ?? named;
+    if (!chapter) {
+      unassigned.add(n.topic);
+      continue;
+    }
+    if (n.chapter === chapter.title) continue;
+    await db.query("UPDATE profile_notes SET chapter = $2 WHERE id = $1", [n.id, chapter.title]);
+    filed++;
+  }
+  return { filed, unassigned: [...unassigned].sort() };
 }
 
 const fold = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
+/** The chapter a name designates: its title, its number, the start of its title or its title without the number. */
+export function chapterNamed(name: string, chapters: Chapter[]): Chapter | undefined {
+  const named = fold(name);
+  if (!named) return undefined;
+  return chapters.find((c) => fold(c.title) === named || String(c.position) === named || fold(c.title).startsWith(named) || fold(c.title).replace(/^\d+[.:)\s-]*/, "") === named);
+}
+
 /** The chapter a note belongs to: the one it names (title, number or start of the title), else the one whose keywords match its topic. */
 export function chapterOf(note: Pick<NoteInput, "chapter" | "topic">, chapters: Chapter[]): Chapter | undefined {
-  const named = note.chapter && fold(note.chapter);
-  if (named) {
-    const byName = chapters.find((c) => fold(c.title) === named || String(c.position) === named || fold(c.title).startsWith(named) || fold(c.title).replace(/^\d+[.:)\s-]*/, "") === named);
-    if (byName) return byName;
-  }
+  const byName = note.chapter ? chapterNamed(note.chapter, chapters) : undefined;
+  if (byName) return byName;
   const topic = fold(note.topic);
+  if (!topic) return undefined;
   return chapters.find((c) => c.keywords.some((k) => fold(k) === topic)) ?? chapters.find((c) => c.keywords.some((k) => topic.includes(fold(k)) || fold(k).includes(topic)));
 }
 
-/** The status of each chapter of a course from its open notes, severity-weighted; chapters without notes are unassessed. */
-/** "3. Fonctions" when the title already starts with its number, else "3. Fonctions" built from the position. */
+/** "3. Fonctions" when the title already starts with its number, else built from the position. */
 export const chapterLabel = (c: Pick<Chapter, "position" | "title">) => (/^\d+[.:)\s-]/.test(c.title) ? c.title : `${c.position}. ${c.title}`);
 
+/** The status of each chapter of a course from its open notes, severity-weighted; chapters without notes are unassessed. */
 export function chapterSummaries(chapters: Chapter[], notes: Pick<NoteInput, "chapter" | "topic" | "kind" | "severity">[]): { chapters: ChapterSummary[]; unassigned: string[] } {
   const tally = new Map(chapters.map((c) => [c.id, { pos: 0, neg: 0, strengths: 0, weaknesses: 0, mistakes: 0, topics: new Set<string>() }]));
   const unassigned = new Set<string>();

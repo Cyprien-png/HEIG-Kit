@@ -72,9 +72,13 @@ export interface HeigApi {
   searchNotes(query: string, course?: string): Promise<ProfileNote[]>;
   addNotes(notes: profile.NoteInput[]): Promise<ProfileNote[]>;
   resolveNote(id: number, resolved?: boolean): Promise<ProfileNote | undefined>;
+  /** Changes the chapter (null clears it) or the topic of a note. */
+  updateNote(id: number, patch: { chapter?: string | null; topic?: string }): Promise<ProfileNote | undefined>;
   /** The chapters of a course (of every course without one), the axes of the profile. */
   chapters(course?: string): Promise<profile.Chapter[]>;
   setChapters(course: string, chapters: profile.ChapterInput[]): Promise<profile.Chapter[]>;
+  /** Writes its chapter on each note of the course that has none (every note with `all`), by the chapters' keywords. */
+  fileNotes(course: string, all?: boolean): Promise<{ filed: number; unassigned: string[] }>;
 
   quizzes(course?: string): Promise<QuizSummary[]>;
   quiz(id: number): Promise<Quiz | undefined>;
@@ -233,11 +237,17 @@ export class LocalApi implements HeigApi {
   async resolveNote(id: number, resolved = true) {
     return json(await profile.resolveNote(this.db, id, resolved));
   }
+  async updateNote(id: number, patch: { chapter?: string | null; topic?: string }) {
+    return json(await profile.updateNote(this.db, id, patch));
+  }
   chapters(course?: string) {
     return profile.listChapters(this.db, course);
   }
   setChapters(course: string, chapters: profile.ChapterInput[]) {
     return profile.setChapters(this.db, course, chapters);
+  }
+  fileNotes(course: string, all = false) {
+    return profile.fileNotes(this.db, course, all);
   }
 
   async quizzes(course?: string) {
@@ -401,11 +411,17 @@ export class RemoteApi implements HeigApi {
   async resolveNote(id: number, resolved = true) {
     return this.client.post<ProfileNote>(`/api/profile/notes/${id}/resolve`, { resolved }).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
+  async updateNote(id: number, patch: { chapter?: string | null; topic?: string }) {
+    return this.client.patch<ProfileNote>(`/api/profile/notes/${id}`, patch).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
+  }
   async chapters(course?: string) {
     return (await this.client.get<{ chapters: profile.Chapter[] }>(`/api/profile/chapters${qs({ course })}`)).chapters;
   }
   async setChapters(course: string, chapters: profile.ChapterInput[]) {
     return (await this.client.put<{ chapters: profile.Chapter[] }>(`/api/profile/chapters/${encodeURIComponent(course)}`, { chapters })).chapters;
+  }
+  fileNotes(course: string, all = false) {
+    return this.client.post<{ filed: number; unassigned: string[] }>(`/api/profile/chapters/${encodeURIComponent(course)}/file`, { all });
   }
 
   async quizzes(course?: string) {

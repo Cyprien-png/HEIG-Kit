@@ -136,7 +136,9 @@ a course in order (set by the agent from the unit sheet with `set_course_chapter
 the topics it covers as keywords. The profile page shows, per course, a radar with one axis per chapter and the
 chapter's status, one of four: **maîtrisé** (70 % or more of the severity-weighted observations are strengths),
 **fragile** (40 to 70 %), **en difficulté** (below) or **non évalué** (no observation yet). A note counts for the chapter
-it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». Below the radar:
+it names, else for the chapter whose keywords hold its topic; the rest is listed as « sans chapitre ». Setting the
+chapters also writes its chapter on each existing note without one (`POST /api/profile/chapters/:course/file` with
+`{"all": true}` refiles every note; `PATCH /api/profile/notes/:id` moves a single note). Below the radar:
 weak and strong topics, frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a
 revision session.
 

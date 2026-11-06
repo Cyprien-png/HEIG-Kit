@@ -18,7 +18,9 @@ description: Reads and updates the user's learning profile (strengths, weaknesse
 - `profile -- chapters [MAD]`: the chapters of a course, the axes of the profile's radar; `profile -- chapters MAD --file
   chapters.json` sets them in order (`{ "chapters": [ { "title": "3. Relations", "keywords": ["relation d'ordre",
   "diagramme de Hasse"] } ] }`). Each chapter is **maîtrisé**, **fragile**, **en difficulté** or **non évalué** from the
-  open notes filed under it (their `chapter` field, or a keyword equal to their topic).
+  open notes filed under it (their `chapter` field, or a keyword equal to their topic). Setting the chapters writes
+  its chapter on every existing note without one; `profile -- file MAD [--all]` does it again (`--all` refiles every
+  note after the keywords changed), `profile -- set <note id> --chapter "2. Relations"` moves one note by hand.
 
 ## Chapters first
 

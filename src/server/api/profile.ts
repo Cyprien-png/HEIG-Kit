@@ -1,4 +1,4 @@
-import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, listChapters, listNotes, profileSummary, resolveNote, searchNotes, setChapters } from "../../app/profile.js";
+import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, fileNotes, listChapters, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../../app/profile.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, intParam, readJson, stringField } from "./util.js";
@@ -41,6 +41,12 @@ export function registerProfileRoutes(router: Router, app: App): void {
     return { chapters: await setChapters(app.db, params.course, chapters) };
   });
 
+  /** Writes its chapter on each note of the course without one (`{"all": true}` for every note), from the chapters' keywords. */
+  router.post("/api/profile/chapters/:course/file", async ({ req, params }) => {
+    const body = await readJson(req);
+    return fileNotes(app.db, params.course, body.all === true);
+  });
+
   router.get("/api/profile/notes", async ({ url }) => {
     const kind = url.searchParams.get("kind");
     if (kind && !NOTE_KINDS.includes(kind as NoteKind)) throw new HttpError(400, "invalid kind");
@@ -60,6 +66,16 @@ export function registerProfileRoutes(router: Router, app: App): void {
   router.post("/api/profile/notes/:id/resolve", async ({ req, params }) => {
     const body = await readJson(req);
     const note = await resolveNote(app.db, intParam(params.id, "id"), body.resolved !== false);
+    if (!note) throw new HttpError(404, "no such note");
+    return note;
+  });
+
+  /** `{"chapter": "2. Relations" | null, "topic": "…"}`: refiles or renames a note. */
+  router.patch("/api/profile/notes/:id", async ({ req, params }) => {
+    const body = await readJson(req);
+    const patch = { chapter: body.chapter === null ? null : stringField(body, "chapter", { optional: true, max: 200 }), topic: stringField(body, "topic", { optional: true, max: 200 }) };
+    if (patch.chapter === undefined && patch.topic === undefined) throw new HttpError(400, "give a chapter or a topic");
+    const note = await updateNote(app.db, intParam(params.id, "id"), patch);
     if (!note) throw new HttpError(404, "no such note");
     return note;
   });

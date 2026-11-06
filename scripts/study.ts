@@ -16,6 +16,8 @@
  *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …]      names it while the student photographs
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
+ *                      | set <id> --chapter "2. Relations" [--topic …]      refiles or renames a note
+ *                      | file <COURSE> [--all]                               writes its chapter on each note without one (every note with --all)
  *                      | chapters [<COURSE>] [--file chapters.json]   (sets them: { "chapters": [ { "title": "…", "keywords": ["…"] } ] })
  *   npm run quiz -- [list [--course RXI]] | show <id> | create --file quiz.json | play <id> [--shuffle] | result <attempt id> | delete <id>
  */
@@ -56,6 +58,8 @@ const { values, positionals } = parseArgs({
     limit: { type: "string" },
     json: { type: "boolean", default: false },
     "all-day": { type: "boolean", default: false },
+    all: { type: "boolean", default: false },
+    chapter: { type: "string" },
     shuffle: { type: "boolean", default: false },
   },
 });
@@ -311,6 +315,17 @@ async function profile(api: HeigApi): Promise<void> {
     }
     case "resolve":
       return out((await api.resolveNote(Number(rest[0]))) ? "Note resolved." : "No such note.");
+    case "set": {
+      if (!rest[0] || (values.chapter === undefined && values.topic === undefined)) throw new Error("Usage: npm run profile -- set <id> --chapter \"2. Relations\" [--topic …]");
+      const note = await api.updateNote(Number(rest[0]), { chapter: values.chapter === "" ? null : values.chapter, topic: values.topic });
+      return out(values.json ? note : note ? `Note ${note.id}: ${note.topic}${note.chapter ? ` · ${note.chapter}` : ""}` : "No such note.");
+    }
+    case "file": {
+      const course = rest[0] ?? values.course;
+      if (!course) throw new Error("Usage: npm run profile -- file <COURSE> [--all]");
+      const r = await api.fileNotes(course, values.all);
+      return out(values.json ? r : `${r.filed} notes filed under the chapters of ${course.toUpperCase()}.${r.unassigned.length ? `\nUnder no chapter: ${r.unassigned.join(", ")}` : ""}`);
+    }
     case "chapters": {
       const course = rest[0] ?? values.course;
       if (values.file) {
@@ -322,7 +337,7 @@ async function profile(api: HeigApi): Promise<void> {
       return out(values.json ? chapters : chapters.length === 0 ? "No chapters set." : chapters.map((c) => `${c.course.padEnd(6)} ${chapterLabel(c)}${c.keywords.length ? `  (${c.keywords.join(", ")})` : ""}`).join("\n"));
     }
     default:
-      throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve | chapters");
+      throw new Error("Usage: npm run profile -- [summary] | notes | add | resolve | set | file | chapters");
   }
 }
 

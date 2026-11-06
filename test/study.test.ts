@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
-import { type Chapter, addNotes, chapterOf, chapterSummaries, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters } from "../src/app/profile.js";
+import { type Chapter, addNotes, chapterOf, chapterSummaries, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
 
@@ -137,6 +137,15 @@ test("profile: notes aggregate into weaknesses, mistakes and topics to revise", 
   assert.deepEqual(mad.chapters.map((c) => [c.course, c.status]), [["MAD", "struggling"], ["MAD", "unassessed"]]);
   assert.deepEqual(mad.unassigned, ["diagramme de Hasse"]);
   assert.match(formatProfile(summary), /1\. Ensembles: struggling/);
+  // Setting the chapters wrote them on the notes; new keywords file the rest.
+  const filed = await listNotes(db!, { course: "MAD" });
+  assert.deepEqual(filed.filter((n) => n.topic === "inclusion-exclusion").map((n) => n.chapter), ["1. Ensembles", "1. Ensembles"]);
+  assert.equal(filed.find((n) => n.topic === "diagramme de Hasse")?.chapter, undefined);
+  await setChapters(db!, "mad", [{ title: "1. Ensembles", keywords: ["inclusion-exclusion"] }, { title: "2. Relations", keywords: ["Hasse"] }]);
+  assert.equal((await listNotes(db!, { course: "MAD" })).find((n) => n.topic === "diagramme de Hasse")?.chapter, "2. Relations");
+  assert.deepEqual(await fileNotes(db!, "MAD", true), { filed: 0, unassigned: [] });
+  assert.equal((await updateNote(db!, filed[0].id, { chapter: "2" }))?.chapter, "2. Relations");
+  assert.equal((await updateNote(db!, filed[0].id, { chapter: null }))?.chapter, undefined);
   assert.equal(mad.strengths.length, 1);
   assert.equal(summary.toRevise[0].topic, "inclusion-exclusion");
   assert.match(formatProfile(summary), /To revise first/);

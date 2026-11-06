@@ -458,12 +458,30 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       inputSchema: {
         course: z.string().describe("Course code, e.g. MAD"),
         chapters: z.array(z.object({ title: z.string().describe("e.g. '3. Relations'"), keywords: z.array(z.string()).optional().describe("Topics of the chapter as the notes name them, e.g. 'relation d'ordre', 'diagramme de Hasse'") })).max(60),
+        refile: z.boolean().optional().describe("true to refile every existing note of the course by the new keywords, not only the notes without a chapter"),
       },
     },
     async (a) =>
       respond(async () => {
         const chapters = await api.setChapters(a.course, a.chapters);
-        return chapters.length === 0 ? `Chapters of ${a.course.toUpperCase()} removed.` : `${chapters.length} chapters of ${chapters[0].course}:\n${chapters.map((c) => `${c.position}. ${c.title}${c.keywords.length ? ` (${c.keywords.join(", ")})` : ""}`).join("\n")}`;
+        if (chapters.length === 0) return `Chapters of ${a.course.toUpperCase()} removed.`;
+        const filed = await api.fileNotes(a.course, a.refile ?? false);
+        return `${chapters.length} chapters of ${chapters[0].course}:\n${chapters.map((c) => `${c.position}. ${c.title}${c.keywords.length ? ` (${c.keywords.join(", ")})` : ""}`).join("\n")}\n${filed.filed} existing notes filed under them.${filed.unassigned.length ? ` Under no chapter (add their topic to a chapter's keywords): ${filed.unassigned.join(", ")}` : ""}`;
+      }),
+  );
+
+  server.registerTool(
+    "update_profile_note",
+    {
+      title: "Refile or rename a note",
+      description: "Moves a note to another chapter of its course (or clears its chapter with null), or renames its topic so it aggregates with the others.",
+      inputSchema: { id: z.number().int(), chapter: z.string().nullable().optional().describe("Chapter title or number, null to clear"), topic: z.string().optional() },
+    },
+    async (a) =>
+      respond(async () => {
+        if (a.chapter === undefined && a.topic === undefined) throw new Error("Give a chapter or a topic");
+        const note = await api.updateNote(a.id, { chapter: a.chapter, topic: a.topic });
+        return note ? `Note ${note.id}: ${note.topic}${note.chapter ? ` · ${note.chapter}` : ""}` : `No note ${a.id}`;
       }),
   );
 
