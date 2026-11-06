@@ -360,6 +360,8 @@ export interface ProfileSummary {
     strengths: TopicSummary[];
     mistakes: TopicSummary[];
     verdicts?: { corrections: number; correct: number; partial: number; wrong: number; missing: number };
+    /** The overall grade on the course's exercises (corrected exercises and quiz answers), Swiss scale. */
+    score?: { exercises: { credit: number; total: number }; quiz: { correct: number; total: number }; ratio: number; grade: number };
     chapters: ChapterSummary[];
     unassigned: string[];
   }[];

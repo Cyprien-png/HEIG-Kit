@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { excerpt } from "../components/Markdown";
-import { Radar, type RadarAxis } from "../components/Radar";
+import { type LevelAxis, LevelRadar } from "../components/Radar";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, Stat } from "../components/ui";
 import { useApi } from "../lib/api";
 import { parseLessonCode } from "../lib/courses";
@@ -45,21 +45,13 @@ export function semesterCourses(plan: PlanUnit[] | undefined, now = new Date()):
   return followed.filter((u) => u.year === year && u.credits.some((c) => c.period === period && c.credits > 0)).map((u) => u.unit.code);
 }
 
-/**
- * Strengths and weaknesses per course on a common scale, relative to the largest: the profile notes weighted by
- * severity (strengths for, weaknesses and mistakes against) plus the quiz answers counted in the chapters (one point
- * each, right or wrong), the same tally as the chapter statuses of the Profile page.
- */
-export function radarAxes(courses: string[], profile: ProfileSummary | undefined): RadarAxis[] {
-  const weight = (list: { count: number; severity: number }[]) => list.reduce((s, t) => s + t.count * Math.max(1, t.severity), 0);
-  const raw = courses.map((code) => {
-    const c = profile?.courses.find((x) => x.course?.toUpperCase() === code.toUpperCase());
-    const quizRight = c?.chapters.reduce((s, ch) => s + ch.quizCorrect, 0) ?? 0;
-    const quizWrong = c?.chapters.reduce((s, ch) => s + ch.quizWrong, 0) ?? 0;
-    return { label: code, strong: c ? weight(c.strengths) + quizRight : 0, weak: c ? weight([...c.weaknesses, ...c.mistakes]) + quizWrong : 0 };
+/** The grade of each course on its exercises (corrected exercises and quiz answers): one axis per course, 1 at the centre, 6 at the edge. */
+export function gradeAxes(courses: string[], profile: ProfileSummary | undefined): LevelAxis[] {
+  return courses.map((code) => {
+    const score = profile?.courses.find((x) => x.course?.toUpperCase() === code.toUpperCase())?.score;
+    if (!score) return { label: code, value: 0.5, tone: "neutral", muted: true };
+    return { label: `${code} ${score.grade.toFixed(1)}`, value: score.ratio, tone: score.grade >= 4 ? "ok" : score.grade >= 3.5 ? "warn" : "bad" };
   });
-  const max = Math.max(1, ...raw.flatMap((a) => [a.strong, a.weak]));
-  return raw.map((a) => ({ label: a.label, strong: a.strong / max, weak: a.weak / max }));
 }
 
 export function Dashboard() {
@@ -80,9 +72,9 @@ export function Dashboard() {
   const axes = useMemo(() => {
     const courses = semesterCourses(plan.data?.data);
     const fallback = (profile.data?.courses ?? []).map((c) => c.course).filter((c): c is string => Boolean(c));
-    return radarAxes(courses.length ? courses : fallback, profile.data);
+    return gradeAxes(courses.length ? courses : fallback, profile.data);
   }, [plan.data, profile.data]);
-  const hasProfile = axes.some((a) => a.strong > 0 || a.weak > 0);
+  const hasProfile = axes.some((a) => !a.muted);
 
   return (
     <div className="space-y-4">
@@ -107,20 +99,17 @@ export function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-5 gap-4">
-        <Card title="Points forts et faibles" className="lg:col-span-2" actions={<Link to="/profile" className="text-xs text-accent inline-flex items-center gap-1">Profil <ArrowRightIcon className="h-3 w-3" /></Link>}>
+        <Card title="Notes aux exercices" className="lg:col-span-2" actions={<Link to="/profile" className="text-xs text-accent inline-flex items-center gap-1">Profil <ArrowRightIcon className="h-3 w-3" /></Link>}>
           {profile.loading || plan.loading ? (
             <Loading />
           ) : axes.length >= 3 ? (
             <Link to="/profile" className="block">
-              <Radar axes={axes} />
-              <div className="flex items-center justify-center gap-4 text-xs text-ink-2 mt-1">
-                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-ok" /> points forts</span>
-                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-bad" /> points faibles</span>
-              </div>
+              <LevelRadar axes={axes} label="Note par cours sur les exercices corrigés et les quiz" />
+              <p className="text-xs text-ink-2 text-center mt-1">Note sur 6 par cours : exercices corrigés et réponses aux quiz, 1 au centre, 6 au bord.</p>
               {!hasProfile && <p className="text-xs text-ink-3 text-center mt-2">Encore vide : faites un quiz ou faites corriger vos exercices pour le remplir.</p>}
             </Link>
           ) : (
-            <Empty title="Pas encore de profil" hint="Faites un quiz ou faites corriger vos exercices : chaque réponse compte pour ou contre un chapitre du cours." action={<Link to="/profile"><Button size="sm">Profil</Button></Link>} />
+            <Empty title="Pas encore de notes" hint="Faites un quiz ou faites corriger vos exercices : chaque cours reçoit une note sur 6." action={<Link to="/profile"><Button size="sm">Profil</Button></Link>} />
           )}
         </Card>
 

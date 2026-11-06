@@ -18,9 +18,10 @@ installation does not change (`npm run server:start`), the web application is bu
 
 Everything lives in the existing Postgres database (`rag/migrations/003_app.sql` and later).
 
-The web app has four places, the tabs of the phone's bottom bar: **Accueil** (the day, four counters, a radar of
-strengths and weaknesses per course of the current semester from the profile, today's events), **Calendrier**,
-**Révision** (cards, quizzes, courses, library, corrections, profile) and **Études** (study plan with folding years and
+The web app has four places, the tabs of the phone's bottom bar: **Accueil** (the day, four counters, a radar with the grade of
+each course of the current semester on its exercises, corrected exercises and quiz answers together on the Swiss scale,
+today's events), **Calendrier**,
+**Révision** (cards, quizzes, mock exams, courses, library, corrections, profile) and **Études** (study plan with folding years and
 modules, grades grouped by module with the credit-weighted module average and the usual promotion rule, the
 transcript). The cog opens the settings panel: theme, server status, logout. On a desktop the same places form the
 sidebar.

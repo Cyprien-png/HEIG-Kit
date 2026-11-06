@@ -92,3 +92,15 @@ test("mock exams pair the library items, read the corrections that name them and
   assert.match(text, /PRG\s+2026-11-05\s+correction pending/);
   assert.equal(formatMockExams([]), "No mock exam in the library (documents tagged « te blanc »).");
 });
+
+test("the grade of a course adds its corrected exercises and its quiz answers", async () => {
+  const { courseScore } = await import("../src/app/profile.js");
+  assert.equal(courseScore(undefined, []), undefined);
+  assert.deepEqual(courseScore({ correct: 3, partial: 2, wrong: 1, missing: 0 }, [{ correct: true }, { correct: true }, { correct: false }, { correct: true }]), {
+    exercises: { credit: 4, total: 6 },
+    quiz: { correct: 3, total: 4 },
+    ratio: 0.7,
+    grade: 4.5,
+  });
+  assert.equal(courseScore(undefined, [{ correct: true }, { correct: false }])?.grade, 3.5, "a course with quizzes only still gets a grade");
+});

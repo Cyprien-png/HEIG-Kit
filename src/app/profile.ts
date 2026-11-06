@@ -6,6 +6,7 @@ import type { Db } from "../rag/db.js";
 import { toVector } from "../rag/db.js";
 import { embed } from "../rag/embed.js";
 import { verdictStats } from "./corrections.js";
+import { swissGrade } from "./exams.js";
 import { type QuizAnswer, latestQuizAnswers } from "./quizzes.js";
 
 export type NoteKind = "weakness" | "strength" | "mistake" | "note";
@@ -435,6 +436,8 @@ export interface ProfileSummary {
     strengths: TopicSummary[];
     mistakes: TopicSummary[];
     verdicts?: { corrections: number; correct: number; partial: number; wrong: number; missing: number };
+    /** The overall grade on the course's exercises: corrected exercises and quiz answers together. */
+    score?: CourseScore;
     /** The chapters of the course with their status; empty until they are set. */
     chapters: ChapterSummary[];
     /** Topics of open notes that no chapter claims. */
@@ -443,6 +446,27 @@ export interface ProfileSummary {
   /** Topics to revise first, across courses: weak topics and repeated mistakes, worst first. */
   toRevise: (TopicSummary & { score: number })[];
   openNotes: number;
+}
+
+export interface CourseScore {
+  /** Corrected exercises: one point each, half for a partial one, and how many there are. */
+  exercises: { credit: number; total: number };
+  /** Quiz answers of the last attempt of each quiz: right ones and how many there are. */
+  quiz: { correct: number; total: number };
+  /** Success, 0 to 1, over exercises and answers together. */
+  ratio: number;
+  /** Swiss grade, 1 to 6, to a tenth. */
+  grade: number;
+}
+
+/** The grade of a course from its corrected exercises (one point each, half for a partial) and its quiz answers (one each); undefined without any. */
+export function courseScore(verdicts: { correct: number; partial: number; wrong: number; missing: number } | undefined, answers: Pick<QuizAnswer, "correct">[]): CourseScore | undefined {
+  const exercises = verdicts ? { credit: verdicts.correct + verdicts.partial / 2, total: verdicts.correct + verdicts.partial + verdicts.wrong + verdicts.missing } : { credit: 0, total: 0 };
+  const quiz = { correct: answers.filter((a) => a.correct).length, total: answers.length };
+  const total = exercises.total + quiz.total;
+  if (total === 0) return undefined;
+  const ratio = (exercises.credit + quiz.correct) / total;
+  return { exercises, quiz, ratio, grade: swissGrade(ratio) };
 }
 
 async function topics(db: Db, kind: NoteKind, course?: string): Promise<TopicSummary[]> {
@@ -466,15 +490,16 @@ export async function profileSummary(db: Db, course?: string): Promise<ProfileSu
     listNotes(db, { course, limit: 5000 }),
     latestQuizAnswers(db, course),
   ]);
-  const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? ""), ...chapters.map((c) => c.course)])].sort();
+  const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? ""), ...chapters.map((c) => c.course), ...answers.map((a) => a.course?.toUpperCase() ?? "")])].sort();
   const courses = courseKeys.map((key) => {
     const c = key || null;
     const v = verdicts.find((x) => (x.course ?? null) === c);
     const own = chapters.filter((x) => x.course.toLowerCase() === (c ?? "").toLowerCase());
+    const ownAnswers = answers.filter((a) => (a.course ?? "").toLowerCase() === (c ?? "").toLowerCase());
     const perChapter = chapterSummaries(
       own,
       openNotes.filter((n) => (n.course ?? null)?.toLowerCase() === (c ?? "").toLowerCase() || (!n.course && c === null)),
-      answers.filter((a) => a.course?.toLowerCase() === (c ?? "").toLowerCase()),
+      ownAnswers,
     );
     return {
       course: c,
@@ -482,6 +507,7 @@ export async function profileSummary(db: Db, course?: string): Promise<ProfileSu
       strengths: strengths.filter((t) => (t.course ?? null) === c),
       mistakes: mistakes.filter((t) => (t.course ?? null) === c),
       verdicts: v ? { corrections: v.corrections, correct: v.correct, partial: v.partial, wrong: v.wrong, missing: v.missing } : undefined,
+      score: courseScore(v, ownAnswers),
       chapters: perChapter.chapters,
       unassigned: own.length > 0 ? perChapter.unassigned : [],
     };
