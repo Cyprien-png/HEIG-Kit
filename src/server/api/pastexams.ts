@@ -5,7 +5,9 @@ import type { Router } from "./router.js";
 import { CONTENT_TYPES, HttpError, readBody, sendFile } from "./util.js";
 
 const MAX_UPLOAD_BYTES = 4 * 1024 ** 3;
-const TYPES: Record<string, string> = { ...CONTENT_TYPES, ".md": "text/markdown; charset=utf-8", ".png": "image/png", ".json": "application/json" };
+const TYPES: Record<string, string> = { ...CONTENT_TYPES, ".md": "text/markdown; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".json": "application/json" };
+/** Served with the sandboxing CSP (an SVG or a Markdown file could carry scripts); an <img> still shows them. */
+const NOT_EMBEDDABLE = new Set([".md", ".svg", ".json", ".html"]);
 
 export function registerPastExamRoutes(router: Router, app: App): void {
   /** The past exams (« anciens TE ») by branch and year, with the student's attempts. */
@@ -19,7 +21,7 @@ export function registerPastExamRoutes(router: Router, app: App): void {
     if (!file) throw new HttpError(404, "no such file");
     const ext = path.extname(file).toLowerCase();
     const inline = url.searchParams.get("download") !== "1";
-    sendFile(req, res, file, { contentType: TYPES[ext] ?? "application/octet-stream", disposition: inline ? "inline" : "attachment", fileName: path.basename(file), embeddable: inline && ext !== ".md" && ext !== ".json", cacheControl: "private, no-cache" });
+    sendFile(req, res, file, { contentType: TYPES[ext] ?? "application/octet-stream", disposition: inline ? "inline" : "attachment", fileName: path.basename(file), embeddable: inline && !NOT_EMBEDDABLE.has(ext), cacheControl: "private, no-cache" });
   });
 
   router.put("/api/past-exams/files/*", async ({ req, params }) => {

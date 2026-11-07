@@ -71,7 +71,7 @@ export interface ExamTreeFile {
 export const examsDir = () => outputDir("exams");
 const YEAR = /^(\d{4})-(\d{4})$/;
 const SEGMENT = /^[\p{L}\p{N}_-][\p{L}\p{N} ._-]{0,150}$/u;
-const FILE_EXT = new Set([".pdf", ".md", ".png", ".json", ".html"]);
+const FILE_EXT = new Set([".pdf", ".md", ".png", ".svg", ".json", ".html"]);
 const ORIGINALS = ["original.pdf", "original-vierge.pdf", "original-corrige.pdf"] as const;
 
 const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -105,7 +105,7 @@ export function pastExamFile(id: string): string | undefined {
 /** Writes a file of the tree atomically, keeping its modification time (for syncs). */
 export function savePastExamFile(id: string, content: Buffer, modifiedAt?: Date): ExamTreeFile {
   const parsed = parseExamPath(id);
-  if (!parsed) throw new Error(`"${id}" is not an acceptable past exam file (<branch>/<year>/<exam>/<name>.pdf|md|png|json)`);
+  if (!parsed) throw new Error(`"${id}" is not an acceptable past exam file (<branch>/<year>/<exam>/<name>.pdf|md|png|svg|json)`);
   const file = path.join(path.resolve(examsDir()), ...id.split("/"));
   mkdirSync(path.dirname(file), { recursive: true });
   if (existsSync(file) && !lstatSync(file).isFile()) throw new Error(`${id} exists and is not a regular file`);
