@@ -98,7 +98,8 @@ export function examTitle(title: string): string {
 const isSolutions = (item: LibraryItem) => item.tags.includes(SOLUTION_TAG) || SOLUTION_WORDS.test(plain(item.name));
 const isStatement = (item: LibraryItem) => !isSolutions(item) || STATEMENT_WORDS.test(plain(item.name));
 
-const attemptOf = (c: Correction): ExamAttempt => ({ id: c.id, title: c.title, state: c.state, createdAt: c.createdAt, correctedAt: c.correctedAt, score: c.state === "corrected" ? examScore(c) : undefined });
+/** A correction as an attempt of an exam, with its score once corrected. */
+export const attemptOf = (c: Correction): ExamAttempt => ({ id: c.id, title: c.title, state: c.state, createdAt: c.createdAt, correctedAt: c.correctedAt, score: c.state === "corrected" ? examScore(c) : undefined });
 
 /** The mock exams of the library (documents tagged « te blanc »), with the corrections that name them. */
 export function mockExams(items: LibraryItem[], corrections: Correction[]): MockExam[] {

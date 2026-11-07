@@ -1,5 +1,6 @@
 import {
   AcademicCapIcon,
+  ArchiveBoxIcon,
   ArrowRightStartOnRectangleIcon,
   BookOpenIcon,
   CalendarDaysIcon,
@@ -33,7 +34,7 @@ export interface NavItem {
 export const TABS: NavItem[] = [
   { to: "/", label: "Accueil", icon: HomeIcon },
   { to: "/calendar", label: "Calendrier", icon: CalendarDaysIcon },
-  { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/exams", "/courses", "/documents", "/library", "/corrections", "/profile"] },
+  { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/exams", "/past-exams", "/courses", "/documents", "/library", "/corrections", "/profile"] },
   { to: "/etudes", label: "Études", icon: AcademicCapIcon, under: ["/studies", "/grades"] },
 ];
 
@@ -42,6 +43,7 @@ export const REVISION: NavItem[] = [
   { to: "/cards", label: "Cartes", icon: RectangleStackIcon, hint: "Répétition espacée, recto-verso" },
   { to: "/quiz", label: "Quiz", icon: QuestionMarkCircleIcon, hint: "Vrai ou faux, à glisser" },
   { to: "/exams", label: "Tests blancs", icon: ClipboardDocumentCheckIcon, hint: "TE blancs par cours, faits ou à faire, notes" },
+  { to: "/past-exams", label: "Anciens TE", icon: ArchiveBoxIcon, hint: "Les TE des années précédentes, par branche et année" },
   { to: "/courses", label: "Cours", icon: Squares2X2Icon, hint: "Supports indexés et recherche" },
   { to: "/library", label: "Bibliothèque", icon: FolderIcon, hint: "Documents et vidéos générés" },
   { to: "/corrections", label: "Corrections", icon: CheckBadgeIcon, hint: "Vos exercices photographiés" },

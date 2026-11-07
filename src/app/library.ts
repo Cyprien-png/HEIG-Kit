@@ -255,18 +255,25 @@ export function deleteLibraryFile(id: string): boolean {
 }
 
 /** Two copies of a file are the same when their size and modification time (to the second) match. */
-export function sameFile(a: LibraryFile, b: LibraryFile): boolean {
+export function sameFile(a: SyncFile, b: SyncFile): boolean {
   return a.size === b.size && Math.abs(Date.parse(a.modifiedAt) - Date.parse(b.modifiedAt)) < 1500;
 }
 
-export interface SyncPlan {
-  push: LibraryFile[];
-  pull: LibraryFile[];
+export interface SyncPlan<T extends SyncFile = LibraryFile> {
+  push: T[];
+  pull: T[];
+}
+
+/** What a sync compares: a path, a size and a modification time (library files, past exam files). */
+export interface SyncFile {
+  id: string;
+  size: number;
+  modifiedAt: string;
 }
 
 /** Which files each side lacks or has an older copy of. */
-export function planSync(local: LibraryFile[], remote: LibraryFile[]): SyncPlan {
-  const byId = (files: LibraryFile[]) => new Map(files.map((f) => [f.id, f]));
+export function planSync<T extends SyncFile>(local: T[], remote: T[]): SyncPlan<T> {
+  const byId = (files: T[]) => new Map(files.map((f) => [f.id, f]));
   const here = byId(local);
   const there = byId(remote);
   const push = local.filter((f) => {

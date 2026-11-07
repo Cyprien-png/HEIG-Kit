@@ -3,6 +3,7 @@
  * on the server and on a stand-alone computer the local database; on a computer connected to a server, its API.
  * Values are JSON-shaped (dates as ISO strings) so that both sides agree.
  */
+import { readFileSync } from "node:fs";
 import type { Db } from "../rag/db.js";
 import type { RemoteClient } from "../remote/client.js";
 import * as calendar from "./calendar.js";
@@ -10,6 +11,7 @@ import * as corrections from "./corrections.js";
 import * as exams from "./exams.js";
 import * as flashcards from "./flashcards.js";
 import * as library from "./library.js";
+import * as pastexams from "./pastexams.js";
 import * as profile from "./profile.js";
 import * as quizzes from "./quizzes.js";
 
@@ -26,6 +28,7 @@ export type Deck = Json<flashcards.Deck>;
 export type Card = Json<flashcards.Card>;
 export type Correction = Json<corrections.Correction>;
 export type MockExam = Json<exams.MockExam>;
+export type PastExam = Json<pastexams.PastExam>;
 export type ProfileNote = Json<profile.ProfileNote>;
 export type ProfileSummary = Json<profile.ProfileSummary>;
 export type QuizSummary = Json<quizzes.QuizSummary>;
@@ -97,6 +100,13 @@ export interface HeigApi {
   library(keywords?: string[]): Promise<LibraryItem[]>;
   /** Sets the course and tags of an item named by a file, a key (document:name), a name or a title. */
   tagLibraryItem(ref: string, patch: LibraryTagPatch): Promise<LibraryItem>;
+
+  /** The past exams (« anciens TE ») with the student's attempts (src/app/pastexams.ts). */
+  pastExams(options?: { branch?: string; course?: string }): Promise<PastExam[]>;
+  /** A file of a past exam (`<id>/enonce.md`, `<id>/pages/p01.png`), or undefined. */
+  readPastExamFile(id: string): Promise<Buffer | undefined>;
+  /** Writes a file of a past exam (the agent's `enonce.md` or `corrige.md`). */
+  writePastExamFile(id: string, content: Buffer): Promise<pastexams.ExamTreeFile>;
 }
 
 const json = <T>(value: T): Json<T> => (value === undefined ? value : JSON.parse(JSON.stringify(value))) as Json<T>;
@@ -290,6 +300,16 @@ export class LocalApi implements HeigApi {
     await library.setLibraryTags(this.db, library.libraryItemKey(item), patch);
     return library.annotateLibrary([item], await library.listLibraryTags(this.db), await library.knownCourses(this.db))[0];
   }
+  async pastExams(options: { branch?: string; course?: string } = {}) {
+    return json(await pastexams.listPastExams(this.db, options));
+  }
+  async readPastExamFile(id: string) {
+    const file = pastexams.pastExamFile(id);
+    return file ? readFileSync(file) : undefined;
+  }
+  async writePastExamFile(id: string, content: Buffer) {
+    return pastexams.savePastExamFile(id, content);
+  }
 }
 
 const qs = (params: Record<string, string | number | boolean | undefined>) => {
@@ -461,6 +481,22 @@ export class RemoteApi implements HeigApi {
 
   async library(keywords: string[] = []) {
     return (await this.client.get<{ items: LibraryItem[] }>(`/api/library${qs({ q: keywords.join(" ") })}`)).items;
+  }
+  async pastExams(options: { branch?: string; course?: string } = {}) {
+    return (await this.client.get<{ exams: PastExam[] }>(`/api/past-exams${qs(options)}`)).exams;
+  }
+  async readPastExamFile(id: string) {
+    try {
+      const res = await this.client.request("GET", `/api/past-exams/files/${id.split("/").map(encodeURIComponent).join("/")}?download=1`);
+      return Buffer.from(await res.arrayBuffer());
+    } catch (e) {
+      if (notFound(e)) return undefined;
+      throw e;
+    }
+  }
+  async writePastExamFile(id: string, content: Buffer) {
+    const res = await this.client.request("PUT", `/api/past-exams/files/${id.split("/").map(encodeURIComponent).join("/")}`, { body: new Uint8Array(content), headers: { "Content-Type": "application/octet-stream" } });
+    return (await res.json()) as pastexams.ExamTreeFile;
   }
   async tagLibraryItem(ref: string, patch: LibraryTagPatch) {
     const item = library.findLibraryItem(await this.library(), ref);

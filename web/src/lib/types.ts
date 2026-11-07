@@ -293,6 +293,29 @@ export interface MockExam {
   best?: ExamScore;
 }
 
+// Past exams (mirrors src/app/pastexams.ts)
+
+export interface PastExamFile {
+  name: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface PastExam {
+  /** `MAD/2024-2025/MAD_JHH_24-25_TE1` */
+  id: string;
+  branch: string[];
+  year: string;
+  slug: string;
+  meta: { title: string; course: string; teacher?: string; year: string; number: string; variant?: string; solutionsIncluded?: boolean; importedAt: string; sources: Record<string, string> };
+  files: PastExamFile[];
+  has: { original: boolean; blank: boolean; teacherSolutions: boolean; statement: boolean; statementPdf: boolean; solutions: boolean; solutionsPdf: boolean; pages: number };
+  attempts: ExamAttempt[];
+  status: ExamStatus;
+  last?: ExamAttempt;
+  best?: ExamScore;
+}
+
 export interface ProfileNote {
   id: number;
   course?: string;

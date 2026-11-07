@@ -44,7 +44,7 @@ export interface Correction {
   topic?: string;
   state: CorrectionState;
   notes?: string;
-  /** The mock exam this work answers: the library item of its statement (`document:<name>`, src/app/exams.ts). */
+  /** The exam this work answers: a mock exam's statement (`document:<name>`, src/app/exams.ts) or a past exam (`exam:<id>`, src/app/pastexams.ts). */
   exam?: string;
   result?: CorrectionResult;
   createdAt: Date;
@@ -108,7 +108,7 @@ export interface CorrectionInput {
   course?: string;
   topic?: string;
   notes?: string;
-  /** The mock exam being corrected, as a library item key (`document:<name>`). */
+  /** The exam being corrected: `document:<name>` (mock exam) or `exam:<id>` (past exam). */
   exam?: string;
 }
 
@@ -120,13 +120,13 @@ export interface CorrectionPatch {
   exam?: string | null;
 }
 
-const EXAM_KEY = /^document:[^/\\]{1,200}$/;
+const EXAM_KEY = /^(document:[^/\\]{1,200}|exam:[^\\]{1,300})$/;
 
-/** Checks an exam reference (`document:<name>`); throws a readable message otherwise. */
+/** Checks an exam reference (`document:<name>` for a mock exam, `exam:<id>` for a past exam); throws a readable message otherwise. */
 export function checkExam(exam: string | null | undefined): string | null | undefined {
   if (exam === undefined || exam === null) return exam;
   const text = exam.trim();
-  if (!EXAM_KEY.test(text)) throw new Error("exam must be the library item of the statement, document:<name>");
+  if (!EXAM_KEY.test(text)) throw new Error("exam must be the library item of a mock exam (document:<name>) or a past exam (exam:<id>)");
   return text;
 }
 

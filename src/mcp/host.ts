@@ -60,6 +60,9 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Mock exams (TE blancs) are library documents tagged « te blanc », a statement and its solutions (names ending in
   -enonce and -corrige): list_mock_exams says which were done and with what grade; when correcting one, pass its id as
   "exam" to create_correction so that the Tests blancs page counts it.
+- Past written tests of former years (anciens TE, scans filled by students) are filed by branch and year: list_past_exams,
+  get_past_exam (page images to transcribe the printed statement only), save_past_exam_text (énoncé, corrigé); correcting
+  the student's own attempt of one goes through create_correction with exam set to exam:<id>.
 - The calendar (get_calendar, set_calendar_event) merges GAPS, Cyberlearn and manual events; flashcards (create_deck) and
   corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
   the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;

@@ -28,6 +28,7 @@
     "generated": "tsx scripts/generated.ts",
     "remote": "tsx scripts/remote.ts",
     "library": "tsx scripts/library.ts",
+    "exams": "tsx scripts/exams.ts",
     "calendar": "tsx scripts/study.ts calendar",
     "cards": "tsx scripts/study.ts cards",
     "correction": "tsx scripts/study.ts correction",

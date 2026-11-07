@@ -1,12 +1,12 @@
 /** Library sync between this computer's output folder and the remote server. */
 import { readFile } from "node:fs/promises";
-import { type LibraryFile, type SyncPlan, libraryFile, listLibraryFiles, planSync, saveLibraryFile } from "../app/library.js";
+import { type LibraryFile, type SyncFile, type SyncPlan, libraryFile, listLibraryFiles, planSync, saveLibraryFile } from "../app/library.js";
 import type { RemoteClient } from "./client.js";
 
 export type Direction = "push" | "pull" | "both";
 
-export interface SyncReport {
-  plan: SyncPlan;
+export interface SyncReport<T extends SyncFile = LibraryFile> {
+  plan: SyncPlan<T>;
   pushed: string[];
   pulled: string[];
 }
@@ -48,7 +48,7 @@ export async function syncLibrary(client: RemoteClient, direction: Direction, dr
   return report;
 }
 
-export function formatReport(report: SyncReport, direction: Direction, dryRun: boolean): string {
+export function formatReport<T extends SyncFile>(report: SyncReport<T>, direction: Direction, dryRun: boolean): string {
   const lines: string[] = [];
   const verb = dryRun ? "would be" : "";
   if (direction !== "pull") lines.push(`${report.plan.push.length} file(s) ${verb} sent to the server${report.plan.push.length ? `: ${report.plan.push.map((f) => f.id).join(", ")}` : ""}`);

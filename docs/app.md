@@ -103,6 +103,21 @@ passes it to `create_correction` (`npm run correction -- new --exam …`) when c
 points when the agent gave points to every exercise, otherwise one point per exercise (half for a partial one). The last
 corrected attempt gives the exam's grade, the best one is kept too.
 
+## Past exams (« Anciens TE »)
+
+The scanned written tests of former years, filed as files under the `exams` output folder (`HEIG_EXAMS_DIR`, next to
+`documents` and `videos`; on the server inside the library volume): `<branch>/[<sub-branch>/]<year>/<exam>/` with
+`original.pdf` (the scan, filled by a former student), `original-vierge.pdf` and `original-corrige.pdf` when the archive
+had them, `exam.json` (course, teacher, year, number, variant, source files), the agent's `enonce.md` / `enonce.pdf`
+(the printed statement alone, nothing handwritten) and `corrige.md` / `corrige.pdf`, and `pages/p01.png`… rendered with
+poppler for the agent to read. `npm run exams -- import <folder>` files an archive (file names such as
+`MAD_JHH_24-25_TE1_corrigé.pdf` give everything, `src/app/pastexams.ts`), `exams -- pages|render` prepare and render,
+`exams -- push|pull` sync with the server (`GET/PUT/DELETE /api/past-exams/files/<path>`). The **Anciens TE** page
+(`/past-exams`, `GET /api/past-exams`, `list_past_exams`, `get_past_exam`, `save_past_exam_text`) walks branches, then
+years, then the tests, each with its files, and tracks the student's own attempts like the mock exams: a correction with
+`exam` = `exam:<id>` (the page's « Photographier » button, or `create_correction`), graded on the Swiss scale. The
+`heig:past-exams` skill describes the agent's work on them.
+
 ## Flashcards
 
 Decks (`decks`) of cards (`cards`, Markdown on both faces, see below) per course. Studying follows a small spaced
