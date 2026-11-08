@@ -1,7 +1,7 @@
 import { PlayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, cx } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
 import { ShuffleToggle } from "../components/ShuffleToggle";
@@ -36,7 +36,7 @@ export function Quizzes() {
       {quizzes.loading && !quizzes.data ? (
         <Loading />
       ) : list.length === 0 ? (
-        <Empty title="Aucun quiz" hint="Demandez à l'agent « fais-moi un quiz vrai/faux sur le chapitre 4 de RXI » : il l'écrit à partir de vos supports, et vous le jouez ici ou à l'oral." />
+        <Empty title="Aucun quiz" hint="Demandez à l'agent « fais-moi un quiz vrai/faux sur le chapitre 4 de RXI » ou « un QCM sur les relations » : il l'écrit à partir de vos supports, et vous le jouez ici ou à l'oral." />
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {list.map((q) => {
@@ -45,7 +45,10 @@ export function Quizzes() {
               <Card key={q.id} className="flex flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <CourseChip code={q.course} />
+                    <div className="flex items-center gap-1.5">
+                      <CourseChip code={q.course} />
+                      <Badge>{q.kind === "mcq" ? "QCM" : q.kind === "mixed" ? "vrai/faux · QCM" : "vrai/faux"}</Badge>
+                    </div>
                     <h2 className="font-semibold mt-1.5 leading-snug">{q.title}</h2>
                     {q.description && <p className="text-sm text-ink-2 mt-1 line-clamp-2">{q.description}</p>}
                   </div>

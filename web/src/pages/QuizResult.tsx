@@ -9,6 +9,8 @@ import { dateTime } from "../lib/format";
 import type { QuizResult as Result } from "../lib/types";
 import { scoreTone } from "./Quizzes";
 
+const LETTERS = "ABCDEFGH";
+
 /** The score of an attempt, then the mistakes (or every question) with the right answer and why. */
 export function QuizResult() {
   const { id } = useParams();
@@ -68,12 +70,34 @@ export function QuizResult() {
                   <div className="flex items-center gap-2 flex-wrap text-xs text-ink-3">
                     <span className="font-mono">{a.position}</span>
                     {a.topic && <Badge>{a.topic}</Badge>}
-                    <span>
-                      Réponse : <strong className={a.expected ? "text-ok" : "text-bad"}>{a.expected ? "vrai" : "faux"}</strong>
-                      {!a.correct && <span> · vous : {a.answer === undefined ? "sans réponse" : a.answer ? "vrai" : "faux"}</span>}
-                    </span>
+                    {a.options ? (
+                      <span>
+                        QCM · réponse : <strong className="text-ok">{(a.expectedChoice ?? []).map((i) => LETTERS[i]).join(", ")}</strong>
+                        {!a.correct && <span> · vous : {a.choice === undefined ? "sans réponse" : a.choice.map((i) => LETTERS[i]).join(", ")}</span>}
+                      </span>
+                    ) : (
+                      <span>
+                        Réponse : <strong className={a.expected ? "text-ok" : "text-bad"}>{a.expected ? "vrai" : "faux"}</strong>
+                        {!a.correct && <span> · vous : {a.answer === undefined ? "sans réponse" : a.answer ? "vrai" : "faux"}</span>}
+                      </span>
+                    )}
                   </div>
                   <Markdown source={a.statement} className="mt-1 font-medium" />
+                  {a.options && (
+                    <ul className="mt-2 space-y-1">
+                      {a.options.map((o, i) => {
+                        const right = a.expectedChoice?.includes(i) ?? false;
+                        const chosen = a.choice?.includes(i) ?? false;
+                        return (
+                          <li key={i} className={cx("flex items-start gap-2 rounded-lg px-2 py-1 text-sm", right ? "bg-ok-soft" : chosen ? "bg-bad-soft" : "")}>
+                            <span className={cx("font-mono text-xs font-semibold w-4 shrink-0 pt-0.5", right ? "text-ok" : chosen ? "text-bad" : "text-ink-3")}>{LETTERS[i]}</span>
+                            <Markdown source={o} className="flex-1 min-w-0" />
+                            {chosen && <span className={cx("text-[11px] shrink-0 pt-0.5", right ? "text-ok" : "text-bad")}>{right ? "votre choix ✓" : "votre choix ✗"}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                   {a.explanation && <Markdown source={a.explanation} className="mt-1.5 text-sm text-ink-2" />}
                   {a.source && <p className="text-xs text-ink-3 mt-1">{a.source}</p>}
                 </div>

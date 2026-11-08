@@ -453,6 +453,8 @@ export interface RequestEntry {
 
 export interface QuizSummary {
   id: number;
+  /** Only true/false statements, only multiple-choice questions (QCM), or both. */
+  kind: "truefalse" | "mcq" | "mixed";
   course?: string;
   title: string;
   description?: string;
@@ -468,7 +470,9 @@ export interface QuizQuestion {
   quizId: number;
   position: number;
   statement: string;
-  answer: boolean;
+  answer?: boolean;
+  options?: string[];
+  correct?: number[];
   explanation?: string;
   source?: string;
   topic?: string;
@@ -491,8 +495,12 @@ export interface QuizAnswer {
   questionId: number;
   position: number;
   statement: string;
-  expected: boolean;
+  expected?: boolean;
   answer?: boolean;
+  /** A QCM: its options, the right ones and the chosen ones (absent when not answered). */
+  options?: string[];
+  expectedChoice?: number[];
+  choice?: number[];
   correct: boolean;
   explanation?: string;
   source?: string;
@@ -506,8 +514,18 @@ export interface QuizResult {
   mistakes: QuizAnswer[];
 }
 
+/** The question being asked, without its answer; a QCM has options and says whether several are right. */
+export interface QuizAsked {
+  id: number;
+  position: number;
+  statement: string;
+  topic?: string;
+  options?: string[];
+  multiple?: boolean;
+}
+
 export interface QuizProgress {
   attempt: QuizAttempt;
-  next?: { id: number; position: number; statement: string; topic?: string };
+  next?: QuizAsked;
   result?: QuizResult;
 }
