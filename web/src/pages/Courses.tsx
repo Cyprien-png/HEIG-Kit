@@ -2,6 +2,7 @@ import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { type FilterSpec, FilterBar, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, PageHeader } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { prettyCourseName } from "../lib/courses";
@@ -65,12 +66,21 @@ export function SearchBox({ course, autoFocus }: { course?: string; autoFocus?: 
   );
 }
 
+const SPEC: FilterSpec<KbCourse> = {
+  title: (c) => prettyCourseName(c.name, c.course),
+  text: (c) => [c.course, c.name, ...(c.teachers ?? [])],
+  categories: (c) => c.docTypes.map((t) => DOC_TYPE_LABEL[t] ?? t),
+  kinds: Object.values(DOC_TYPE_LABEL),
+};
+
 export function Courses() {
   const kb = useApi<{ courses: KbCourse[] }>("/api/kb/courses");
   const cyberlearn = useApi<Snapshot<CyberlearnCourse[]>>("/api/campus/courses");
   const [params] = useSearchParams();
 
   const indexed = (kb.data?.courses ?? []).filter((c) => c.course);
+  const [state, set] = useFilterState("courses", "name");
+  const filtered = useFiltered(indexed, SPEC, state);
   const extra = (cyberlearn.data?.data ?? []).filter((c) => !indexed.some((i) => c.shortName.includes(i.course!)));
 
   return (
@@ -78,9 +88,10 @@ export function Courses() {
       <PageHeader title="Cours" />
       <SearchBox autoFocus={Boolean(params.get("q"))} />
       {kb.error && <ErrorBox error={kb.error} retry={kb.reload} />}
-      {kb.loading ? <Loading /> : indexed.length === 0 ? <Empty title="Aucun cours indexé" hint="Lancez l'ingestion sur le serveur (npm run ingest)." /> : (
+      {indexed.length > 1 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer les cours par nom, sigle, enseignant…" />}
+      {kb.loading ? <Loading /> : indexed.length === 0 ? <Empty title="Aucun cours indexé" hint="Lancez l'ingestion sur le serveur (npm run ingest)." /> : filtered.list.length === 0 ? <Empty title="Aucun cours ne correspond" hint="Changez les filtres." /> : (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {indexed.map((c) => (
+          {filtered.groups[0].items.map((c) => (
             <Link key={c.course} to={`/courses/${encodeURIComponent(c.course!)}`} className="block">
               <Card className="h-full hover:border-line-strong transition-colors">
                 <div className="flex items-start justify-between gap-2">

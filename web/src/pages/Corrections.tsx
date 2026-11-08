@@ -2,7 +2,8 @@ import { CameraIcon, QrCodeIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
+import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
+import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, Modal, PageHeader, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { dateTime, relative } from "../lib/format";
 import type { CorrectedExercise, Correction } from "../lib/types";
@@ -50,11 +51,24 @@ export function VerdictBar({ c }: { c: Correction }) {
   );
 }
 
+/** What the work was: a mock exam of the library, a past exam, or exercises. */
+const origin = (c: Correction) => (c.exam?.startsWith("exam:") ? "ancien TE" : c.exam ? "test blanc" : "exercices");
+
+const SPEC: FilterSpec<Correction> = {
+  title: (c) => c.title,
+  text: (c) => [c.topic, c.notes, c.result?.summary, ...(c.result?.exercises ?? []).flatMap((e) => [e.title, ...(e.topics ?? [])])],
+  course: (c) => c.course,
+  date: (c) => c.correctedAt ?? c.sentAt ?? c.updatedAt,
+  categories: (c) => [STATE_LABEL[c.state], origin(c), !c.affectsProfile && "hors profil", c.topic],
+  kinds: [...Object.values(STATE_LABEL), "test blanc", "ancien TE", "exercices", "hors profil"],
+};
+
 export function Corrections() {
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections", [], { refreshMs: 60_000 });
-  const [filter, setFilter] = useState<"all" | "open" | "corrected">("all");
+  const [state, set] = useFilterState("corrections");
   const [link, setLink] = useState<{ title: string; url: string }>();
-  const list = (corrections.data?.corrections ?? []).filter((c) => filter === "all" || (filter === "open" ? c.state !== "corrected" : c.state === "corrected"));
+  const all = corrections.data?.corrections ?? [];
+  const filtered = useFiltered(all, SPEC, state);
 
   const openLink = async (c: Correction) => {
     const { captureUrl } = await api<{ captureUrl: string }>(`/api/corrections/${c.id}/capture-link`, { method: "POST" });
@@ -63,11 +77,12 @@ export function Corrections() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Corrections" actions={<Segmented value={filter} onChange={setFilter} options={[{ value: "all", label: "Toutes" }, { value: "open", label: "En cours" }, { value: "corrected", label: "Corrigées" }]} />} />
+      <PageHeader title="Corrections" />
+      {all.length > 0 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} />}
       {corrections.error && <ErrorBox error={corrections.error} retry={corrections.reload} />}
-      {corrections.loading && !corrections.data ? <Loading /> : list.length === 0 ? <Empty title="Aucune correction" hint="Dans Claude Code : « corrige ma série 3 de MAD ». Scannez le QR code, photographiez vos pages, envoyez." /> : (
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {list.map((c) => {
+      {corrections.loading && !corrections.data ? <Loading /> : all.length === 0 ? <Empty title="Aucune correction" hint="Dans Claude Code : « corrige ma série 3 de MAD ». Scannez le QR code, photographiez vos pages, envoyez." /> : filtered.list.length === 0 ? <Empty title="Rien ne correspond" hint="Changez les filtres." /> : (
+        <FilteredGroups spec={SPEC} filtered={filtered} grid="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {(c) => {
             const v = verdictCounts(c);
             return (
               <Card key={c.id} padded={false} className="flex flex-col hover:border-line-strong transition-colors">
@@ -99,8 +114,8 @@ export function Corrections() {
                 </div>
               </Card>
             );
-          })}
-        </div>
+          }}
+        </FilteredGroups>
       )}
       {link && (
         <Modal open onClose={() => setLink(undefined)} title={link.title}>

@@ -1,7 +1,7 @@
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CourseChip } from "../components/CourseChip";
+import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
 import { ReviewButton } from "../components/ReviewButton";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea } from "../components/ui";
 import { api, useApi } from "../lib/api";
@@ -10,14 +10,24 @@ import { ShuffleToggle } from "../components/ShuffleToggle";
 import { useShuffle } from "../lib/shuffle";
 import type { Deck, StudyStats } from "../lib/types";
 
+const SPEC: FilterSpec<Deck> = {
+  title: (d) => d.title,
+  text: (d) => [d.description],
+  course: (d) => d.course,
+  date: (d) => d.updatedAt,
+  categories: (d) => [d.due > 0 && "à réviser", d.fresh > 0 && "nouvelles cartes", d.cards > 0 && d.due === 0 && d.fresh === 0 && "à jour", d.cards === 0 && "vide"],
+  kinds: ["à réviser", "nouvelles cartes", "à jour", "vide"],
+};
+
 export function Decks() {
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
   const [shuffle, setShuffle] = useShuffle();
   const stats = decks.data?.stats;
-  const byCourse = new Map<string, Deck[]>();
-  for (const d of decks.data?.decks ?? []) byCourse.set(d.course ?? "", [...(byCourse.get(d.course ?? "") ?? []), d]);
+  const all = decks.data?.decks ?? [];
+  const [state, set] = useFilterState("decks");
+  const filtered = useFiltered(all, SPEC, state);
 
   return (
     <div className="space-y-5">
@@ -39,31 +49,29 @@ export function Decks() {
         <Stat label="Vues aujourd'hui" value={stats?.reviewedToday ?? "–"} hint={stats && <Sparkline days={stats.days} />} />
       </div>
       {decks.error && <ErrorBox error={decks.error} retry={decks.reload} />}
-      {decks.loading && !decks.data ? <Loading /> : byCourse.size === 0 ? (
+      {all.length > 0 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} />}
+      {decks.loading && !decks.data ? <Loading /> : all.length === 0 ? (
         <Empty title="Aucun paquet" hint="Demandez à l'agent « crée-moi des cartes sur le chapitre 2 de MAD », ou créez un paquet vide et ajoutez vos cartes." action={<Button onClick={() => setCreating(true)}>Créer un paquet</Button>} />
+      ) : filtered.list.length === 0 ? (
+        <Empty title="Rien ne correspond" hint="Changez les filtres." />
       ) : (
-        [...byCourse.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([course, list]) => (
-          <section key={course} className="space-y-2">
-            <h2 className="text-sm font-semibold flex items-center gap-2">{course ? <CourseChip code={course} /> : "Sans cours"}</h2>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {list.map((d) => (
-                <Link key={d.id} to={`/cards/${d.id}`}>
-                  <Card className="h-full hover:border-line-strong transition-colors">
-                    <h3 className="font-medium leading-snug">{d.title}</h3>
-                    {d.description && <p className="text-xs text-ink-2 mt-1 line-clamp-2">{d.description}</p>}
-                    <div className="mt-3 flex items-center gap-3 text-xs text-ink-2">
-                      <span className="tabular-nums">{d.cards} cartes</span>
-                      {d.due > 0 && <span className="text-accent font-semibold tabular-nums">{d.due} à réviser</span>}
-                      {d.fresh > 0 && <span className="tabular-nums">{d.fresh} nouvelles</span>}
-                      <span className="ml-auto text-ink-3">{relative(d.updatedAt)}</span>
-                    </div>
-                    <Progress deck={d} />
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))
+        <FilteredGroups spec={SPEC} filtered={filtered} grid="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {(d) => (
+            <Link key={d.id} to={`/cards/${d.id}`}>
+              <Card className="h-full hover:border-line-strong transition-colors">
+                <h3 className="font-medium leading-snug">{d.title}</h3>
+                {d.description && <p className="text-xs text-ink-2 mt-1 line-clamp-2">{d.description}</p>}
+                <div className="mt-3 flex items-center gap-3 text-xs text-ink-2">
+                  <span className="tabular-nums">{d.cards} cartes</span>
+                  {d.due > 0 && <span className="text-accent font-semibold tabular-nums">{d.due} à réviser</span>}
+                  {d.fresh > 0 && <span className="tabular-nums">{d.fresh} nouvelles</span>}
+                  <span className="ml-auto text-ink-3">{relative(d.updatedAt)}</span>
+                </div>
+                <Progress deck={d} />
+              </Card>
+            </Link>
+          )}
+        </FilteredGroups>
       )}
       {creating && <NewDeck onClose={() => setCreating(false)} onCreated={(id) => navigate(`/cards/${id}`)} />}
     </div>

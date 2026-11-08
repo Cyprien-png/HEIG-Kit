@@ -1,8 +1,9 @@
 import { ArrowPathIcon, CameraIcon, DocumentCheckIcon, DocumentTextIcon, LinkIcon, QrCodeIcon } from "@heroicons/react/24/outline";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, Segmented, Select, Stat, cx } from "../components/ui";
+import { type FilterSpec, FilterBar, FilteredGroups, NO_COURSE, useFilterState, useFiltered } from "../components/ListFilters";
+import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, Select, Stat, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { day, dateTime } from "../lib/format";
 import type { Correction, ExamAttempt, ExamStatus, LibraryItem, MockExam } from "../lib/types";
@@ -13,7 +14,6 @@ const STATUS: Record<ExamStatus, { label: string; tone: "neutral" | "warn" | "ok
   pending: { label: "correction en cours", tone: "warn" },
   done: { label: "fait", tone: "ok" },
 };
-const NO_COURSE = "–";
 
 /** A Swiss grade, coloured: 4 and above passes. */
 export function Grade({ grade, className }: { grade: number; className?: string }) {
@@ -22,21 +22,34 @@ export function Grade({ grade, className }: { grade: number; className?: string 
 
 const mainFile = (item: LibraryItem) => item.files.find((f) => f.ext === ".pdf") ?? item.files.find((f) => f.ext === ".md") ?? item.files[0];
 
+const SPEC: FilterSpec<MockExam> = {
+  title: (e) => e.title,
+  text: (e) => e.items.map((i) => i.name),
+  course: (e) => e.course,
+  date: (e) => e.createdAt,
+  categories: (e) => [STATUS[e.status].label, e.last?.score && (e.last.score.grade >= 4 ? "réussi" : "insuffisant"), ...(e.statement?.tags ?? []).filter((t) => !["te blanc", "corrigé", "exercices"].includes(t))],
+  kinds: [...Object.values(STATUS).map((s) => s.label), "réussi", "insuffisant"],
+  group: {
+    label: "Par cours",
+    key: (e) => e.course ?? NO_COURSE,
+    heading: (course, group) => (
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
+        {course === NO_COURSE ? <span className="text-ink-2">Sans cours</span> : <CourseChip code={course} className="text-xs" />}
+        <span className="text-xs text-ink-3 font-normal tabular-nums">{group.filter((e) => e.status === "done").length}/{group.length} fait{group.filter((e) => e.status === "done").length > 1 ? "s" : ""}</span>
+      </h2>
+    ),
+  },
+};
+
 export function MockExams() {
   const navigate = useNavigate();
   const exams = useApi<{ exams: MockExam[] }>("/api/exams", [], { refreshMs: 60_000 });
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections");
-  const [filter, setFilter] = useState<"all" | ExamStatus>("all");
+  const [state, set] = useFilterState("exams");
   const [link, setLink] = useState<{ title: string; url: string }>();
   const [linking, setLinking] = useState<MockExam>();
   const all = exams.data?.exams ?? [];
-  const list = all.filter((e) => filter === "all" || e.status === filter);
-
-  const groups = useMemo(() => {
-    const byCourse = new Map<string, MockExam[]>();
-    for (const e of list) byCourse.set(e.course ?? NO_COURSE, [...(byCourse.get(e.course ?? NO_COURSE) ?? []), e]);
-    return [...byCourse.entries()].sort(([a], [b]) => (a === NO_COURSE ? 1 : b === NO_COURSE ? -1 : a.localeCompare(b)));
-  }, [list]);
+  const filtered = useFiltered(all, SPEC, state);
 
   const done = all.filter((e) => e.status === "done");
   const average = done.length ? done.reduce((s, e) => s + (e.last?.score?.grade ?? 0), 0) / done.length : undefined;
@@ -57,7 +70,6 @@ export function MockExams() {
       <PageHeader
         title="Tests blancs"
         subtitle="Les TE blancs de la bibliothèque, par cours : faites-les sur papier, photographiez vos réponses, l'agent les corrige et la note apparaît ici."
-        actions={<Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: "all", label: "Tous" }, { value: "todo", label: "À faire" }, { value: "pending", label: "En cours" }, { value: "done", label: "Faits" }]} />}
       />
       {all.length > 0 && (
         <div className="grid grid-cols-3 gap-3 max-w-xl">
@@ -67,24 +79,13 @@ export function MockExams() {
         </div>
       )}
       {exams.error && <ErrorBox error={exams.error} retry={exams.reload} />}
-      {exams.loading && !exams.data ? <Loading /> : list.length === 0 ? (
-        <Empty title={all.length === 0 ? "Aucun test blanc" : "Rien dans cette catégorie"} hint={all.length === 0 ? "Dans Claude Code : « génère-moi un TE blanc de MAD sur les chapitres 1 à 3 ». L'énoncé et le corrigé tagués « te blanc » apparaissent ici." : "Changez le filtre."} />
+      {all.length > 0 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} />}
+      {exams.loading && !exams.data ? <Loading /> : filtered.list.length === 0 ? (
+        <Empty title={all.length === 0 ? "Aucun test blanc" : "Rien ne correspond"} hint={all.length === 0 ? "Dans Claude Code : « génère-moi un TE blanc de MAD sur les chapitres 1 à 3 ». L'énoncé et le corrigé tagués « te blanc » apparaissent ici." : "Changez les filtres."} />
       ) : (
-        <div className="space-y-6">
-          {groups.map(([course, group]) => (
-            <section key={course} className="space-y-2">
-              <h2 className="flex items-center gap-2 text-sm font-semibold">
-                {course === NO_COURSE ? <span className="text-ink-2">Sans cours</span> : <CourseChip code={course} className="text-xs" />}
-                <span className="text-xs text-ink-3 font-normal tabular-nums">{group.filter((e) => e.status === "done").length}/{group.length} fait{group.filter((e) => e.status === "done").length > 1 ? "s" : ""}</span>
-              </h2>
-              <div className="grid md:grid-cols-2 gap-3">
-                {group.map((e) => (
-                  <ExamCard key={e.key} exam={e} onOpen={(item) => navigate(`/library/${mainFile(item).id}`)} onPhotograph={() => void photograph(e)} onLink={() => setLinking(e)} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <FilteredGroups spec={SPEC} filtered={filtered} grid="grid md:grid-cols-2 gap-3">
+          {(e) => <ExamCard key={e.key} exam={e} onOpen={(item) => navigate(`/library/${mainFile(item).id}`)} onPhotograph={() => void photograph(e)} onLink={() => setLinking(e)} />}
+        </FilteredGroups>
       )}
       {link && (
         <Modal open onClose={() => setLink(undefined)} title={link.title}>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
 import { PdfReader, type PdfInfo } from "../components/PdfReader";
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader } from "../components/ui";
 import { ApiError, api, useApi } from "../lib/api";
@@ -12,6 +13,15 @@ import { renderPageImage } from "../lib/pdf";
 import type { Correction, Workcopy } from "../lib/types";
 import { useAnnotations } from "../lib/useAnnotations";
 import { makeCopy } from "../lib/workcopies";
+
+const SPEC: FilterSpec<Workcopy> = {
+  title: (c) => c.title,
+  text: (c) => [c.sourceLabel],
+  course: (c) => c.course,
+  date: (c) => c.updatedAt,
+  categories: (c) => [c.submittedAt ? "envoyée" : "en cours", c.correctionId && "corrigée", c.exam?.startsWith("exam:") ? "ancien TE" : c.exam ? "test blanc" : undefined, c.annotatedPages === 0 && "vierge"],
+  kinds: ["en cours", "envoyée", "corrigée", "test blanc", "ancien TE", "vierge"],
+};
 
 /** The copies of PDFs the student fills in on the web app. */
 export function WorkCopies() {
@@ -39,6 +49,8 @@ export function WorkCopies() {
   };
 
   const list = copies.data?.workcopies ?? [];
+  const [state, set] = useFilterState("copies");
+  const filtered = useFiltered(list, SPEC, state);
   return (
     <div className="space-y-4">
       <PageHeader
@@ -54,6 +66,7 @@ export function WorkCopies() {
         }
       />
       {error && <p className="text-sm text-bad">{error}</p>}
+      {list.length > 0 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} />}
       {copies.loading && !copies.data ? (
         <Loading />
       ) : copies.error ? (
@@ -62,9 +75,11 @@ export function WorkCopies() {
         <Card>
           <Empty title="Aucune copie" hint="Ouvrez un test blanc, un ancien TE ou un document de la bibliothèque et appuyez sur « Faire une copie », ou importez un PDF." />
         </Card>
+      ) : filtered.list.length === 0 ? (
+        <Empty title="Rien ne correspond" hint="Changez les filtres." />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((c) => (
+        <FilteredGroups spec={SPEC} filtered={filtered} grid="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {(c) => (
             <Card key={c.id} padded={false} className="flex flex-col">
               <Link to={`/copies/${c.id}`} className="block flex-1 p-4 hover:bg-surface-2/50 rounded-t-xl">
                 <div className="flex flex-wrap items-center gap-2">
@@ -88,8 +103,8 @@ export function WorkCopies() {
                 </span>
               </div>
             </Card>
-          ))}
-        </div>
+          )}
+        </FilteredGroups>
       )}
     </div>
   );

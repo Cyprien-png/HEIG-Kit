@@ -2,6 +2,7 @@ import { ArrowDownTrayIcon, CameraIcon, ChevronRightIcon, DocumentCheckIcon, Doc
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
 import { Markdown } from "../components/Markdown";
 import { PdfOverlay } from "../components/PdfOverlay";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, Select, cx } from "../components/ui";
@@ -25,6 +26,27 @@ function useFolder(): string[] {
   return pathname.replace(/^\/past-exams\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
 }
 
+const folderOf = (e: PastExam) => [...e.branch, e.year].join(" › ");
+
+const SPEC: FilterSpec<PastExam> = {
+  title: (e) => e.meta.title,
+  text: (e) => [e.meta.teacher, e.meta.number, e.meta.variant, ...e.branch],
+  course: (e) => e.meta.course,
+  date: (e) => `${e.year} ${e.meta.importedAt}`,
+  categories: (e) => [STATUS[e.status].label, e.has.solutions || e.has.teacherSolutions ? "corrigé disponible" : undefined, !e.has.statement && "énoncé à retranscrire", e.meta.number === "EXA" ? "examen" : e.meta.number, e.year, e.meta.teacher],
+  kinds: [...Object.values(STATUS).map((s) => s.label), "corrigé disponible", "énoncé à retranscrire"],
+  group: {
+    label: "Dossiers",
+    key: folderOf,
+    heading: (folder, group) => (
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <FolderIcon className="h-4 w-4 text-ink-3" /> {folder}
+        <span className="text-xs text-ink-3 font-normal tabular-nums">{group.length}</span>
+      </h2>
+    ),
+  },
+};
+
 export function PastExams() {
   const navigate = useNavigate();
   const folder = useFolder();
@@ -34,6 +56,7 @@ export function PastExams() {
   const [link, setLink] = useState<{ title: string; url: string }>();
   const [linking, setLinking] = useState<PastExam>();
   const all = exams.data?.exams ?? [];
+  const [state, set] = useFilterState("past-exams");
 
   // The exams under the current folder, and the sub-folders to offer (branches, then years).
   const inside = all.filter((e) => folder.every((seg, i) => [...e.branch, e.year][i] === seg));
@@ -54,6 +77,9 @@ export function PastExams() {
   }, [inside, depth]);
   const atYear = depth > 0 && /^\d{4}-\d{4}$/.test(folder[depth - 1]);
   const here = atYear ? inside : inside.filter((e) => [...e.branch, e.year].length === depth);
+  // Searching, filtering or sorting lists the exams of the folder and its sub-folders instead of browsing them.
+  const filtered = useFiltered(inside, SPEC, state);
+  const browsing = !filtered.active && state.sort === "group";
   const go = (parts: string[]) => navigate(`/past-exams${parts.length ? `/${parts.map(encodeURIComponent).join("/")}` : ""}`);
 
   const photograph = async (e: PastExam) => {
@@ -83,7 +109,13 @@ export function PastExams() {
         <Empty title="Aucun ancien TE" hint={<>Sur l'ordinateur qui a les archives : <code className="font-mono text-xs">npm run exams -- import &lt;dossier&gt;</code> puis <code className="font-mono text-xs">npm run exams -- push</code>.</>} />
       ) : (
         <>
-          {subfolders.length > 0 && (
+          <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder={depth ? `Chercher dans ${folder.join(" › ")}…` : "Chercher par cours, année, prof…"} />
+          {!browsing && (filtered.list.length === 0 ? <Empty title="Rien ne correspond" hint="Changez les filtres." /> : (
+            <FilteredGroups spec={SPEC} filtered={filtered} grid="grid md:grid-cols-2 gap-3">
+              {(e) => <ExamCard key={e.id} exam={e} onView={(name) => setViewing({ exam: e, name })} onPhotograph={() => void photograph(e)} onLink={() => setLinking(e)} />}
+            </FilteredGroups>
+          ))}
+          {browsing && subfolders.length > 0 && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {subfolders.map(([name, info]) => (
                 <button key={name} onClick={() => go([...folder, name])} className="text-left bg-surface border border-line rounded-xl shadow-card px-4 py-3 hover:border-line-strong transition-colors flex items-center gap-3">
@@ -97,14 +129,14 @@ export function PastExams() {
               ))}
             </div>
           )}
-          {here.length > 0 && (
+          {browsing && here.length > 0 && (
             <div className="grid md:grid-cols-2 gap-3">
               {here.map((e) => (
                 <ExamCard key={e.id} exam={e} onView={(name) => setViewing({ exam: e, name })} onPhotograph={() => void photograph(e)} onLink={() => setLinking(e)} />
               ))}
             </div>
           )}
-          {subfolders.length === 0 && here.length === 0 && <Empty title="Rien ici" hint="Ce dossier est vide." />}
+          {browsing && subfolders.length === 0 && here.length === 0 && <Empty title="Rien ici" hint="Ce dossier est vide." />}
         </>
       )}
       {viewing && <Viewer exam={viewing.exam} name={viewing.name} onClose={() => setViewing(undefined)} />}

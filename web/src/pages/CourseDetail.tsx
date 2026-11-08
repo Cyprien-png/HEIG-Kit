@@ -1,6 +1,7 @@
 import { ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { Link, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { type FilterSpec, FilterBar, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useApi } from "../lib/api";
 import { prettyCourseName } from "../lib/courses";
@@ -9,6 +10,17 @@ import type { CalendarEvent, Correction, Deck, KbCourse, KbDocument, ProfileSumm
 import { DOC_TYPE_LABEL, SearchBox } from "./Courses";
 
 const TYPE_ORDER = ["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"];
+
+const typeLabel = (t: string) => DOC_TYPE_LABEL[t] ?? t;
+
+const SPEC: FilterSpec<KbDocument> = {
+  title: (d) => d.title,
+  text: (d) => [d.chapter],
+  date: (d) => d.uploadedAt,
+  categories: (d) => [typeLabel(d.docType), d.chapter],
+  kinds: TYPE_ORDER.map(typeLabel),
+  group: { label: "Par type", key: (d) => typeLabel(d.docType), order: TYPE_ORDER.map(typeLabel) },
+};
 
 export function CourseDetail() {
   const { code = "" } = useParams();
@@ -20,8 +32,9 @@ export function CourseDetail() {
   const profile = useApi<ProfileSummary>(`/api/profile?course=${encodeURIComponent(code)}`, [code]);
 
   const info = courses.data?.courses.find((c) => c.course?.toLowerCase() === code.toLowerCase());
-  const byType = new Map<string, KbDocument[]>();
-  for (const d of docs.data?.documents ?? []) byType.set(d.docType, [...(byType.get(d.docType) ?? []), d]);
+  const documents = docs.data?.documents ?? [];
+  const [state, set] = useFilterState(`course-documents:${code}`);
+  const filtered = useFiltered(documents, SPEC, state);
   const me = profile.data?.courses[0];
 
   return (
@@ -32,16 +45,17 @@ export function CourseDetail() {
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4 min-w-0">
           {docs.error && <ErrorBox error={docs.error} retry={docs.reload} />}
-          {docs.loading ? <Loading /> : byType.size === 0 ? <Empty title="Aucun document indexé pour ce cours" /> : (
-            TYPE_ORDER.filter((t) => byType.has(t)).map((type) => (
-              <Card key={type} title={`${DOC_TYPE_LABEL[type] ?? type} · ${byType.get(type)!.length}`} padded={false}>
+          {documents.length > 1 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer les documents par titre, chapitre…" />}
+          {docs.loading ? <Loading /> : documents.length === 0 ? <Empty title="Aucun document indexé pour ce cours" /> : filtered.list.length === 0 ? <Empty title="Aucun document ne correspond" hint="Changez les filtres." /> : (
+            filtered.groups.map((group) => (
+              <Card key={group.key ?? "all"} title={group.key !== undefined ? `${group.key} · ${group.items.length}` : `${group.items.length} document${group.items.length > 1 ? "s" : ""}`} padded={false}>
                 <ul className="divide-y divide-line">
-                  {byType.get(type)!.map((d) => (
+                  {group.items.map((d) => (
                     <li key={d.id} className="flex items-center gap-3 px-4 py-2 hover:bg-surface-2">
                       <DocumentTextIcon className="h-4 w-4 text-ink-3 shrink-0" />
                       <Link to={`/documents/${d.id}`} className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{d.title}</div>
-                        <div className="text-[11px] text-ink-3 truncate">{d.chapter ?? "—"}{d.uploadedAt ? ` · ${day(d.uploadedAt)}` : ""}</div>
+                        <div className="text-[11px] text-ink-3 truncate">{group.key === undefined ? `${typeLabel(d.docType)} · ` : ""}{d.chapter ?? "—"}{d.uploadedAt ? ` · ${day(d.uploadedAt)}` : ""}</div>
                       </Link>
                       {d.url && (
                         <a href={d.url} target="_blank" rel="noreferrer" title="Sur Cyberlearn" className="text-ink-3 hover:text-accent">
