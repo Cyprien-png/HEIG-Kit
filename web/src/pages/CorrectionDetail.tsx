@@ -110,7 +110,7 @@ export function CorrectionDetail() {
           </Card>
           <div className="space-y-3">
             {c.result.exercises.map((e, i) => (
-              <Exercise key={i} e={e} level={level} />
+              <Exercise key={i} e={e} level={level} photos={c.photos.map((ph) => `/api/corrections/${c.id}/photos/${ph.id}`)} onPhoto={setPhoto} />
             ))}
           </div>
         </>
@@ -148,10 +148,12 @@ export function CorrectionDetail() {
   );
 }
 
-function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
+function Exercise({ e, level, photos, onPhoto }: { e: CorrectedExercise; level: Level; photos: string[]; onPhoto: (index: number) => void }) {
   const info = VERDICT[e.verdict];
   const Icon = info.icon;
   const [open, setOpen] = useState(true);
+  const [source, setSource] = useState(false);
+  const shown = (e.pages?.length ? e.pages.map((n) => n - 1) : photos.map((_, i) => i)).filter((i) => i >= 0 && i < photos.length);
   return (
     <Card padded={false} className={cx("border-l-4", level >= 1 ? info.ring : "border-l-line")}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
@@ -174,8 +176,36 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
             )}
           </section>
           <section>
-            <h3 className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Votre réponse (transcrite)</h3>
+            <div className="flex items-center gap-1 mb-1">
+              <h3 className="text-[11px] uppercase tracking-wide text-ink-3 flex-1">Votre réponse (transcrite)</h3>
+              {shown.length > 0 && (
+                <button
+                  onClick={() => setSource(!source)}
+                  aria-pressed={source}
+                  aria-label={source ? "Masquer le document source" : "Voir le document source"}
+                  title={source ? "Masquer le document source" : "Voir le document source"}
+                  className={cx("h-7 w-7 grid place-items-center rounded-md transition-colors", source ? "bg-accent-soft text-accent" : "text-ink-3 hover:bg-surface-2 hover:text-ink")}
+                >
+                  {source ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                </button>
+              )}
+            </div>
             <div className="rounded-lg bg-surface-2 p-3"><Markdown source={e.answer} /></div>
+            {shown.length > 0 && (
+              <div className={cx("grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out motion-reduce:transition-none", source ? "grid-rows-[1fr] opacity-100 mt-2" : "grid-rows-[0fr] opacity-0 mt-0")} aria-hidden={!source}>
+                <div className="overflow-hidden min-h-0">
+                  <div className="space-y-2">
+                    {!e.pages?.length && <p className="text-xs text-ink-3">Page de l'exercice non indiquée : toutes les photos sont affichées.</p>}
+                    {shown.map((i) => (
+                      <button key={i} onClick={() => onPhoto(i)} tabIndex={source ? 0 : -1} className="relative block w-full rounded-lg overflow-hidden border border-line bg-surface-2">
+                        <img src={photos[i]} alt={`Photo ${i + 1}`} loading="lazy" className="w-full" />
+                        <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-mono rounded px-1">{i + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
           {level >= 2 && (
             <>

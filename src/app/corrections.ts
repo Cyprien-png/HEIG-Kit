@@ -28,6 +28,8 @@ export interface CorrectedExercise {
   /** Probable cause of the mistake, e.g. "confusion entre ⊆ et ∈". */
   cause?: string;
   topics: string[];
+  /** Photos (1-based, as numbered on the page) where the student wrote this exercise; all of them when absent. */
+  pages?: number[];
 }
 
 export interface CorrectionResult {
@@ -294,6 +296,7 @@ export function validateResult(value: unknown): CorrectionResult {
       solution: str("solution"),
       cause: str("cause"),
       topics: Array.isArray(x.topics) ? x.topics.filter((t): t is string => typeof t === "string") : [],
+      pages: Array.isArray(x.pages) ? [...new Set(x.pages.filter((p): p is number => Number.isInteger(p) && p > 0))].sort((a, b) => a - b) : undefined,
     } satisfies CorrectedExercise;
   });
   const toRevise = Array.isArray(r.toRevise) ? r.toRevise.filter((t): t is string => typeof t === "string") : undefined;

@@ -238,6 +238,8 @@ export interface CorrectedExercise {
   solution?: string;
   cause?: string;
   topics: string[];
+  /** Photos (1-based) holding the exercise. */
+  pages?: number[];
 }
 
 export interface Correction {

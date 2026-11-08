@@ -72,6 +72,7 @@ Follow this method, exercise by exercise (it is also the server's `correct_exerc
    words (confused notions, forgotten case, calculation, misread statement, method not mastered…). For correct ones,
    confirm in a sentence and point out a possible improvement of the write-up.
 5. `topics`: short reusable French topics per exercise ("inclusion-exclusion", "diagramme de Hasse").
+6. `pages`: the numbers of the photos (1 = first) where the exercise is written, per exercise; the web app shows them under the transcribed answer with an eye icon.
 
 Write the result as JSON (`.cache/corrections/<id>/result.json`):
 

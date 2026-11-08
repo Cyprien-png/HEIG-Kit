@@ -67,6 +67,7 @@ const exerciseSchema = z.object({
   solution: z.string().optional().describe("The complete correct solution, with the correct drawing, graph or table when the exercise has one (same Markdown)"),
   cause: z.string().optional().describe("Probable cause of the mistake, e.g. 'confusion entre ⊆ et ∈'"),
   topics: z.array(z.string()).describe("Course topics involved, short and reusable, e.g. 'inclusion-exclusion'"),
+  pages: z.array(z.number().int().positive()).optional().describe("Numbers of the photos (1 = first) on which the student wrote this exercise; the web app shows them under the transcribed answer (eye icon) so that nothing has to be searched in the photos"),
 });
 
 const noteSchema = z.object({
