@@ -72,7 +72,7 @@ Follow this method, exercise by exercise (it is also the server's `correct_exerc
    words (confused notions, forgotten case, calculation, misread statement, method not mastered…). For correct ones,
    confirm in a sentence and point out a possible improvement of the write-up.
 5. `topics`: short reusable French topics per exercise ("inclusion-exclusion", "diagramme de Hasse").
-6. `pages`: the numbers of the photos (1 = first) where the exercise is written, per exercise; the web app shows them under the transcribed answer with an eye icon.
+6. `regions`: where the student wrote each exercise, one `{ "page": 1, "x": 0.05, "y": 0.4, "w": 0.9, "h": 0.3 }` per photo it spans (page = photo number, 1 = first; x, y = top left corner, w, h = size, as fractions 0 to 1 of the photo, a small margin around the writing). Look at each photo to estimate them. The web app crops the photo to this zone under the transcribed answer (eye icon). `pages` (list of photo numbers) is the fallback when a zone is not worth giving.
 
 Write the result as JSON (`.cache/corrections/<id>/result.json`):
 

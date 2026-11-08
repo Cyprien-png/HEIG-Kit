@@ -30,6 +30,8 @@ export interface CorrectedExercise {
   topics: string[];
   /** Photos (1-based, as numbered on the page) where the student wrote this exercise; all of them when absent. */
   pages?: number[];
+  /** The zones of the photos holding the exercise, as fractions (0 to 1) of the photo: x, y = top left corner, w, h = size. */
+  regions?: { page: number; x: number; y: number; w: number; h: number }[];
 }
 
 export interface CorrectionResult {
@@ -296,11 +298,26 @@ export function validateResult(value: unknown): CorrectionResult {
       solution: str("solution"),
       cause: str("cause"),
       topics: Array.isArray(x.topics) ? x.topics.filter((t): t is string => typeof t === "string") : [],
+      regions: parseRegions(x.regions, i),
       pages: Array.isArray(x.pages) ? [...new Set(x.pages.filter((p): p is number => Number.isInteger(p) && p > 0))].sort((a, b) => a - b) : undefined,
     } satisfies CorrectedExercise;
   });
   const toRevise = Array.isArray(r.toRevise) ? r.toRevise.filter((t): t is string => typeof t === "string") : undefined;
   return { summary: r.summary, exercises, toRevise };
+}
+
+/** Zones of photos, clamped to the photo: anything else is refused. */
+function parseRegions(value: unknown, i: number): CorrectedExercise["regions"] {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new Error(`exercise ${i + 1}: regions must be a list`);
+  const clamp = (n: number) => Math.max(0, Math.min(1, n));
+  return value.map((r) => {
+    const o = r as Record<string, unknown>;
+    if (!r || typeof r !== "object" || !Number.isInteger(o.page) || (o.page as number) < 1 || ["x", "y", "w", "h"].some((k) => typeof o[k] !== "number" || !Number.isFinite(o[k] as number))) throw new Error(`exercise ${i + 1}: a region needs page (1 = first photo) and numeric x, y, w, h between 0 and 1`);
+    const x = clamp(o.x as number);
+    const y = clamp(o.y as number);
+    return { page: o.page as number, x, y, w: Math.max(0.05, Math.min(1 - x, clamp(o.w as number))), h: Math.max(0.03, Math.min(1 - y, clamp(o.h as number))) };
+  });
 }
 
 export async function submitResult(db: Db, id: string, value: unknown): Promise<Correction | undefined> {

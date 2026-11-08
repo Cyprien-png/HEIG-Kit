@@ -67,6 +67,7 @@ const exerciseSchema = z.object({
   solution: z.string().optional().describe("The complete correct solution, with the correct drawing, graph or table when the exercise has one (same Markdown)"),
   cause: z.string().optional().describe("Probable cause of the mistake, e.g. 'confusion entre ⊆ et ∈'"),
   topics: z.array(z.string()).describe("Course topics involved, short and reusable, e.g. 'inclusion-exclusion'"),
+  regions: z.array(z.object({ page: z.number().int().positive(), x: z.number(), y: z.number(), w: z.number(), h: z.number() })).optional().describe("The zone of the photos holding this exercise (statement excluded), one per photo it spans: page = photo number (1 = first), x and y = top left corner, w and h = size, all as fractions between 0 and 1 of the photo (x 0 = left edge, y 0 = top edge). Leave a small margin around the writing. The web app crops the photo to it under the transcribed answer (eye icon)"),
   pages: z.array(z.number().int().positive()).optional().describe("Numbers of the photos (1 = first) on which the student wrote this exercise; the web app shows them under the transcribed answer (eye icon) so that nothing has to be searched in the photos"),
 });
 

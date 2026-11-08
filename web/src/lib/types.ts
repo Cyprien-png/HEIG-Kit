@@ -240,6 +240,8 @@ export interface CorrectedExercise {
   topics: string[];
   /** Photos (1-based) holding the exercise. */
   pages?: number[];
+  /** The zones of the photos holding the exercise, as fractions (0 to 1) of the photo: x, y = top left corner, w, h = size. */
+  regions?: { page: number; x: number; y: number; w: number; h: number }[];
 }
 
 export interface Correction {

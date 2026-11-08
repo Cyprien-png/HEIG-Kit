@@ -153,7 +153,9 @@ function Exercise({ e, level, photos, onPhoto }: { e: CorrectedExercise; level: 
   const Icon = info.icon;
   const [open, setOpen] = useState(true);
   const [source, setSource] = useState(false);
+  const regions = (e.regions ?? []).filter((r) => r.page >= 1 && r.page <= photos.length);
   const shown = (e.pages?.length ? e.pages.map((n) => n - 1) : photos.map((_, i) => i)).filter((i) => i >= 0 && i < photos.length);
+  const count = regions.length || shown.length;
   return (
     <Card padded={false} className={cx("border-l-4", level >= 1 ? info.ring : "border-l-line")}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
@@ -178,7 +180,7 @@ function Exercise({ e, level, photos, onPhoto }: { e: CorrectedExercise; level: 
           <section>
             <div className="flex items-center gap-1 mb-1">
               <h3 className="text-[11px] uppercase tracking-wide text-ink-3 flex-1">Votre réponse (transcrite)</h3>
-              {shown.length > 0 && (
+              {count > 0 && (
                 <button
                   onClick={() => setSource(!source)}
                   aria-pressed={source}
@@ -191,17 +193,19 @@ function Exercise({ e, level, photos, onPhoto }: { e: CorrectedExercise; level: 
               )}
             </div>
             <div className="rounded-lg bg-surface-2 p-3"><Markdown source={e.answer} /></div>
-            {shown.length > 0 && (
+            {count > 0 && (
               <div className={cx("grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out motion-reduce:transition-none", source ? "grid-rows-[1fr] opacity-100 mt-2" : "grid-rows-[0fr] opacity-0 mt-0")} aria-hidden={!source}>
                 <div className="overflow-hidden min-h-0">
                   <div className="space-y-2">
-                    {!e.pages?.length && <p className="text-xs text-ink-3">Page de l'exercice non indiquée : toutes les photos sont affichées.</p>}
-                    {shown.map((i) => (
-                      <button key={i} onClick={() => onPhoto(i)} tabIndex={source ? 0 : -1} className="relative block w-full rounded-lg overflow-hidden border border-line bg-surface-2">
-                        <img src={photos[i]} alt={`Photo ${i + 1}`} loading="lazy" className="w-full" />
-                        <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-mono rounded px-1">{i + 1}</span>
-                      </button>
-                    ))}
+                    {!regions.length && !e.pages?.length && <p className="text-xs text-ink-3">Page de l'exercice non indiquée : toutes les photos sont affichées.</p>}
+                    {regions.length > 0
+                      ? regions.map((r, k) => <Crop key={k} src={photos[r.page - 1]} region={r} onClick={() => onPhoto(r.page - 1)} tabIndex={source ? 0 : -1} />)
+                      : shown.map((i) => (
+                          <button key={i} onClick={() => onPhoto(i)} tabIndex={source ? 0 : -1} className="relative block w-full rounded-lg overflow-hidden border border-line bg-surface-2">
+                            <img src={photos[i]} alt={`Photo ${i + 1}`} loading="lazy" className="w-full" />
+                            <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-mono rounded px-1">{i + 1}</span>
+                          </button>
+                        ))}
                   </div>
                 </div>
               </div>
@@ -226,5 +230,24 @@ function Exercise({ e, level, photos, onPhoto }: { e: CorrectedExercise; level: 
         </div>
       )}
     </Card>
+  );
+}
+
+/** A zone of a photo, cropped on screen (the whole photo opens on click). */
+function Crop({ src, region, onClick, tabIndex }: { src: string; region: NonNullable<CorrectedExercise["regions"]>[number]; onClick: () => void; tabIndex: number }) {
+  const [ratio, setRatio] = useState(4 / 3); // height / width of the photo
+  const { x, y, w, h, page } = region;
+  return (
+    <button onClick={onClick} tabIndex={tabIndex} className="relative block w-full rounded-lg overflow-hidden border border-line bg-surface-2" style={{ aspectRatio: `${w} / ${h * ratio}` }}>
+      <img
+        src={src}
+        alt={`Photo ${page}`}
+        loading="lazy"
+        onLoad={(ev) => setRatio(ev.currentTarget.naturalHeight / ev.currentTarget.naturalWidth)}
+        className="absolute max-w-none"
+        style={{ width: `${100 / w}%`, left: `${(-x / w) * 100}%`, top: `${(-y / h) * 100}%` }}
+      />
+      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-mono rounded px-1">{page}</span>
+    </button>
   );
 }
