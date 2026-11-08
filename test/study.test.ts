@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { addPhoto, createCorrection, deleteCorrection, getCorrection, listCorrections, markSent, photosWithData, replacePhoto, reorderPhotos, sniffImage, submitResult, updateCorrection, validateResult, verdictStats } from "../src/app/corrections.js";
 import { addCards, answerStudySession, createDeck, currentStudySession, deleteDeck, deleteStudySession, getDeck, listDecks, openStudySession, review, schedule, studyQueue, studyStats, updateCard, updateStudySession } from "../src/app/flashcards.js";
-import { type Chapter, addNotes, chapterOf, chapterOfAnswer, chapterSummaries, sectionOf, fileNotes, formatProfile, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
+import { type Chapter, addNotes, chapterOf, chapterOfAnswer, chapterSummaries, sectionOf, fileNotes, formatProfile, listNotes, profileSince, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../src/app/profile.js";
 import type { Db } from "../src/rag/db.js";
 import { testDb } from "./helpers/db.js";
 
@@ -228,4 +228,28 @@ test("review sessions: resumed where they were left, a card to see again comes b
   assert.equal(await deleteStudySession(db!, replaced.session.id), true);
   assert.equal(await currentStudySession(db!, deck.id), undefined);
   await deleteDeck(db!, deck.id);
+});
+
+test("profile period: today starts at midnight in Zurich, 7d covers today and the six days before", () => {
+  const now = new Date("2026-11-08T21:30:00Z");
+  assert.equal(profileSince("today", now)?.toISOString(), "2026-11-07T23:00:00.000Z");
+  assert.equal(profileSince("7d", now)?.toISOString(), "2026-11-01T23:00:00.000Z");
+  assert.equal(profileSince("2026-09-01", now)?.toISOString(), "2026-08-31T22:00:00.000Z");
+  assert.equal(profileSince("all", now), undefined);
+  assert.equal(profileSince(undefined, now), undefined);
+  assert.throws(() => profileSince("hier soir", now), /Invalid period/);
+});
+
+test("profile period: only the notes and corrections of the period count", { skip: !db && "no local database" }, async () => {
+  const [old] = await addNotes(db!, [{ course: "PERIODE", topic: "ancien thème", kind: "mistake", text: "Erreur d'il y a un mois.", severity: 3 }]);
+  await addNotes(db!, [{ course: "PERIODE", topic: "thème du jour", kind: "weakness", text: "Fragile aujourd'hui.", severity: 2 }]);
+  await db!.query("UPDATE profile_notes SET created_at = now() - interval '30 days' WHERE id = $1", [old.id]);
+  const all = (await profileSummary(db!, "PERIODE")).courses[0];
+  assert.deepEqual([...all.mistakes, ...all.weaknesses].map((t) => t.topic).sort(), ["ancien thème", "thème du jour"]);
+  const today = await profileSummary(db!, "PERIODE", profileSince("today"));
+  const day = today.courses[0];
+  assert.deepEqual(day.mistakes, []);
+  assert.deepEqual(day.weaknesses.map((t) => t.topic), ["thème du jour"]);
+  assert.equal(today.openNotes, 1);
+  assert.equal((await profileSummary(db!, "PERIODE", new Date(Date.now() + 60_000))).courses.length, 0);
 });

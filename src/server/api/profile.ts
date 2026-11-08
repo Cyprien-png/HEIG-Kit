@@ -1,4 +1,4 @@
-import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, fileNotes, listChapters, listNotes, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../../app/profile.js";
+import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, fileNotes, listChapters, listNotes, profileSince, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../../app/profile.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, intParam, readJson, stringField } from "./util.js";
@@ -24,7 +24,15 @@ export function noteFrom(value: unknown, index: number): NoteInput {
 }
 
 export function registerProfileRoutes(router: Router, app: App): void {
-  router.get("/api/profile", async ({ url }) => profileSummary(app.db, url.searchParams.get("course") ?? undefined));
+  router.get("/api/profile", async ({ url }) => {
+    let since: Date | undefined;
+    try {
+      since = profileSince(url.searchParams.get("since") ?? undefined);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+    return profileSummary(app.db, url.searchParams.get("course") ?? undefined, since);
+  });
 
   router.get("/api/profile/chapters", async ({ url }) => ({ chapters: await listChapters(app.db, url.searchParams.get("course") ?? undefined) }));
 

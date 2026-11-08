@@ -239,16 +239,16 @@ export interface QuizAnswer {
   correct: boolean;
 }
 
-/** The answers of the last finished attempt of every quiz (of a course), so that retaking a quiz replaces its weight in the profile. */
-export async function latestQuizAnswers(db: Db, course?: string): Promise<QuizAnswer[]> {
+/** The answers of the last finished attempt of every quiz (of a course), so that retaking a quiz replaces its weight in the profile; with since, the last attempt finished from then on. */
+export async function latestQuizAnswers(db: Db, course?: string, since?: Date): Promise<QuizAnswer[]> {
   const { rows } = await db.query(
     `SELECT z.course, z.id AS quiz_id, q.chapter, q.section, q.topic, q.statement, q.source, x.correct
      FROM quizzes z
-     JOIN LATERAL (SELECT id FROM quiz_attempts a WHERE a.quiz_id = z.id AND a.finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1) l ON true
+     JOIN LATERAL (SELECT id FROM quiz_attempts a WHERE a.quiz_id = z.id AND a.finished_at IS NOT NULL AND ($2::timestamptz IS NULL OR a.finished_at >= $2) ORDER BY finished_at DESC LIMIT 1) l ON true
      JOIN quiz_answers x ON x.attempt_id = l.id
      JOIN quiz_questions q ON q.id = x.question_id
      WHERE $1::text IS NULL OR lower(z.course) = lower($1)`,
-    [course ?? null],
+    [course ?? null, since ?? null],
   );
   return rows.map((r) => ({
     course: (r.course as string | null) ?? undefined,

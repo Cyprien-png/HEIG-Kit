@@ -74,7 +74,8 @@ export interface HeigApi {
   submitCorrection(id: string, result: corrections.CorrectionResult): Promise<Correction>;
   deleteCorrection(id: string): Promise<boolean>;
 
-  profile(course?: string): Promise<ProfileSummary>;
+  /** With since, only what was corrected, noted or answered from then on. */
+  profile(course?: string, since?: Date): Promise<ProfileSummary>;
   profileNotes(options?: { course?: string; kind?: profile.NoteKind; topic?: string; resolved?: boolean }): Promise<ProfileNote[]>;
   searchNotes(query: string, course?: string): Promise<ProfileNote[]>;
   addNotes(notes: profile.NoteInput[]): Promise<ProfileNote[]>;
@@ -239,8 +240,8 @@ export class LocalApi implements HeigApi {
     return corrections.deleteCorrection(this.db, id);
   }
 
-  async profile(course?: string) {
-    return json(await profile.profileSummary(this.db, course));
+  async profile(course?: string, since?: Date) {
+    return json(await profile.profileSummary(this.db, course, since));
   }
   async profileNotes(options: { course?: string; kind?: profile.NoteKind; topic?: string; resolved?: boolean } = {}) {
     return json(await profile.listNotes(this.db, options));
@@ -426,8 +427,8 @@ export class RemoteApi implements HeigApi {
     return this.client.delete(`/api/corrections/${id}`).then(() => true, (e) => (notFound(e) ? false : Promise.reject(e)));
   }
 
-  profile(course?: string) {
-    return this.client.get<ProfileSummary>(`/api/profile${qs({ course })}`);
+  profile(course?: string, since?: Date) {
+    return this.client.get<ProfileSummary>(`/api/profile${qs({ course, since: since?.toISOString() })}`);
   }
   async profileNotes(options: { course?: string; kind?: profile.NoteKind; topic?: string; resolved?: boolean } = {}) {
     return (await this.client.get<{ notes: ProfileNote[] }>(`/api/profile/notes${qs({ ...options, resolved: options.resolved ? 1 : undefined })}`)).notes;

@@ -15,7 +15,7 @@
  *   npm run correction -- new ["Série 3 MAD"] [--course MAD] [--topic …] [--notes …] [--exam document:<name>]   creates it and prints the QR code at once
  *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …] [--exam …] [--no-profile|--profile]   names it while the student photographs (--exam: the TE blanc it answers; --no-profile: leaves it out of the profile, also accepted by `new`)
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
- *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
+ *   npm run profile -- [--course MAD] [--since today|7d|YYYY-MM-DD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
  *                      | set <id> --chapter "2. Relations" [--section "Ordre"] [--topic …]   refiles or renames a note
  *                      | file <COURSE> [--all]                               writes its chapter on each note without one (every note with --all)
  *                      | chapters [<COURSE>] [--file chapters.json]   (sets them: { "chapters": [ { "title": "…", "keywords": ["…"] } ] })
@@ -27,7 +27,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import QRCode from "qrcode";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
-import { chapterLabel, formatProfile } from "../src/app/profile.js";
+import { chapterLabel, formatProfile, profileSince } from "../src/app/profile.js";
 import { LETTERS, type QuestionInput, lettersOf, parseChoice } from "../src/app/quizzes.js";
 import { TIME_ZONE } from "../src/dates.js";
 import { migrate, openDb } from "../src/rag/db.js";
@@ -66,6 +66,7 @@ const { values, positionals } = parseArgs({
     exam: { type: "string" },
     "no-profile": { type: "boolean" },
     profile: { type: "boolean" },
+    since: { type: "string" },
   },
 });
 
@@ -307,7 +308,7 @@ async function profile(api: HeigApi): Promise<void> {
   switch (action) {
     case undefined:
     case "summary": {
-      const summary = await api.profile(values.course);
+      const summary = await api.profile(values.course, profileSince(values.since));
       return out(values.json ? summary : formatProfile(summary as never));
     }
     case "notes": {

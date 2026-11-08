@@ -5,6 +5,7 @@
 import type { Db } from "../rag/db.js";
 import { toVector } from "../rag/db.js";
 import { embed } from "../rag/embed.js";
+import { addDays, isoDate, startOfDay } from "../dates.js";
 import { verdictStats } from "./corrections.js";
 import { swissGrade } from "./exams.js";
 import { type QuizAnswer, latestQuizAnswers } from "./quizzes.js";
@@ -80,13 +81,14 @@ export async function addNotes(db: Db, notes: NoteInput[]): Promise<ProfileNote[
   return out;
 }
 
-export async function listNotes(db: Db, options: { course?: string; kind?: NoteKind; topic?: string; resolved?: boolean; limit?: number } = {}): Promise<ProfileNote[]> {
+export async function listNotes(db: Db, options: { course?: string; kind?: NoteKind; topic?: string; resolved?: boolean; limit?: number; since?: Date } = {}): Promise<ProfileNote[]> {
   const { rows } = await db.query(
     `SELECT * FROM profile_notes
      WHERE ($1::text IS NULL OR lower(course) = lower($1)) AND ($2::text IS NULL OR kind = $2)
        AND ($3::text IS NULL OR lower(topic) = lower($3)) AND ($4::boolean OR resolved_at IS NULL) AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile)
+       AND ($6::timestamptz IS NULL OR created_at >= $6)
      ORDER BY created_at DESC LIMIT $5`,
-    [options.course ?? null, options.kind ?? null, options.topic ?? null, options.resolved ?? false, options.limit ?? 200],
+    [options.course ?? null, options.kind ?? null, options.topic ?? null, options.resolved ?? false, options.limit ?? 200, options.since ?? null],
   );
   return rows.map(row);
 }
@@ -469,26 +471,45 @@ export function courseScore(verdicts: { correct: number; partial: number; wrong:
   return { exercises, quiz, ratio, grade: swissGrade(ratio) };
 }
 
-async function topics(db: Db, kind: NoteKind, course?: string): Promise<TopicSummary[]> {
+async function topics(db: Db, kind: NoteKind, course?: string, since?: Date): Promise<TopicSummary[]> {
   const { rows } = await db.query(
     `SELECT course, topic, count(*)::int AS count, max(severity)::int AS severity, max(created_at) AS last_at,
             (array_agg(text ORDER BY severity DESC, created_at DESC))[1:3] AS examples
      FROM profile_notes WHERE kind = $1 AND resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile) AND ($2::text IS NULL OR lower(course) = lower($2))
+       AND ($3::timestamptz IS NULL OR created_at >= $3)
      GROUP BY course, topic ORDER BY severity DESC, count DESC, last_at DESC`,
-    [kind, course ?? null],
+    [kind, course ?? null, since ?? null],
   );
   return rows.map((r) => ({ course: r.course, topic: r.topic, count: r.count, severity: r.severity, lastAt: r.last_at, examples: r.examples }));
 }
 
-export async function profileSummary(db: Db, course?: string): Promise<ProfileSummary> {
+/**
+ * The start of a profile period: "today" (or "aujourd'hui", from midnight in Zurich), "7d" (today and the 6 days before),
+ * a day YYYY-MM-DD or a full ISO time; undefined for "all" or nothing.
+ */
+export function profileSince(value: string | undefined, now = new Date()): Date | undefined {
+  const v = value?.trim().toLowerCase();
+  if (!v || v === "all" || v === "tout") return undefined;
+  const today = startOfDay(isoDate(now));
+  if (v === "today" || v === "aujourd'hui" || v === "aujourdhui") return today;
+  const days = /^(\d{1,4})\s*(d|j|days?|jours?)$/.exec(v);
+  if (days) return addDays(today, 1 - Number(days[1]));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return startOfDay(v);
+  const time = new Date(value!.trim());
+  if (Number.isNaN(time.getTime())) throw new Error(`Invalid period "${value}": give today, 7d, 30d, a day YYYY-MM-DD or an ISO time`);
+  return time;
+}
+
+/** The profile of every course (or one); with since, only what was corrected, noted or answered from then on (the level of the day, of the week…). */
+export async function profileSummary(db: Db, course?: string, since?: Date): Promise<ProfileSummary> {
   const [weaknesses, strengths, mistakes, verdicts, chapters, openNotes, answers] = await Promise.all([
-    topics(db, "weakness", course),
-    topics(db, "strength", course),
-    topics(db, "mistake", course),
-    verdictStats(db, course),
+    topics(db, "weakness", course, since),
+    topics(db, "strength", course, since),
+    topics(db, "mistake", course, since),
+    verdictStats(db, course, since),
     listChapters(db, course),
-    listNotes(db, { course, limit: 5000 }),
-    latestQuizAnswers(db, course),
+    listNotes(db, { course, limit: 5000, since }),
+    latestQuizAnswers(db, course, since),
   ]);
   const courseKeys = [...new Set([...[...weaknesses, ...strengths, ...mistakes].map((t) => t.course ?? ""), ...verdicts.map((v) => v.course ?? ""), ...chapters.map((c) => c.course), ...answers.map((a) => a.course?.toUpperCase() ?? "")])].sort();
   const courses = courseKeys.map((key) => {
@@ -520,7 +541,7 @@ export async function profileSummary(db: Db, course?: string): Promise<ProfileSu
     const existing = scored.get(key);
     scored.set(key, existing ? { ...existing, count: existing.count + t.count, score: existing.score + score, examples: [...existing.examples, ...t.examples].slice(0, 3) } : { ...t, score });
   }
-  const { rows } = await db.query("SELECT count(*)::int AS open FROM profile_notes WHERE resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile) AND ($1::text IS NULL OR lower(course) = lower($1))", [course ?? null]);
+  const { rows } = await db.query("SELECT count(*)::int AS open FROM profile_notes WHERE resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile) AND ($1::text IS NULL OR lower(course) = lower($1)) AND ($2::timestamptz IS NULL OR created_at >= $2)", [course ?? null, since ?? null]);
   return { courses, toRevise: [...scored.values()].sort((a, b) => b.score - a.score).slice(0, 12), openNotes: rows[0].open };
 }
 

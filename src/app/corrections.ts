@@ -327,7 +327,8 @@ export async function submitResult(db: Db, id: string, value: unknown): Promise<
 }
 
 /** Share of correct, partial and wrong exercises over corrected work, per course. */
-export async function verdictStats(db: Db, course?: string): Promise<{ course: string | null; corrections: number; correct: number; partial: number; wrong: number; missing: number }[]> {
+/** The verdicts of the corrected work of a course; with since, only work corrected from then on. */
+export async function verdictStats(db: Db, course?: string, since?: Date): Promise<{ course: string | null; corrections: number; correct: number; partial: number; wrong: number; missing: number }[]> {
   const { rows } = await db.query(
     `SELECT c.course, count(DISTINCT c.id)::int AS corrections,
             count(*) FILTER (WHERE e->>'verdict' = 'correct')::int AS correct,
@@ -336,8 +337,9 @@ export async function verdictStats(db: Db, course?: string): Promise<{ course: s
             count(*) FILTER (WHERE e->>'verdict' = 'missing')::int AS missing
      FROM corrections c, jsonb_array_elements(c.result->'exercises') e
      WHERE c.state = 'corrected' AND c.affects_profile AND ($1::text IS NULL OR lower(c.course) = lower($1))
+       AND ($2::timestamptz IS NULL OR coalesce(c.corrected_at, c.updated_at) >= $2)
      GROUP BY c.course ORDER BY c.course`,
-    [course ?? null],
+    [course ?? null, since ?? null],
   );
   return rows;
 }

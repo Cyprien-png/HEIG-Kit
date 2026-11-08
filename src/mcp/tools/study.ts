@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import { z } from "zod";
 import type { HeigApi } from "../../app/api.js";
 import { formatMockExams } from "../../app/exams.js";
-import { formatProfile } from "../../app/profile.js";
+import { formatProfile, profileSince } from "../../app/profile.js";
 import { TIME_ZONE } from "../../dates.js";
 import { respond } from "../common.js";
 
@@ -444,8 +444,9 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         "What the student does well and badly, per course and topic, from past corrections and notes: weaknesses, frequent " +
         "mistakes, strengths, the status of each chapter of the course and the topics to revise first. Use it before preparing " +
         "revisions, exercises or a practice exam. " +
+        "With since, only what was corrected, noted or answered in that period (the level of the day: since 'today'). " +
         "With query, the notes closest in meaning.",
-      inputSchema: { course: z.string().optional(), query: z.string().optional().describe("Find notes about a topic, e.g. 'cardinal et inclusion-exclusion'") },
+      inputSchema: { course: z.string().optional(), since: z.string().optional().describe("Period: 'today', '7d', '30d', a day YYYY-MM-DD or an ISO time; everything when left out"), query: z.string().optional().describe("Find notes about a topic, e.g. 'cardinal et inclusion-exclusion'") },
       annotations: { readOnlyHint: true },
     },
     async (a) =>
@@ -454,7 +455,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
           const notes = await api.searchNotes(a.query, a.course);
           return notes.length === 0 ? "No matching notes." : notes.map((n) => `[${n.id}] ${n.course ?? ""} · ${n.topic} · ${n.kind} (severity ${n.severity}) · ${n.text}`).join("\n");
         }
-        return formatProfile(await api.profile(a.course));
+        return formatProfile(await api.profile(a.course, profileSince(a.since)));
       }),
   );
 
