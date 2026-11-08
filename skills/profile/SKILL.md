@@ -10,7 +10,8 @@ description: Reads and updates the user's learning profile (strengths, weaknesse
 ## Commands
 
 - `npm --prefix <root> run -s profile -- [--course MAD]`: weaknesses, frequent mistakes, strengths, corrected exercise
-  rates and the topics to revise first.
+  rates and the topics to revise first. `--since today` (or `7d`, `30d`, a day `YYYY-MM-DD`; MCP: `since` of
+  `get_profile`) keeps only what was corrected, noted or answered in that period: the level of the day.
 - `profile -- notes [--course MAD] [--kind mistake|weakness|strength|note] [--query "<topic>"]`: the notes, by
   filters or by meaning.
 - `profile -- add --file notes.json`: `{ "notes": [ { "course": "MAD", "topic": "…", "kind": "weakness", "text": "…", "severity": 2 } ] }`.

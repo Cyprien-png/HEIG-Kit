@@ -210,6 +210,11 @@ chapters also writes its chapter on each existing note without one (`POST /api/p
 weak and strong topics, frequent mistakes, what to revise. `revise_weaknesses` is the prompt that turns them into a
 revision session.
 
+The profile page has a period selector (Aujourd'hui, 7 jours, 30 jours, Tout): `GET /api/profile?since=today|7d|30d|<day>|<ISO time>`
+keeps only the notes written, the work corrected and the last quiz attempts finished from then on (today starts at
+midnight in Zurich), so the radars show the level of the day rather than of the whole semester. `get_profile` takes the
+same `since`, and the CLI `--since`.
+
 ## Markdown
 
 Every text the app shows from the AI or the user (cards, quiz statements and explanations, corrections, event details,
