@@ -1,4 +1,4 @@
-import { type AttemptMode, type QuestionInput, answerQuestion, attemptResult, createQuiz, deleteQuiz, finishAttempt, getQuiz, listAttempts, listQuizzes, startAttempt } from "../../app/quizzes.js";
+import { type AttemptMode, LETTERS, type QuestionInput, answerQuestion, attemptResult, createQuiz, deleteQuiz, finishAttempt, getQuiz, listAttempts, listQuizzes, startAttempt } from "../../app/quizzes.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { HttpError, intParam, readJson, stringField } from "./util.js";
@@ -6,13 +6,31 @@ import { HttpError, intParam, readJson, stringField } from "./util.js";
 const MAX_QUESTIONS = 200;
 const MODES: AttemptMode[] = ["web", "voice", "cli"];
 
+/** Indexes from 0, or letters (« B ») as the agent and the student name the options. */
+function choiceFrom(value: unknown, count: number, where: string): number[] {
+  if (!Array.isArray(value) || value.length === 0) throw new HttpError(400, `${where}: give the chosen options as a list`);
+  return value.map((v) => {
+    const index = typeof v === "number" ? v : typeof v === "string" && /^[A-Ha-h]$/.test(v.trim()) ? LETTERS.indexOf(v.trim().toUpperCase()) : Number.NaN;
+    if (!Number.isInteger(index) || index < 0 || index >= count) throw new HttpError(400, `${where}: ${JSON.stringify(v)} is not one of the options`);
+    return index;
+  });
+}
+
 function questionFrom(value: unknown, index: number): QuestionInput {
-  if (!value || typeof value !== "object") throw new HttpError(400, `question ${index + 1} must be an object`);
+  const where = `question ${index + 1}`;
+  if (!value || typeof value !== "object") throw new HttpError(400, `${where} must be an object`);
   const body = value as Record<string, unknown>;
-  if (typeof body.answer !== "boolean") throw new HttpError(400, `question ${index + 1}: answer must be true or false`);
+  let kind: Pick<QuestionInput, "answer" | "options" | "correct">;
+  if (body.options !== undefined) {
+    if (!Array.isArray(body.options) || body.options.some((o) => typeof o !== "string")) throw new HttpError(400, `${where}: options must be a list of texts`);
+    kind = { options: body.options as string[], correct: choiceFrom(body.correct, body.options.length, where) };
+  } else {
+    if (typeof body.answer !== "boolean") throw new HttpError(400, `${where}: answer must be true or false, or give options and correct for a QCM`);
+    kind = { answer: body.answer };
+  }
   return {
     statement: stringField(body, "statement", { max: 1000 })!,
-    answer: body.answer,
+    ...kind,
     explanation: stringField(body, "explanation", { optional: true, max: 2000 }),
     source: stringField(body, "source", { optional: true, max: 300 }),
     topic: stringField(body, "topic", { optional: true, max: 100 }),
@@ -76,9 +94,10 @@ export function registerQuizRoutes(router: Router, app: App): void {
 
   router.post("/api/quiz-attempts/:id/answers", async ({ req, params }) => {
     const body = await readJson(req);
-    if (typeof body.answer !== "boolean") throw new HttpError(400, "answer must be true or false");
+    const answer = typeof body.answer === "boolean" ? body.answer : Array.isArray(body.choice) && body.choice.every((c) => Number.isInteger(c)) ? (body.choice as number[]) : undefined;
+    if (answer === undefined) throw new HttpError(400, "answer must be true or false, or choice the list of the chosen options (indexes from 0)");
     const questionId = body.questionId === undefined ? undefined : intParam(String(body.questionId), "questionId");
-    return domain(() => answerQuestion(app.db, intParam(params.id, "id"), body.answer as boolean, questionId));
+    return domain(() => answerQuestion(app.db, intParam(params.id, "id"), answer, questionId));
   });
 
   router.post("/api/quiz-attempts/:id/finish", async ({ params }) => domain(() => finishAttempt(app.db, intParam(params.id, "id"))));

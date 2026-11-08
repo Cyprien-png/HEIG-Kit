@@ -28,6 +28,7 @@ import { parseArgs } from "node:util";
 import QRCode from "qrcode";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
 import { chapterLabel, formatProfile } from "../src/app/profile.js";
+import { LETTERS, type QuestionInput, lettersOf, parseChoice } from "../src/app/quizzes.js";
 import { TIME_ZONE } from "../src/dates.js";
 import { migrate, openDb } from "../src/rag/db.js";
 import { RemoteClient } from "../src/remote/client.js";
@@ -349,22 +350,27 @@ async function quiz(api: HeigApi): Promise<void> {
   type Result = Awaited<ReturnType<HeigApi["finishQuiz"]>>;
   const fmtResult = (r: Result) => {
     const lines = [`${r.quiz.course ? `${r.quiz.course} · ` : ""}${r.quiz.title}: ${r.attempt.score}/${r.attempt.total}${r.attempt.finishedAt ? "" : " (en cours)"}`];
-    for (const a of r.answers) lines.push(`  ${a.correct ? "✓" : "✗"} ${a.position}. ${a.statement}  [${a.expected ? "VRAI" : "FAUX"}${a.answer === undefined ? ", sans réponse" : a.correct ? "" : `, répondu ${a.answer ? "vrai" : "faux"}`}]${!a.correct && a.explanation ? `\n      ${a.explanation}${a.source ? ` (${a.source})` : ""}` : ""}`);
+    for (const a of r.answers) {
+      const verdict = a.options
+        ? `${lettersOf(a.expectedChoice ?? [])}${a.choice === undefined ? ", sans réponse" : a.correct ? "" : `, répondu ${lettersOf(a.choice)}`}`
+        : `${a.expected ? "VRAI" : "FAUX"}${a.answer === undefined ? ", sans réponse" : a.correct ? "" : `, répondu ${a.answer ? "vrai" : "faux"}`}`;
+      lines.push(`  ${a.correct ? "✓" : "✗"} ${a.position}. ${a.statement}  [${verdict}]${!a.correct && a.explanation ? `\n      ${a.explanation}${a.source ? ` (${a.source})` : ""}` : ""}`);
+    }
     return lines.join("\n");
   };
   switch (action) {
     case undefined:
     case "list": {
       const quizzes = await api.quizzes(values.course);
-      return out(values.json ? quizzes : quizzes.length === 0 ? "No quizzes." : quizzes.map((q) => `[${q.id}] ${(q.course ?? "").padEnd(6)} ${q.title}: ${q.questions} questions, ${q.attempts} attempts${q.last ? `, last ${q.last.score}/${q.last.total}` : ""}${q.best ? `, best ${q.best.score}/${q.best.total}` : ""}`).join("\n"));
+      return out(values.json ? quizzes : quizzes.length === 0 ? "No quizzes." : quizzes.map((q) => `[${q.id}] ${(q.course ?? "").padEnd(6)} ${q.title}${q.kind === "truefalse" ? "" : q.kind === "mcq" ? " (QCM)" : " (vrai/faux et QCM)"}: ${q.questions} questions, ${q.attempts} attempts${q.last ? `, last ${q.last.score}/${q.last.total}` : ""}${q.best ? `, best ${q.best.score}/${q.best.total}` : ""}`).join("\n"));
     }
     case "show": {
       const q = await api.quiz(Number(rest[0]));
       if (!q) throw new Error(`No quiz ${rest[0]}`);
-      return out(values.json ? q : `[${q.id}] ${q.course ? `${q.course} · ` : ""}${q.title}${q.description ? `\n${q.description}` : ""}\n${q.questionList.map((x) => `${x.position}. ${x.statement} → ${x.answer ? "VRAI" : "FAUX"}${x.explanation ? `\n   ${x.explanation}` : ""}${x.source ? ` (${x.source})` : ""}`).join("\n")}`);
+      return out(values.json ? q : `[${q.id}] ${q.course ? `${q.course} · ` : ""}${q.title}${q.description ? `\n${q.description}` : ""}\n${q.questionList.map((x) => `${x.position}. ${x.statement}${x.options ? `${x.options.map((o, i) => `\n   ${LETTERS[i]}. ${o}`).join("")}\n   → ${lettersOf(x.correct ?? [])}` : ` → ${x.answer ? "VRAI" : "FAUX"}`}${x.explanation ? `\n   ${x.explanation}` : ""}${x.source ? ` (${x.source})` : ""}`).join("\n")}`);
     }
     case "create": {
-      const plan = readJsonFile<{ title: string; course?: string; description?: string; questions: { statement: string; answer: boolean; explanation?: string; source?: string; topic?: string }[] }>(values.file, "quiz");
+      const plan = readJsonFile<{ title: string; course?: string; description?: string; questions: QuestionInput[] }>(values.file, "quiz");
       const q = await api.createQuiz({ title: plan.title, course: plan.course ?? values.course, description: plan.description }, plan.questions);
       return out(`Quiz ${q.id} "${q.title}" created with ${q.questionList.length} questions.`);
     }
@@ -374,11 +380,20 @@ async function quiz(api: HeigApi): Promise<void> {
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       try {
         while (progress.next) {
-          const reply = (await rl.question(`${progress.next.position}/${progress.attempt.total}  ${progress.next.statement}\n  vrai (v) / faux (f) / quitter (q) > `)).trim().toLowerCase();
-          if (reply.startsWith("q")) break;
-          if (!/^[vfyntojn]/.test(reply)) continue;
-          const answer = /^[vyotj]/.test(reply);
-          const r = await api.answerQuiz(progress.attempt.id, answer, progress.next.id);
+          const next = progress.next;
+          const head = `${next.position}/${progress.attempt.total}  ${next.statement}`;
+          let answer: boolean | number[] | undefined;
+          if (next.options) {
+            const reply = (await rl.question(`${head}\n${next.options.map((o, i) => `  ${LETTERS[i]}. ${o}`).join("\n")}\n  ${next.multiple ? "lettres, plusieurs réponses (ex. A C)" : "lettre"} / quitter (q) > `)).trim();
+            if (/^q(uit|uitter)?$/i.test(reply)) break;
+            answer = parseChoice(reply, next.options.length);
+          } else {
+            const reply = (await rl.question(`${head}\n  vrai (v) / faux (f) / quitter (q) > `)).trim().toLowerCase();
+            if (reply.startsWith("q")) break;
+            if (/^[vfyntojn]/.test(reply)) answer = /^[vyotj]/.test(reply);
+          }
+          if (answer === undefined) continue;
+          const r = await api.answerQuiz(progress.attempt.id, answer, next.id);
           progress = r;
           if (r.result) return out(`\n${fmtResult(r.result)}`);
         }

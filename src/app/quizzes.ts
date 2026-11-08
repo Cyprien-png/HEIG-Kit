@@ -1,14 +1,19 @@
 /**
- * True/false quizzes: the agent writes the statements from the course material, the student answers them one by one
- * (a swipe on the web app, a word aloud with a voice assistant through the MCP tools, y/n in the terminal) and gets
- * a score and the list of mistakes at the end. Each attempt keeps its answers, so a quiz can be redone.
+ * Quizzes of true/false statements and multiple-choice questions (QCM), freely mixed: the agent writes them from the
+ * course material, the student answers them one by one (a swipe or a form on the web app, a word or a letter aloud
+ * with a voice assistant through the MCP tools, the keyboard in the terminal) and gets a score and the list of
+ * mistakes at the end. Each attempt keeps its answers, so a quiz can be redone.
  */
 import type { Db } from "../rag/db.js";
 
 export type AttemptMode = "web" | "voice" | "cli";
 
+/** What a quiz is made of: only true/false statements, only multiple-choice questions, or both. */
+export type QuizKind = "truefalse" | "mcq" | "mixed";
+
 export interface QuizSummary {
   id: number;
+  kind: QuizKind;
   course?: string;
   title: string;
   description?: string;
@@ -21,9 +26,14 @@ export interface QuizSummary {
 }
 
 export interface QuestionInput {
-  /** A statement that is true or false, written to be read aloud (no formula the voice cannot say). */
+  /** A statement that is true or false, or the question of a QCM; written to be read aloud (no formula the voice cannot say). */
   statement: string;
-  answer: boolean;
+  /** True/false question: whether the statement is true. */
+  answer?: boolean;
+  /** Multiple-choice question: the options (2 to 8), shown and read with the letters A, B, C… */
+  options?: string[];
+  /** Multiple-choice question: the indexes of the right options (from 0), one or several. */
+  correct?: number[];
   /** Why, in one or two sentences, with the course's words. */
   explanation?: string;
   source?: string;
@@ -40,8 +50,34 @@ export interface Question extends QuestionInput {
   position: number;
 }
 
-/** A question as shown while answering: without its answer. */
-export type AskedQuestion = Pick<Question, "id" | "position" | "statement" | "topic">;
+/** A question as shown while answering: without its answer; for a QCM, its options and whether several are right. */
+export type AskedQuestion = Pick<Question, "id" | "position" | "statement" | "topic" | "options"> & { multiple?: boolean };
+
+/** The answer to a question: true or false, or the indexes of the chosen options of a QCM. */
+export type QuizAnswerValue = boolean | number[];
+
+export const LETTERS = "ABCDEFGH";
+/** « B » or « A et C ». */
+export const lettersOf = (choice: number[]) => {
+  const l = choice.map((i) => LETTERS[i] ?? "?");
+  return l.length <= 1 ? (l[0] ?? "") : `${l.slice(0, -1).join(", ")} et ${l[l.length - 1]}`;
+};
+
+/**
+ * The options a student named, as indexes: letters (« B », « a et c », « réponse D ») or numbers from 1 (« 2 »);
+ * undefined when nothing in range was found.
+ */
+export function parseChoice(text: string, count: number): number[] | undefined {
+  const found = new Set<number>();
+  // An elided letter (« c'est », « d'accord ») is not an option.
+  const plain = text.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\b[A-Z]['’]/g, " ");
+  for (const token of plain.split(/[^A-Z0-9]+/)) {
+    if (/^[A-H]$/.test(token)) found.add(LETTERS.indexOf(token));
+    else if (/^[1-8]$/.test(token)) found.add(Number(token) - 1);
+  }
+  const choice = [...found].filter((i) => i >= 0 && i < count).sort((a, b) => a - b);
+  return choice.length > 0 ? choice : undefined;
+}
 
 export interface Attempt {
   id: number;
@@ -58,9 +94,14 @@ export interface AnswerRecord {
   questionId: number;
   position: number;
   statement: string;
-  expected: boolean;
-  /** The student's answer; absent when the attempt was finished without answering. */
+  /** True/false question: the right answer. */
+  expected?: boolean;
+  /** True/false question: the student's answer; absent when the attempt was finished without answering. */
   answer?: boolean;
+  /** Multiple-choice question: the options, the right ones and the student's choice (absent when not answered). */
+  options?: string[];
+  expectedChoice?: number[];
+  choice?: number[];
   correct: boolean;
   explanation?: string;
   source?: string;
@@ -76,6 +117,7 @@ export interface AttemptResult {
 
 const toSummary = (r: Record<string, unknown>): QuizSummary => ({
   id: Number(r.id),
+  kind: Number(r.mcq_questions ?? 0) === 0 ? "truefalse" : Number(r.mcq_questions) === Number(r.questions ?? 0) ? "mcq" : "mixed",
   course: (r.course as string | null) ?? undefined,
   title: r.title as string,
   description: (r.description as string | null) ?? undefined,
@@ -94,7 +136,7 @@ const toQuestion = (r: Record<string, unknown>): Question => ({
   quizId: Number(r.quiz_id),
   position: Number(r.asked_position ?? r.position),
   statement: r.statement as string,
-  answer: Boolean(r.answer),
+  ...(r.options ? { options: r.options as string[], correct: (r.correct as number[] | null) ?? [] } : { answer: Boolean(r.answer) }),
   explanation: (r.explanation as string | null) ?? undefined,
   source: (r.source as string | null) ?? undefined,
   topic: (r.topic as string | null) ?? undefined,
@@ -113,10 +155,17 @@ const toAttempt = (r: Record<string, unknown>): Attempt => ({
   score: Number(r.score ?? r.correct_count ?? 0),
 });
 
-export const asked = (q: Question): AskedQuestion => ({ id: q.id, position: q.position, statement: q.statement, topic: q.topic });
+export const asked = (q: Question): AskedQuestion => ({
+  id: q.id,
+  position: q.position,
+  statement: q.statement,
+  topic: q.topic,
+  ...(q.options ? { options: q.options, multiple: (q.correct?.length ?? 0) > 1 } : {}),
+});
 
 const SUMMARY_COLUMNS = `q.*,
   (SELECT count(*) FROM quiz_questions x WHERE x.quiz_id = q.id)::int AS questions,
+  (SELECT count(*) FROM quiz_questions x WHERE x.quiz_id = q.id AND x.options IS NOT NULL)::int AS mcq_questions,
   (SELECT count(*) FROM quiz_attempts a WHERE a.quiz_id = q.id AND a.finished_at IS NOT NULL)::int AS attempts,
   l.id AS last_attempt_id, l.score AS last_score, l.total AS last_total, l.finished_at AS last_finished_at,
   b.score AS best_score, b.total AS best_total`;
@@ -137,10 +186,21 @@ export async function getQuiz(db: Db, id: number): Promise<(QuizSummary & { ques
 }
 
 function checkQuestion(q: QuestionInput, index: number): QuestionInput {
+  const where = `question ${index + 1}`;
   const statement = q.statement?.trim();
-  if (!statement || statement.length > 1000) throw new Error(`question ${index + 1}: statement must be 1 to 1000 characters`);
-  if (typeof q.answer !== "boolean") throw new Error(`question ${index + 1}: answer must be true or false`);
-  return { statement, answer: q.answer, explanation: q.explanation?.trim() || undefined, source: q.source?.trim() || undefined, topic: q.topic?.trim() || undefined, chapter: q.chapter?.trim() || undefined, section: q.section?.trim() || undefined };
+  if (!statement || statement.length > 1000) throw new Error(`${where}: statement must be 1 to 1000 characters`);
+  const common = { statement, explanation: q.explanation?.trim() || undefined, source: q.source?.trim() || undefined, topic: q.topic?.trim() || undefined, chapter: q.chapter?.trim() || undefined, section: q.section?.trim() || undefined };
+  if (q.options !== undefined) {
+    const options = q.options.map((o) => (typeof o === "string" ? o.trim() : ""));
+    if (options.length < 2 || options.length > LETTERS.length) throw new Error(`${where}: a QCM has 2 to ${LETTERS.length} options`);
+    if (options.some((o) => !o || o.length > 500)) throw new Error(`${where}: every option must be 1 to 500 characters`);
+    // Letters (« B ») are accepted too, as in a JSON file written by hand or by the agent.
+    const correct = [...new Set((q.correct ?? []).map((c) => (typeof c === "string" ? LETTERS.indexOf((c as string).trim().toUpperCase()) : c)))].sort((a, b) => a - b);
+    if (correct.length === 0 || correct.some((i) => !Number.isInteger(i) || i < 0 || i >= options.length)) throw new Error(`${where}: correct must list the indexes (from 0) of the right options`);
+    return { ...common, options, correct };
+  }
+  if (typeof q.answer !== "boolean") throw new Error(`${where}: answer must be true or false, or give options and correct for a QCM`);
+  return { ...common, answer: q.answer };
 }
 
 export async function createQuiz(db: Db, input: { title: string; course?: string; description?: string }, questions: QuestionInput[]): Promise<QuizSummary & { questionList: Question[] }> {
@@ -150,7 +210,19 @@ export async function createQuiz(db: Db, input: { title: string; course?: string
   const { rows } = await db.query("INSERT INTO quizzes (title, course, description) VALUES ($1, $2, $3) RETURNING id", [input.title.trim(), input.course?.trim() || null, input.description?.trim() || null]);
   const id = Number(rows[0].id);
   for (const [i, q] of checked.entries()) {
-    await db.query("INSERT INTO quiz_questions (quiz_id, position, statement, answer, explanation, source, topic, chapter, section) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)", [id, i + 1, q.statement, q.answer, q.explanation ?? null, q.source ?? null, q.topic ?? null, q.chapter ?? null, q.section ?? null]);
+    await db.query("INSERT INTO quiz_questions (quiz_id, position, statement, answer, explanation, source, topic, chapter, section, options, correct) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", [
+      id,
+      i + 1,
+      q.statement,
+      q.answer ?? null,
+      q.explanation ?? null,
+      q.source ?? null,
+      q.topic ?? null,
+      q.chapter ?? null,
+      q.section ?? null,
+      q.options ?? null,
+      q.correct ?? null,
+    ]);
   }
   return (await getQuiz(db, id))!;
 }
@@ -246,8 +318,16 @@ export async function startAttempt(db: Db, quizId: number, mode: AttemptMode = "
   return { attempt, next: asked({ ...questions[0], position: 1 }) };
 }
 
-/** Records an answer; `questionId` defaults to the next unanswered question (the voice flow never repeats ids). */
-export async function answerQuestion(db: Db, attemptId: number, answer: boolean, questionId?: number): Promise<Progress & { correct: boolean; expected: boolean; explanation?: string }> {
+/**
+ * Records an answer, true/false or the chosen options of a QCM (right when exactly the right options are chosen);
+ * `questionId` defaults to the next unanswered question (the voice flow never repeats ids).
+ */
+export async function answerQuestion(
+  db: Db,
+  attemptId: number,
+  answer: QuizAnswerValue,
+  questionId?: number,
+): Promise<Progress & { correct: boolean; expected?: boolean; expectedChoice?: number[]; explanation?: string }> {
   const attempt = await getAttempt(db, attemptId);
   if (!attempt) throw new Error(`No attempt ${attemptId}`);
   if (attempt.finishedAt) throw new Error("This attempt is finished");
@@ -258,13 +338,30 @@ export async function answerQuestion(db: Db, attemptId: number, answer: boolean,
     question = rows[0] ? toQuestion(rows[0]) : undefined;
   }
   if (!question) throw new Error(questionId === undefined ? "Every question is answered" : `No question ${questionId} in this quiz`);
-  const correct = question.answer === answer;
-  const { rowCount } = await db.query("INSERT INTO quiz_answers (attempt_id, question_id, answer, correct) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", [attemptId, question.id, answer, correct]);
+  let correct: boolean;
+  let choice: number[] | null = null;
+  if (question.options) {
+    if (!Array.isArray(answer)) throw new Error(`Question ${question.id} is a QCM: answer with the chosen options`);
+    choice = [...new Set(answer)].sort((a, b) => a - b);
+    if (choice.length === 0 || choice.some((i) => !Number.isInteger(i) || i < 0 || i >= question.options!.length)) throw new Error(`Question ${question.id} has options ${lettersOf(question.options.map((_, i) => i))}`);
+    const expected = question.correct ?? [];
+    correct = choice.length === expected.length && choice.every((c, i) => c === expected[i]);
+  } else {
+    if (typeof answer !== "boolean") throw new Error(`Question ${question.id} is true or false`);
+    correct = question.answer === answer;
+  }
+  const { rowCount } = await db.query("INSERT INTO quiz_answers (attempt_id, question_id, answer, choice, correct) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", [
+    attemptId,
+    question.id,
+    typeof answer === "boolean" ? answer : null,
+    choice,
+    correct,
+  ]);
   if ((rowCount ?? 0) === 0) throw new Error(`Question ${question.id} is already answered in this attempt`);
   const next = await nextQuestion(db, attemptId);
   const progress: Progress = { attempt: (await getAttempt(db, attemptId))!, next: next ? asked(next) : undefined };
   if (!next) progress.result = await finishAttempt(db, attemptId);
-  return { ...progress, correct, expected: question.answer, explanation: question.explanation };
+  return { ...progress, correct, expected: question.answer, expectedChoice: question.correct, explanation: question.explanation };
 }
 
 /** Closes an attempt (unanswered questions count as wrong) and gives the result. */
@@ -283,7 +380,8 @@ export async function attemptResult(db: Db, attemptId: number): Promise<AttemptR
   if (!attempt) return undefined;
   const { rows: quizRows } = await db.query("SELECT id, title, course FROM quizzes WHERE id = $1", [attempt.quizId]);
   const { rows } = await db.query(
-    `SELECT q.id, ${ASKED_POSITION} AS position, q.statement, q.answer AS expected, q.explanation, q.source, q.topic, x.answer, x.correct
+    `SELECT q.id, ${ASKED_POSITION} AS position, q.statement, q.answer AS expected, q.options, q.correct AS expected_choice, q.explanation, q.source, q.topic,
+            x.answer, x.choice, x.correct, x.attempt_id IS NOT NULL AS answered
      FROM quiz_questions q JOIN quiz_attempts a ON a.id = $1 LEFT JOIN quiz_answers x ON x.question_id = q.id AND x.attempt_id = a.id
      WHERE q.quiz_id = a.quiz_id ORDER BY ${ASKED_POSITION}, q.id`,
     [attemptId],
@@ -292,8 +390,9 @@ export async function attemptResult(db: Db, attemptId: number): Promise<AttemptR
     questionId: Number(r.id),
     position: Number(r.position),
     statement: r.statement as string,
-    expected: Boolean(r.expected),
-    answer: r.answer === null || r.answer === undefined ? undefined : Boolean(r.answer),
+    ...(r.options
+      ? { options: r.options as string[], expectedChoice: (r.expected_choice as number[] | null) ?? [], choice: r.answered ? ((r.choice as number[] | null) ?? []) : undefined }
+      : { expected: Boolean(r.expected), answer: r.answer === null || r.answer === undefined ? undefined : Boolean(r.answer) }),
     correct: Boolean(r.correct),
     explanation: (r.explanation as string | null) ?? undefined,
     source: (r.source as string | null) ?? undefined,
@@ -312,14 +411,24 @@ export async function listAttempts(db: Db, quizId: number): Promise<Attempt[]> {
   return rows.map(toAttempt);
 }
 
+type SpokenAnswer = Pick<AnswerRecord, "position" | "statement" | "expected" | "answer" | "options" | "expectedChoice" | "choice" | "explanation" | "source">;
+
+/** The right answer of a mistake as a sentence: « est faux », or « la bonne réponse est B : … ». */
+export function rightAnswer(m: SpokenAnswer): string {
+  if (!m.options) return `« ${m.statement} » est ${m.expected ? "vrai" : "faux"}${m.answer === undefined ? " (sans réponse)" : ""}.`;
+  const right = m.expectedChoice ?? [];
+  const said = m.choice === undefined ? "sans réponse" : `répondu ${lettersOf(m.choice)}`;
+  return `« ${m.statement} » : ${right.length > 1 ? "les bonnes réponses sont" : "la bonne réponse est"} ${right.map((i) => `${LETTERS[i]}, « ${m.options![i]} »`).join(", et ")} (${said}).`;
+}
+
 /** A result as a few spoken lines: the score, then each mistake with the right answer and why. */
-export function speakResult(result: AttemptResult): string {
+export function speakResult(result: { attempt: { score: number; total: number }; mistakes: SpokenAnswer[] }): string {
   const { attempt, mistakes } = result;
   const lines = [`Score : ${attempt.score} sur ${attempt.total}.`];
   if (mistakes.length === 0) lines.push("Aucune erreur.");
   else {
     lines.push(`${mistakes.length} erreur${mistakes.length > 1 ? "s" : ""} :`);
-    for (const m of mistakes) lines.push(`${m.position}. « ${m.statement} » est ${m.expected ? "vrai" : "faux"}${m.answer === undefined ? " (sans réponse)" : ""}.${m.explanation ? ` ${m.explanation}` : ""}${m.source ? ` (${m.source})` : ""}`);
+    for (const m of mistakes) lines.push(`${m.position}. ${rightAnswer(m)}${m.explanation ? ` ${m.explanation}` : ""}${m.source ? ` (${m.source})` : ""}`);
   }
   return lines.join("\n");
 }
