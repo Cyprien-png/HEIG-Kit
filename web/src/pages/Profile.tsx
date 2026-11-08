@@ -18,8 +18,40 @@ const STATUS: Record<ChapterStatus, { label: string; tone: "ok" | "warn" | "bad"
   unassessed: { label: "non évalué", tone: "neutral" },
 };
 
+/** The periods of the profile: what was corrected, noted or answered since then. */
+type Period = "today" | "7d" | "30d" | "all";
+const PERIODS: { value: Period; label: string; hint: string }[] = [
+  { value: "today", label: "Aujourd'hui", hint: "depuis ce matin" },
+  { value: "7d", label: "7 jours", hint: "sur les 7 derniers jours" },
+  { value: "30d", label: "30 jours", hint: "sur les 30 derniers jours" },
+  { value: "all", label: "Tout", hint: "" },
+];
+const PERIOD_KEY = "heig-profile-period";
+
+function usePeriod(): [Period, (p: Period) => void] {
+  const [period, setPeriod] = useState<Period>(() => {
+    try {
+      const saved = localStorage.getItem(PERIOD_KEY);
+      return PERIODS.some((p) => p.value === saved) ? (saved as Period) : "all";
+    } catch {
+      return "all";
+    }
+  });
+  const choose = (p: Period) => {
+    setPeriod(p);
+    try {
+      localStorage.setItem(PERIOD_KEY, p);
+    } catch {
+      /* not kept in a private window */
+    }
+  };
+  return [period, choose];
+}
+
 export function Profile() {
-  const summary = useApi<ProfileSummary>("/api/profile");
+  const [period, setPeriod] = usePeriod();
+  const summary = useApi<ProfileSummary>(`/api/profile${period === "all" ? "" : `?since=${period}`}`, [period]);
+  const periodHint = PERIODS.find((p) => p.value === period)!.hint;
   const [tab, setTab] = useState<"summary" | "notes">("summary");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string>();
@@ -29,9 +61,19 @@ export function Profile() {
   return (
     <div className="space-y-5">
       <PageHeader title="Profil" actions={<><Segmented value={tab} onChange={setTab} options={[{ value: "summary", label: "Synthèse" }, { value: "notes", label: "Notes" }]} /><Button onClick={() => setAdding(true)}><PlusIcon className="h-4 w-4" /> Note</Button></>} />
+      {tab === "summary" && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Segmented size="sm" value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p.value, label: p.label }))} />
+          {period !== "all" && <span className="text-xs text-ink-3">Seulement ce qui a été corrigé, noté ou répondu en quiz {periodHint}.</span>}
+        </div>
+      )}
       {summary.error && <ErrorBox error={summary.error} retry={summary.reload} />}
       {summary.loading && !s ? <Loading /> : tab === "notes" ? <Notes onChanged={() => void summary.reload()} /> : !s || (s.courses.length === 0 && s.toRevise.length === 0) ? (
-        <Empty title="Profil vide" hint="Faites corriger vos exercices (« corrige ma série 3 ») : chaque correction note vos erreurs et vos acquis ici." />
+        period === "all" ? (
+          <Empty title="Profil vide" hint="Faites corriger vos exercices (« corrige ma série 3 ») : chaque correction note vos erreurs et vos acquis ici." />
+        ) : (
+          <Empty title={`Rien ${periodHint}`} hint="Aucune correction, note ni réponse de quiz sur cette période. Faites un quiz ou corrigez des exercices, ou choisissez une période plus longue." />
+        )
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">
