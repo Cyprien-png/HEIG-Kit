@@ -210,6 +210,13 @@ body {
 .prose-kit figure.drawing svg {
   @apply block mx-auto;
 }
+/* Only a viewBox: no size of its own, so it takes the width of the text, within reason. */
+.prose-kit figure.drawing.fluid {
+  @apply w-full max-w-md;
+}
+.prose-kit figure.drawing.fluid svg {
+  @apply w-full h-auto;
+}
 /* A diagram or chart (```mermaid), drawn in the theme's colours once mounted. */
 .prose-kit figure.mermaid {
   @apply my-2 overflow-x-auto;

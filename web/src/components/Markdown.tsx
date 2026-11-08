@@ -11,10 +11,30 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
  * Mermaid once mounted (its source waits in a <pre>: an attribute holding `-->` would not survive sanitizing). Every
  * other fence stays code.
  */
+/**
+ * A drawing as written by the agent, made to show in every browser: an <svg> with only a viewBox has no size of its
+ * own and collapses to nothing in a figure that fits its content, so such a drawing takes the width it is given
+ * ("fluid"); a transform on the root <svg> (not drawn by Safari) moves to a group around its content.
+ */
+export function drawing(text: string): string {
+  const open = /<svg\b([^>]*)>/i.exec(text);
+  if (!open) return `<figure class="drawing">${text}</figure>`;
+  let attrs = open[1];
+  let body = text.slice(open.index + open[0].length);
+  const transform = /\stransform\s*=\s*("[^"]*"|'[^']*')/i.exec(attrs);
+  if (transform) {
+    attrs = attrs.replace(transform[0], "");
+    const end = body.toLowerCase().lastIndexOf("</svg>");
+    body = end >= 0 ? `<g transform=${transform[1]}>${body.slice(0, end)}</g>${body.slice(end)}` : body;
+  }
+  const sized = /\swidth\s*=/i.test(attrs);
+  return `<figure class="drawing${sized ? "" : " fluid"}">${text.slice(0, open.index)}<svg${attrs}>${body}</figure>`;
+}
+
 const renderer = {
   code({ text, lang }: Tokens.Code): string | false {
     const language = (lang ?? "").trim().toLowerCase();
-    if (language === "svg") return `<figure class="drawing">${text}</figure>`;
+    if (language === "svg") return drawing(text);
     if (language === "mermaid") return `<figure class="mermaid"><pre>${escapeHtml(text)}</pre></figure>`;
     return false;
   },
