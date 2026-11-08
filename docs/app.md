@@ -90,6 +90,13 @@ Each item carries a course code and tags (`library_tags`): a type among `explica
 without saved tags is classified from its name and title (the course codes come from the GAPS snapshots). The web app
 lists the library by course then by type, and filters it by course, type and tags; `list_library` gives the same view.
 
+Every list of the Révision part (library, cards, quizzes, mock exams, past exams, courses and their documents, copies,
+corrections) shares the same filter bar (`web/src/components/ListFilters.tsx`): a search on the name and what the
+item is about, a sort (by course, or by type, or by folder, then newest, oldest, A–Z), the course chips and the
+categories of the page (state, kind, result, year, topics). The filters of each page are kept for the browser tab.
+Past exams are browsed by folder until a filter or another sort is chosen, which lists the exams of the current folder
+and below.
+
 ## Mock exams (« Tests blancs »)
 
 The practice exams the agent generates (`heig:teacher`, « TE blanc ») are library documents tagged `te blanc`: a
