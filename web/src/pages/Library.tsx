@@ -12,10 +12,6 @@ const fileUrl = (f: LibraryFile) => `/api/library/files/${f.id}`;
 
 /** The type tags, in the order the library shows them; the other tags are topics. */
 const TYPE_TAGS = ["explication", "révision", "exercices", "corrigé", "te blanc", "vidéo"];
-const typeRank = (item: LibraryItem) => {
-  const ranks = item.tags.map((t) => TYPE_TAGS.indexOf(t)).filter((r) => r >= 0);
-  return ranks.length ? Math.min(...ranks) : TYPE_TAGS.length;
-};
 const tagOrder = (a: string, b: string) => {
   const ra = TYPE_TAGS.indexOf(a);
   const rb = TYPE_TAGS.indexOf(b);
@@ -45,7 +41,7 @@ export function Library() {
     for (const i of list) byCourse.set(i.course ?? NO_COURSE, [...(byCourse.get(i.course ?? NO_COURSE) ?? []), i]);
     return [...byCourse.entries()]
       .sort(([a], [b]) => (a === NO_COURSE ? 1 : b === NO_COURSE ? -1 : a.localeCompare(b)))
-      .map(([code, group]) => ({ course: code, items: group.sort((a, b) => typeRank(a) - typeRank(b) || b.modifiedAt.localeCompare(a.modifiedAt)) }));
+      .map(([code, group]) => ({ course: code, items: group.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)) }));
   }, [list, sort]);
   const opened = kind && name ? all.flatMap((i) => i.files).find((f) => f.id === `${kind}/${name}`) : undefined;
   const toggleTag = (t: string) => setTags((current) => (current.includes(t) ? current.filter((x) => x !== t) : [...current, t]));
