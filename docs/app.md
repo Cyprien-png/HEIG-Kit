@@ -155,11 +155,15 @@ updates the card's spaced repetition state at once, whether the session is finis
 
 ## Quizzes
 
-True/false quizzes (`quizzes`, `quiz_questions`): the agent writes them from the course material (`create_quiz`,
-`heig:quiz` skill), the student answers them one statement at a time: full-screen cards swiped right (true) or left (false) on the
-web app's Quiz page (LaTeX between `$…$` is rendered), aloud with a voice assistant through `start_quiz` / `answer_quiz` (each call records an answer
-and returns the next question, the last one returns the result as lines to read), or `npm run quiz -- play` in the
-terminal. An attempt may shuffle the questions (the « Mélanger » switch of the Quiz page, `shuffle` of `start_quiz`,
+Quizzes (`quizzes`, `quiz_questions`) of true/false statements and multiple-choice questions (QCM), freely mixed: the
+agent writes them from the course material (`create_quiz`, `heig:quiz` skill). A true/false question has `answer`; a QCM
+has `options` (2 to 8, named A to H) and `correct`, the indexes of the right ones (one or several; the MCP tool and the
+HTTP route also take letters), and is right only when exactly the right options are chosen (`quiz_answers.choice`). The
+student answers one question at a time: on the web app's Quiz page, a statement is a full-screen card swiped right
+(true) or left (false), a QCM a form whose options are ticked with a tap or the letter keys and validated (LaTeX between
+`$…$` is rendered); aloud with a voice assistant through `start_quiz` / `answer_quiz` (the options are read with their
+letters, the letters said are passed as `choice`; each call records an answer and returns the next question, the last
+one returns the result as lines to read); or `npm run quiz -- play` in the terminal. An attempt may shuffle the questions (the « Mélanger » switch of the Quiz page, `shuffle` of `start_quiz`,
 `--shuffle` of `play`): the order is kept with the attempt (`question_order`) and the questions are numbered in that order.
 Every attempt (`quiz_attempts`, `quiz_answers`) ends with a score and the mistakes with their explanation
 and source; an attempt stopped early counts the rest as wrong. Each question may name its `chapter`: the last finished
