@@ -21,9 +21,9 @@ RUN git -c advice.detachedHead=false clone --quiet --depth 1 --branch v1.7.2 htt
   && vendor/manim/.venv/bin/pip install --quiet --upgrade pip "setuptools<81" \
   && vendor/manim/.venv/bin/pip install --quiet -e vendor/manim
 RUN python3 -m venv vendor/kokoro/.venv \
-  && vendor/kokoro/.venv/bin/pip install --quiet kokoro-onnx==0.6.1 \
-  && curl -fsSL -o vendor/kokoro/kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx \
-  && curl -fsSL -o vendor/kokoro/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+  && vendor/kokoro/.venv/bin/pip install --quiet --retries 6 kokoro-onnx==0.6.1 \
+  && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx \
+  && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 COPY tsconfig.json ./
 COPY src ./src
 COPY modules ./modules
