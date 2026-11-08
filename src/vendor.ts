@@ -8,13 +8,15 @@ export const VENDOR_DIR = path.join(ROOT, "vendor");
 export const MANIM_DIR = path.join(VENDOR_DIR, "manim");
 const windows = process.platform === "win32";
 
+const OUTPUT_ENV = { documents: "HEIG_DOCUMENTS_DIR", videos: "HEIG_VIDEOS_DIR", exams: "HEIG_EXAMS_DIR" } as const;
+
 /**
- * Where generated documents and videos go: HEIG_DOCUMENTS_DIR and HEIG_VIDEOS_DIR in .env, otherwise a subfolder of
- * HEIG_OUTPUT_DIR, itself ~/Documents/HEIG-Kit by default.
+ * Where generated documents and videos go, and the past exams: HEIG_DOCUMENTS_DIR, HEIG_VIDEOS_DIR and HEIG_EXAMS_DIR in
+ * .env, otherwise a subfolder of HEIG_OUTPUT_DIR, itself ~/Documents/HEIG-Kit by default.
  */
-export function outputDir(kind: "documents" | "videos"): string {
+export function outputDir(kind: "documents" | "videos" | "exams"): string {
   const base = folderFromEnv(process.env.HEIG_OUTPUT_DIR, path.join(os.homedir(), "Documents", "HEIG-Kit"));
-  return folderFromEnv(process.env[kind === "documents" ? "HEIG_DOCUMENTS_DIR" : "HEIG_VIDEOS_DIR"], path.join(base, kind));
+  return folderFromEnv(process.env[OUTPUT_ENV[kind]], path.join(base, kind));
 }
 
 /** Executable of a program of manim's Python environment (python, pip, manimgl). */

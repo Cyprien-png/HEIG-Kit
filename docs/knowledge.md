@@ -71,11 +71,13 @@ npm run repos -- add https://github.com/owner/repo --course PRG    # or …/tree
 npm run repos -- add owner/repo --course PRG --exclude Classe_C     # leaves out folders (repeatable)
 npm run repos                                                      # lists them
 npm run repos -- remove https://github.com/owner/repo
-npm run ingest -- --source github                                  # only the repositories
+npm run repos -- update                                            # fetches and indexes only the repositories
 ```
 
-They are read with your own git account (`git` must be able to clone them: credential helper, keychain…), no token is
-stored by HEIG-Kit. Only the latest commit is kept, in `data/repos`, and nothing is checked out or run. Documents and
+They are read with your own git account (`git` must be able to clone them: credential helper, keychain…), or with the
+token `HEIG_GITHUB_TOKEN` of `.env` when set (fine-grained, read-only on these repositories). With `HEIG_REMOTE_URL`,
+these commands manage the repositories of your server, which fetches and indexes them itself with its own token
+([server.md](server.md)). Only the latest commit is kept, in `data/repos`, and nothing is checked out or run. Documents and
 source code are indexed, except hidden folders, `node_modules`, `build`… Each indexing fetches the repositories: changed
 files replace their previous version and deleted ones leave the index, while a repository that cannot be reached keeps
 its documents and makes the command report a failure.

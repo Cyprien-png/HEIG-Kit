@@ -10,8 +10,10 @@ The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each s
 Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`),
 `heig:courses` (`skills/courses/SKILL.md`), `heig:teacher` (`skills/teacher/SKILL.md`, course knowledge base),
 `heig:documents` (`skills/documents/SKILL.md`, PDF/DOCX/HTML), `heig:visuals` (`skills/visuals/SKILL.md`, manim),
-`heig:studies` (`skills/studies/SKILL.md`, study plan and course sheets) and `heig:grades` (`skills/grades/SKILL.md`,
-grades and absences) skills.
+`heig:studies` (`skills/studies/SKILL.md`, study plan and course sheets), `heig:grades` (`skills/grades/SKILL.md`,
+grades and absences), `heig:calendar` (events, exams, overrides), `heig:flashcards` (decks), `heig:quiz` (true/false and QCM quizzes, also aloud), `heig:correct`
+(photographed work, QR code), `heig:past-exams` (scanned tests of former years: import, énoncé and corrigé, corrections)
+and `heig:profile` (weak points, targeted revisions) skills.
 
 ## Modules
 
@@ -43,7 +45,12 @@ Never print or commit the content of `.env` or `.cache/`.
 - `src/rag/`: knowledge base: `db.ts` (pgvector, migrations in `rag/migrations/`), `extract.ts` (docling), `chunk.ts`
   (structure-aware chunking, one chunk per exercise), `embed.ts` (Ollama bge-m3), `sources/` (Cyberlearn, local folders, GitHub repositories read with the local git account, listed in `data/github-repos.json`),
   `ingest.ts` (incremental, deduplicated by content hash, curriculum courses = GAPS timetable codes, one run at a time), `search.ts` (hybrid vector + French full-text + exercise numbers)
-- `src/server/`: remote server (`npm run server`, `docs/server.md`): `config.ts` (settings, refuses weak ones), `auth.ts` (JWT, login limits), `http.ts` (login, MCP, signed downloads), `files.ts` (which files can be downloaded), `jobs.ts` (render queue, everything back from the worker is untrusted), `worker.ts` (runs in the `render` container, no network nor secrets); `src/mcp/tools/remote.ts`: its output tools. Rendering must never run in the process holding the secrets. Images built and published on ghcr.io by `.github/workflows/server-images.yml` (Debian install: `docs/install-debian.md`)
+- `src/server/`: remote server (`npm run server`, `docs/server.md`): `config.ts` (settings, refuses weak ones), `auth.ts` (JWT, login limits, capture tokens), `oauth.ts` (OAuth 2.1 server for claude.ai connectors), `http.ts` (login, MCP, signed downloads, `/api`, web app), `app.ts` (what routes, tools and jobs share), `api/` (REST routes of the web app, one module per domain, `router.ts`, `static.ts`), `files.ts` (which files can be downloaded), `jobs.ts` (render queue, everything back from the worker is untrusted), `worker.ts` (runs in the `render` container, no network nor secrets); `src/mcp/tools/remote.ts`: its output tools. Rendering must never run in the process holding the secrets. Images built and published on ghcr.io by `.github/workflows/server-images.yml` (Debian install: `docs/install-debian.md`)
+- `src/app/`: domain logic of the web app (`docs/app.md`), plain functions on the database shared by the API, the MCP tools (`src/mcp/tools/study.ts`) and the CLI (`scripts/study.ts`): `calendar.ts` (versioned events in calendars/layers, source sync, manual overrides), `lessons.ts` (programme of each
+  lesson read from the Cyberlearn course pages), `snapshots.ts`, `sync.ts` (periodic GAPS and Cyberlearn fetch, run history), `status.ts`, `requests.ts` (request log), `library.ts`, `flashcards.ts`, `quizzes.ts` (true/false and multiple-choice quizzes, attempts, spoken results), `corrections.ts`, `workcopies.ts` (PDF copies filled in on the web app, submitted as corrections), `profile.ts`, `knowledge.ts` (local or remote knowledge base), `api.ts` (`HeigApi`: `LocalApi` on the database, `RemoteApi` over HTTP)
+- `src/remote/`: client of a remote server (`HEIG_REMOTE_URL`, `npm run remote -- login`), library push/pull (`npm run library`), past exams sync (`npm run exams`)
+- `src/app/exams.ts` (mock exams of the library, Swiss grades) and `src/app/pastexams.ts` (past exams: the `exams` output folder, `<branch>/<year>/<exam>/` with originals, énoncé, corrigé, page images; `scripts/exams.ts`)
+- `web/`: the web application (Vite, React, Tailwind, Heroicons; own package.json), served by the server from `web/dist`, built in the server image; `npm run setup -- web` builds it locally; `cd web && npm run dev` proxies `/api` to a local server
 - `src/services.ts`: logic shared by the CLI and the MCP server; `src/mcp/host.ts`: complete MCP server on the host
   (stdio or `--http` 8766), tools in `src/mcp/tools/`; `src/mcp/server.ts`: knowledge-only MCP server in Docker (8765).
   Add every new feature both as a CLI command and as an MCP tool
@@ -67,4 +74,5 @@ Never print or commit the content of `.env` or `.cache/`.
 - `scripts/aliases.ts`: installs the `heig:*` terminal shortcuts (`heig-*` on Windows) in the user's shell configuration
 - `skills/`: plugin skills; run `claude plugin validate .` after changing them or `.claude-plugin/`
 
-Run `npm test` (node:test) and `npx tsc --noEmit` after changes.
+Run `npm test` (node:test; domain tests use the local Postgres of `rag/compose.yml` when it runs, and are skipped
+otherwise) and `npx tsc --noEmit` after changes; `cd web && npm run build` after changes to the web app.

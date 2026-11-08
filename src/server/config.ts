@@ -16,12 +16,14 @@ export interface ServerConfig {
   jobsDir?: string;
   /** Behind a reverse proxy, the client address is the last entry of X-Forwarded-For. */
   trustProxy: boolean;
+  /** How often GAPS and Cyberlearn are fetched for the web app's calendar and data; 0 disables the sync. */
+  syncMinutes: number;
 }
 
-function positive(name: string, value: string | undefined, fallback: number): number {
+function positive(name: string, value: string | undefined, fallback: number, zeroAllowed = false): number {
   if (!value?.trim()) return fallback;
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) throw new Error(`${name} must be a positive number`);
+  if (!Number.isFinite(number) || number < 0 || (number === 0 && !zeroAllowed)) throw new Error(`${name} must be a positive number`);
   return number;
 }
 
@@ -54,5 +56,6 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     port: positive("HEIG_HTTP_PORT", env.HEIG_HTTP_PORT, 8766),
     jobsDir: env.HEIG_JOBS_DIR?.trim() ? folderFromEnv(env.HEIG_JOBS_DIR, "") : undefined,
     trustProxy: env.HEIG_TRUST_PROXY === "1" || env.HEIG_TRUST_PROXY === "true",
+    syncMinutes: positive("HEIG_SYNC_MINUTES", env.HEIG_SYNC_MINUTES, 60, true),
   };
 }

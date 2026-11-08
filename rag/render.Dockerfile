@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-science tipa cm-super dvisvgm fonts-dejavu fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+# Heavy installs first, then the code: a change in src/ or modules/ must not rebuild (and re-pull) the layers below, which
+# only depend on their own manifests and pinned versions.
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY tsconfig.json ./
-COPY src ./src
-COPY modules ./modules
+COPY modules/documents/package.json modules/documents/package-lock.json ./modules/documents/
 RUN cd modules/documents && npm ci --no-audit --no-fund
 # Same versions as src/setup/modules/visuals.ts and src/setup/modules/voice.ts.
 RUN git -c advice.detachedHead=false clone --quiet --depth 1 --branch v1.7.2 https://github.com/3b1b/manim.git vendor/manim \
@@ -21,9 +21,12 @@ RUN git -c advice.detachedHead=false clone --quiet --depth 1 --branch v1.7.2 htt
   && vendor/manim/.venv/bin/pip install --quiet --upgrade pip "setuptools<81" \
   && vendor/manim/.venv/bin/pip install --quiet -e vendor/manim
 RUN python3 -m venv vendor/kokoro/.venv \
-  && vendor/kokoro/.venv/bin/pip install --quiet kokoro-onnx==0.6.1 \
-  && curl -fsSL -o vendor/kokoro/kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx \
-  && curl -fsSL -o vendor/kokoro/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+  && vendor/kokoro/.venv/bin/pip install --quiet --retries 6 kokoro-onnx==0.6.1 \
+  && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx \
+  && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+COPY tsconfig.json ./
+COPY src ./src
+COPY modules ./modules
 RUN mkdir -p /jobs /voice-cache && chown node:node /jobs /voice-cache
 USER node
 CMD ["node", "node_modules/tsx/dist/cli.mjs", "src/server/worker.ts"]

@@ -11,7 +11,9 @@ import { type IngestStats, ingestSource } from "./rag/ingest.js";
 import { formatBytes, formatDuration } from "./rag/progress.js";
 import { search } from "./rag/search.js";
 import { CyberlearnSource } from "./rag/sources/cyberlearn.js";
-import { GitHubSource, addCourseRepo, formatCourseRepos, readCourseRepos, removeCourseRepo } from "./rag/sources/github.js";
+import { type CourseRepos, LocalRepos, RemoteRepos, formatCourseRepos } from "./app/repos.js";
+import { GitHubSource, readCourseRepos } from "./rag/sources/github.js";
+import { RemoteClient } from "./remote/client.js";
 import { LocalSource } from "./rag/sources/local.js";
 import type { ColorMode } from "./render.js";
 import { scheduleCourses } from "./table.js";
@@ -24,8 +26,9 @@ const USAGE = `Usage:
   npm run course -- <course>       content of a Cyberlearn course as text (plannings, resources, activities);
                                    <course> is a timetable code (e.g. MAD), an id or part of the name
   npm run ingest -- [options]      index course documents in the local RAG database (npm run rag:start first)
-  npm run repos -- add <url> --course <code> [--branch <name>] [--exclude <folder>]…   index a GitHub repository, with your local git account
-  npm run repos -- list | remove <url>   indexed GitHub repositories
+  npm run repos -- add <url> --course <code> [--branch <name>] [--exclude <folder>]…   index a GitHub repository (with your git
+                       account, or on the server named by HEIG_REMOTE_URL with its token)
+  npm run repos -- list | remove <url> | update   indexed GitHub repositories; update fetches and indexes them now
   npm run gaps -- plan [--all]     study plan: modules, units, credits and status (current year, or all years)
   npm run gaps -- unit <CODE>      unit sheet (e.g. MAD); gaps -- module <CODE> for a module sheet (e.g. MAI1)
   npm run gaps -- grades           continuous assessment grades and transcript
@@ -105,10 +108,19 @@ async function main(): Promise<void> {
 
   if (command === "repos") {
     const [action, url] = positionals.slice(1);
-    if (action === "add" && url && values.course?.[0]) console.log(await addCourseRepo(url, values.course[0], values.branch, values.exclude ?? []));
-    else if (action === "remove" && url) console.log(await removeCourseRepo(url));
-    else if (!action || action === "list") console.log(formatCourseRepos(await readCourseRepos()));
-    else throw new Error("Usage: npm run repos -- add <url> --course <CODE> [--branch <name>] [--exclude <folder>]… | list | remove <url>");
+    // With HEIG_REMOTE_URL, the repositories are the server's: it fetches and indexes them itself.
+    const remote = await RemoteClient.fromEnv();
+    const repos: CourseRepos = remote
+      ? new RemoteRepos(remote)
+      : new LocalRepos(async () => {
+          await runIngest("github", [], false, false, values.debug);
+          return "";
+        });
+    if (action === "add" && url && values.course?.[0]) console.log(await repos.add(url, values.course[0], values.branch, values.exclude ?? []));
+    else if (action === "remove" && url) console.log(await repos.remove(url));
+    else if (action === "update") console.log(await repos.update());
+    else if (!action || action === "list") console.log(formatCourseRepos(await repos.list()));
+    else throw new Error("Usage: npm run repos -- add <url> --course <CODE> [--branch <name>] [--exclude <folder>]… | list | remove <url> | update");
     return;
   }
 
@@ -267,7 +279,7 @@ function compose(...args: string[]): void {
 
 function summary(name: string, s: IngestStats): string {
   const work = s.bytes > 0 ? `, ${formatBytes(s.bytes)} processed in ${formatDuration(s.ms)} (${formatBytes(s.bytes / Math.max(s.ms / 60_000, 1 / 60))}/min)` : "";
-  return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed${work}`;
+  return `${name}: ${s.listed} listed, ${s.unchanged} unchanged, ${s.indexed} indexed (${s.chunks} chunks), ${s.linked} linked, ${s.removed} removed, ${s.failed} failed${s.skipped > 0 ? `, ${s.skipped} left for later` : ""}${work}`;
 }
 
 main().catch((error: unknown) => {

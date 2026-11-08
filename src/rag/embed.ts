@@ -29,3 +29,13 @@ export async function embed(texts: string[]): Promise<number[][]> {
   }
   return vectors;
 }
+
+/** Whether the embedding service answers, and whether it holds the model. */
+export async function embedderStatus(): Promise<{ up: boolean; model: boolean }> {
+  try {
+    const { models } = (await (await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) })).json()) as { models: { name: string }[] };
+    return { up: true, model: models.some((m) => m.name.split(":")[0] === EMBEDDING_MODEL) };
+  } catch {
+    return { up: false, model: false };
+  }
+}

@@ -5,3 +5,5 @@ data/
 **/node_modules
 vendor/
 .git/
+web/node_modules
+web/dist

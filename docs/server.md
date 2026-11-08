@@ -56,7 +56,20 @@ With a reverse proxy elsewhere on your network (which already holds the certific
 network instead: `echo HEIG_BIND=0.0.0.0 > rag/.env`, then `npm run server:start` again, and point the proxy to
 `http://<machine>:8766`, forwarding the `Host` header unchanged (the server refuses other host names).
 
+## The web application
+
+The same address serves a web application ([app.md](app.md)): log in with the account of `.env` to see your
+calendar (GAPS lessons, Cyberlearn deadlines, exams, with your own changes), grades, study plan, courses and documents,
+the generated library, your flashcards, the corrections of your photographed work, your learning profile, and a status
+page (services, edu-ID session with a reconnect button for the two-step code, syncs, ingestion, last requests). It
+works on a phone as on a wide screen. The server fetches GAPS and Cyberlearn every `HEIG_SYNC_MINUTES` (60).
+
 ## Connect a client
+
+A computer with its own HEIG-Kit installation uses the server for its knowledge base, calendar, flashcards, corrections
+and library with `HEIG_REMOTE_URL=https://heig.example.org` in its `.env` and `npm run remote -- login`
+(`npm run setup -- remote`): nothing to index on the computer, and `npm run library -- push|pull` syncs the generated
+documents and videos. Any MCP client:
 
 ```sh
 curl -s https://heig.example.org/auth/login -H 'Content-Type: application/json' \
@@ -66,8 +79,13 @@ curl -s https://heig.example.org/auth/login -H 'Content-Type: application/json' 
 claude mcp add --transport http heig-kit https://heig.example.org/mcp --header "Authorization: Bearer <access_token>"
 ```
 
-The token lasts 90 days (`HEIG_JWT_DAYS`); log in again and update the client afterwards. This is a bearer token, so
-clients that only support OAuth, such as web connectors, cannot use this server.
+The token lasts 90 days (`HEIG_JWT_DAYS`); log in again and update the client afterwards.
+
+Clients that only speak OAuth, such as claude.ai connectors and the Claude phone app, connect through the server's own
+OAuth 2.1 authorization server (`src/server/oauth.ts`): on claude.ai, Settings → Connectors → Add custom connector
+with `https://heig.example.org/mcp`; Claude registers itself, a login page of the server asks for the account of
+`.env`, and the connector then appears in the phone app too. Access tokens of connectors last 7 days and are renewed
+with a refresh token (90 days); changing `HEIG_JWT_VERSION` revokes everything.
 
 ## Endpoints
 
@@ -76,12 +94,19 @@ clients that only support OAuth, such as web connectors, cannot use this server.
 | `GET /health` | No authentication; used by Docker |
 | `POST /auth/login` | `{"username", "password"}`, gives the access token |
 | `/mcp` | MCP over Streamable HTTP, `Authorization: Bearer <token>` |
+| `/.well-known/oauth-*`, `/oauth/register`, `/oauth/authorize`, `/oauth/token` | OAuth 2.1 (metadata, dynamic registration, login page with PKCE, tokens) for connectors |
 | `GET /files?token=…` | Signed link given by `get_job` or `get_download_link` |
+| `/api/*` | The web application's API ([app.md](app.md)): session cookie (`POST /api/auth/login`) or `Authorization: Bearer <token>` |
+| `/` and every other path | The web application |
 
 ## What differs from a local installation
 
 - `render_document` and `render_animation` return a job id, followed with `get_job`; results are download links.
 - `open_generated` is replaced by `get_download_link`.
-- Repository tools are absent: use `npm run repos` and `npm run ingest` on the machine (`git` must be able to read them).
+- The GitHub repositories of courses (`add_course_repo`, `update_course_repos`, `npm run repos` from a computer with
+  `HEIG_REMOTE_URL`, the GitHub row of the status page) are fetched and indexed by the server itself, every sync and on
+  demand, with the token `HEIG_GITHUB_TOKEN` of `.env` (its container has no git account). Their PDFs and DOCX wait for
+  the extraction service, which the daily `npm run ingest` on the machine starts; code, Markdown and text are indexed at
+  once.
 - A PDF embedding a video shows its image, but its link points inside the worker: send the video link separately.
 - Skills of the Claude Code plugin call the local command line: on another computer, use the MCP tools.

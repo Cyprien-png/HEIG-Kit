@@ -29,6 +29,9 @@ matches, best matches first, e.g. `ordre total hasse`), and in the same turn as 
    asked; several formats can be combined. The output files are written next to the Markdown file.
 4. Tell the user where the files are (the command prints their paths) and that the Markdown source is next to them
    (editable, and also rendered by Obsidian, VS Code or GitHub).
+5. Tag it in the library so the web app files it by course and type: `npm --prefix <root> run -s library -- tag
+   <file.md> --course <CODE> --tags "<type>,<topic>"` (or the `tag_library_item` MCP tool), one type among
+   `explication`, `révision`, `exercices`, `corrigé`, `te blanc`, and short topics in French (« relations d'ordre »).
 
 ## Writing the Markdown
 

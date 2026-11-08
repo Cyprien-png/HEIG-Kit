@@ -14,17 +14,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
-import { openDb } from "../rag/db.js";
-import { Auth } from "../server/auth.js";
+import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
+import { captureUrl } from "../app/corrections.js";
+import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
+import { type CourseRepos, RemoteRepos } from "../app/repos.js";
+import { migrate, openDb } from "../rag/db.js";
+import { RemoteClient } from "../remote/client.js";
+import { createApp } from "../server/app.js";
 import { loadServerConfig } from "../server/config.js";
 import { createRemoteServer } from "../server/http.js";
 import { JobQueue } from "../server/jobs.js";
 import { serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
+import { registerLibraryTools } from "./tools/library.js";
 import { registerOutputTools } from "./tools/output.js";
 import { registerRemoteOutputTools } from "./tools/remote.js";
-import { registerRepoTools } from "./tools/repos.js";
+import { localRepos, registerRepoTools } from "./tools/repos.js";
+import { registerQuizTools } from "./tools/quiz.js";
+import { registerStudyPrompts, registerStudyTools } from "./tools/study.js";
 
 // With stdio, stdout carries the protocol: everything the services log goes to stderr.
 console.log = console.error;
@@ -37,27 +45,48 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - As a teacher, answer directly and completely, grounded in the course material (search_course_material, get_exercise,
   get_document; course material is mostly in French), following the course's notation, with concrete examples, and cite
   the documents (title, course, pages, link). Say when something does not come from the course.
-- Some courses keep their material on GitHub: add_course_repo indexes a repository with the user's local git account,
-  update_course_repos refreshes it; it is then searched like any other course material.
+- Some courses keep their material on GitHub: add_course_repo indexes a repository (read with git: the user's account
+  on this computer, the server's token on a remote server), update_course_repos refreshes it; it is then searched like
+  any other course material.
+- Every text shown on the web app (cards, quiz statements, corrections) is Markdown: LaTeX between $…$, GFM tables,
+  \`\`\`mermaid diagrams and charts, \`\`\`svg drawings. Use them for anything visual: a Hasse diagram, an automaton, a graph,
+  a table of values, a sketch.
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
-  ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).`;
+  ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).
+- The library (list_library) classifies every generated document and video by course and tags: a type among
+  explication, révision, exercices, corrigé, te blanc, vidéo, and topics such as « calcul matriciel ». Items not tagged
+  yet are guessed from their name: when the user asks to tag the library, set them with tag_library_item.
+- Mock exams (TE blancs) are library documents tagged « te blanc », a statement and its solutions (names ending in
+  -enonce and -corrige): list_mock_exams says which were done and with what grade; when correcting one, pass its id as
+  "exam" to create_correction so that the Tests blancs page counts it.
+- Past written tests of former years (anciens TE, scans filled by students) are filed by branch and year: list_past_exams,
+  get_past_exam (page images to transcribe the printed statement only), save_past_exam_text (énoncé, corrigé); correcting
+  the student's own attempt of one goes through create_correction with exam set to exam:<id>.
+- The calendar (get_calendar, set_calendar_event) merges GAPS, Cyberlearn and manual events; flashcards (create_deck) and
+  corrections of photographed work (create_correction, get_correction, submit_correction, prompt correct_exercises) feed
+  the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;
 
-const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace(/- Some courses keep[\s\S]*?course material\.\n/, "").replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
+const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
 - This server is remote: render_document and render_animation queue a job, followed with get_job, which gives download
   links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
 
 /** How the server exposes files and rendering: on this computer by default. */
 let registerOutputs: (server: McpServer) => void = registerOutputTools;
 let instructions = INSTRUCTIONS;
+/** Where the GitHub repositories of courses are listed and indexed: here, on the remote server, or the server itself. */
+let repos: { store: CourseRepos; where: "this computer" | "the server" } = { store: localRepos(), where: "this computer" };
 
 async function buildServer(): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
   registerCampusTools(server);
-  await registerKnowledgeTools(server, db);
+  await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
-  // Not on a remote server: repositories are read with the git account of the computer, and indexed from it.
-  if (registerOutputs === registerOutputTools) registerRepoTools(server);
+  registerStudyTools(server, study);
+  registerQuizTools(server, study);
+  registerLibraryTools(server, study);
+  registerStudyPrompts(server);
+  registerRepoTools(server, repos.store, repos.where);
 
   server.registerPrompt(
     "teacher",
@@ -109,17 +138,33 @@ async function buildServer(): Promise<McpServer> {
 }
 
 const db = openDb();
+// A laptop with HEIG_REMOTE_URL searches the courses indexed on the server instead of a local database.
+const remote = await RemoteClient.fromEnv().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  return undefined;
+});
+let knowledge: KnowledgeBase = remote ? new RemoteKnowledge(remote) : new LocalKnowledge(db);
+let study: HeigApi = remote ? new RemoteApi(remote) : new LocalApi(db);
+if (remote) repos = { store: new RemoteRepos(remote), where: "the server" };
+// The study tables, for a stand-alone computer; a database that is down only disables the knowledge and study tools.
+if (!remote) await migrate(db).catch(() => undefined);
 const { values } = parseArgs({ options: { http: { type: "boolean", default: false }, server: { type: "boolean", default: false }, port: { type: "string", default: "8766" } } });
 
 if (values.server) {
   const config = loadServerConfig();
-  const auth = new Auth(config);
   const queue = config.jobsDir ? new JobQueue(config.jobsDir) : undefined;
   if (queue) setInterval(() => queue.collect(), 5000).unref();
   else console.error("HEIG_JOBS_DIR is not set: rendering is disabled, since it must not run next to the secrets.");
+  const applied = await migrate(db);
+  if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
+  const app = createApp(config, db, queue);
+  knowledge = new LocalKnowledge(db);
+  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
+  if (config.syncMinutes > 0) app.syncer.start();
+  repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;
-  registerOutputs = (server) => registerRemoteOutputTools(server, auth, config.publicUrl, queue, config.linkMinutes);
-  createRemoteServer(config, buildServer, auth).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
+  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
+  createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
 } else if (values.http) {
   const tokenFile = path.join(DATA_DIR, "mcp-token");
   if (!existsSync(tokenFile)) {

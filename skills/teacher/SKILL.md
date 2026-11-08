@@ -68,8 +68,12 @@ unreachable or empty, say so and suggest `npm --prefix <root> run rag:start` the
 2. Cover the chapters taught up to the exam: use the course planning (`heig:courses`) and the exam date when known.
 3. Produce the statement (header with course, duration, allowed material, total points; numbered exercises with points),
    then a separate **Corrigé et barème** with full solutions and how the points are awarded.
-4. Offer to export it as PDF (statement and solutions in separate files) with the `heig:documents` skill. Never copy
-   past exams verbatim: write new exercises in their style.
+4. Export it as PDF with the `heig:documents` skill, statement and solutions in **separate files whose names differ only
+   by the ending** (`MAD-TE-blanc-ch1-3-enonce.md` and `MAD-TE-blanc-ch1-3-corrige.md`), and tag both with the type
+   `te blanc` (plus `corrigé` on the solutions): the web app's **Tests blancs** page then pairs them and tracks whether
+   the user did the exam and with what grade. Check `npm --prefix <root> run -s library -- exams --course <CODE>`
+   (MCP: `list_mock_exams`) first, to see which exams exist and were done, and vary the exercises. Never copy past
+   exams verbatim: write new exercises in their style.
 
 ## Documents and animations
 

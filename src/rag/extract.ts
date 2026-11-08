@@ -23,6 +23,8 @@ export const PAGE_BREAK = "<!-- page break -->";
 
 /** File types docling converts; other files (archives, videos, captures…) are not indexed. */
 export const EXTRACTABLE = /\.(pdf|docx|pptx|xlsx|html?|md|txt)$/i;
+/** Whether a file goes through docling (Markdown and text are taken as they are). */
+export const needsExtractor = (filename: string): boolean => EXTRACTABLE.test(filename) && !/\.(md|txt)$/i.test(filename);
 
 export function extractedMarkdownPath(contentHash: string): string {
   return path.join(EXTRACTED_DIR, `${contentHash}.v${EXTRACTOR_VERSION}.md`);
@@ -63,7 +65,7 @@ export async function extractMarkdown(bytes: Buffer, filename: string, contentHa
 
 export async function isDoclingAvailable(): Promise<boolean> {
   try {
-    return (await fetch(`${DOCLING_URL}/health`)).ok;
+    return (await fetch(`${DOCLING_URL}/health`, { signal: AbortSignal.timeout(3000) })).ok;
   } catch {
     return false;
   }

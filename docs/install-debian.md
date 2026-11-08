@@ -81,6 +81,10 @@ HEIG_PUBLIC_URL=https://heig.example.org
 HEIG_TRUST_PROXY=1
 ```
 
+For courses published on GitHub (`npm run repos`, the `add_course_repo` tool), also set `HEIG_GITHUB_TOKEN`: a
+fine-grained token of the GitHub account that can read these repositories, with read-only access to their contents.
+The server's container fetches them with it; `git pull` of this folder keeps using the machine's own git account.
+
 ## 6. Check that GAPS and edu-ID accept the machine
 
 Before anything else: some hosting providers' addresses are refused, and then nothing else works.
@@ -101,6 +105,9 @@ npm run server:start    # downloads the server and render images, then starts th
 curl -s http://127.0.0.1:8766/health    # ok
 ```
 
+The `server` image also holds the web application ([app.md](app.md)); once HTTPS is set up (next step), open
+`https://heig.example.org` and log in with `HEIG_AUTH_USERNAME` / `HEIG_AUTH_PASSWORD`.
+
 ## 8. HTTPS
 
 **You already have a reverse proxy** (on another machine, with the certificate): publish the server on the network and
@@ -110,6 +117,12 @@ point the proxy to it, keeping the `Host` header:
 echo HEIG_BIND=0.0.0.0 > rag/.env
 npm run server:start
 ```
+
+`rag/.env` also takes `HEIG_LIBRARY_DIR=/path/on/this/machine` to keep the library (generated documents and videos,
+`npm run library -- push` from your computer) in a folder of the machine instead of the `outputs` Docker volume: an
+absolute path, created beforehand and owned by uid 1000 (`sudo chown -R 1000:1000 /path/on/this/machine`). It is
+mounted at the same path in the container, so `HEIG_DOCUMENTS_DIR` and `HEIG_VIDEOS_DIR` of `.env` may name folders
+inside it; any other path in those two settings does not exist in the container (`ENOENT … mkdir`).
 
 **Otherwise, Caddy on this machine** gets and renews the certificate by itself. From its repository:
 
@@ -156,7 +169,9 @@ Every push to `main` publishes new images (`.github/workflows/server-images.yml`
 cd ~/HEIG-Kit && npm run server:update
 ```
 
-It pulls the repository, reinstalls the dependencies, downloads the new images and restarts the containers. A video
+It pulls the repository, reinstalls the dependencies, downloads the new images, restarts the containers and deletes
+the images left without a name by the update (`docker image prune -f`: the previous versions, which would otherwise pile
+up in `/var/lib/containerd`; volumes and images in use are kept). A video
 being rendered at that moment is lost: render it again.
 
 Other versions, with `HEIG_IMAGE_TAG` in the command (the repository stays on its branch: switch it with `git checkout`
@@ -184,10 +199,13 @@ HEIG_IMAGE_TAG=sha-1a2b3c4 npm run server:update
 | `denied` when downloading the images | The GHCR packages are private: make them public in GitHub (Packages, Package settings), or `docker login ghcr.io` with a token allowed to `read:packages` |
 | The server does not start | Its log names the missing or weak setting of `.env` |
 | `EACCES` on `data/` or `.cache/` | They are not owned by uid 1000: `sudo chown -R 1000:1000 data .cache` |
+| `ENOENT … mkdir` when pushing the library | `HEIG_DOCUMENTS_DIR` / `HEIG_VIDEOS_DIR` of `.env` point outside the container: set `HEIG_LIBRARY_DIR` in `rag/.env` (section 8) or remove them |
 | 421 `unknown host` | `HEIG_PUBLIC_URL` does not match the address used by the client |
+| GitHub row of the status page: `could not fetch` | `HEIG_GITHUB_TOKEN` is missing, expired or not allowed to read that repository (private ones need it) |
+| GitHub row: `en attente de l'extraction` | PDFs of the repositories wait for docling, started by `npm run ingest` on the machine (or `docker compose -f rag/compose.yml --profile ingest up -d docling`) |
 
 ## Backups
 
 `.env`, `data/` (course documents, tokens, job records) and `.cache/` (login session) in the repository folder, and the
-Docker volumes `heig-kit_outputs` (generated documents and videos) and `heig-kit_db` (the index, which `npm run ingest`
+Docker volumes `heig-kit_outputs` (generated documents and videos, unless `HEIG_LIBRARY_DIR` names a folder) and `heig-kit_db` (the index, which `npm run ingest`
 can rebuild).

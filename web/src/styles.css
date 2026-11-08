@@ -1,0 +1,275 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* Design tokens: a warm neutral scale with the red of the logo as accent, defined for light and dark, exposed to Tailwind below. */
+:root {
+  --canvas: #f5f4f1;
+  --surface: #ffffff;
+  --surface-2: #eceae6;
+  --line: #dcd8d2;
+  --line-strong: #bdb6ad;
+  --ink: #1c1a17;
+  --ink-2: #57534c;
+  --ink-3: #8f887f;
+  --accent: #d90115;
+  --accent-soft: #fde3e5;
+  --accent-ink: #ffffff;
+  --ok: #15803d;
+  --ok-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #9f1239;
+  --bad-soft: #ffe4e6;
+  --info: #1d4ed8;
+  --info-soft: #dbe6ff;
+  --shadow: 0 1px 2px rgb(28 26 23 / 0.06), 0 4px 16px rgb(28 26 23 / 0.05);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #161412;
+    --surface: #1e1b18;
+    --surface-2: #28241f;
+    --line: #353028;
+    --line-strong: #4d463d;
+    --ink: #ede9e3;
+    --ink-2: #b8b0a6;
+    --ink-3: #7d756b;
+    --accent: #ff5a66;
+    --accent-soft: #4a1218;
+    --accent-ink: #1a0608;
+    --ok: #4ade80;
+    --ok-soft: #14532d;
+    --warn: #fbbf24;
+    --warn-soft: #78350f;
+    --bad: #fb7185;
+    --bad-soft: #701a2b;
+    --info: #7ea4ff;
+    --info-soft: #1e3a8a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --canvas: #161412;
+  --surface: #1e1b18;
+  --surface-2: #28241f;
+  --line: #353028;
+  --line-strong: #4d463d;
+  --ink: #ede9e3;
+  --ink-2: #b8b0a6;
+  --ink-3: #7d756b;
+  --accent: #ff5a66;
+  --accent-soft: #4a1218;
+  --accent-ink: #1a0608;
+  --ok: #4ade80;
+  --ok-soft: #14532d;
+  --warn: #fbbf24;
+  --warn-soft: #78350f;
+  --bad: #fb7185;
+  --bad-soft: #701a2b;
+  --info: #7ea4ff;
+  --info-soft: #1e3a8a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 20px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --shadow-card: var(--shadow);
+}
+
+/* The document never scrolls nor bounces, and the app scrolls inside it (the main area of the shell, or #root for the
+   pages outside it), so the header and the bottom bar stay put on phones. Nothing here is position: fixed: on iOS a
+   fixed element is clamped to the layout viewport, which in a home-screen app with a translucent status bar is the
+   screen minus the status bar, laid out from the top, so a fixed bottom bar always floats a status bar's height above
+   the bottom. In flow, the body takes the dynamic viewport height (the whole screen in a home-screen app, the visible
+   area in Safari) and is painted wherever it is; the root cannot be panned by touch, so nothing rubber-bands. */
+html {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  /* Read by lib/viewport.ts (env() cannot be read from a script directly). */
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+body {
+  position: relative; /* overlays (modals, drawers) are absolute to it */
+  height: 100vh;
+  height: 100dvh;
+  /* Set by lib/viewport.ts on iPhone home-screen apps, whose viewport is a status bar short of the screen. */
+  height: var(--app-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
+  @apply bg-canvas text-ink font-sans antialiased;
+  font-feature-settings: "cv11", "ss01", "tnum";
+  -webkit-tap-highlight-color: transparent;
+}
+#root {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior: contain;
+}
+
+/* A page that fills the scrolling area of the shell, so that it never scrolls itself. */
+.page-fill {
+  height: 100%;
+  min-height: 22rem;
+}
+
+/* Prose: Markdown of cards, corrections, documents (a layer, so that utilities such as text-xl still win). */
+@layer components {
+  .prose-kit {
+    @apply text-[15px] leading-relaxed;
+  }
+}
+.prose-kit > * + * {
+  margin-top: 0.6em;
+}
+.prose-kit h1,
+.prose-kit h2,
+.prose-kit h3 {
+  @apply font-semibold text-ink;
+}
+.prose-kit h1 {
+  @apply text-xl mt-4;
+}
+.prose-kit h2 {
+  @apply text-lg mt-4;
+}
+.prose-kit h3 {
+  @apply text-base mt-3;
+}
+.prose-kit ul {
+  @apply list-disc pl-5;
+}
+.prose-kit ol {
+  @apply list-decimal pl-5;
+}
+.prose-kit code {
+  @apply font-mono text-[0.9em] bg-surface-2 rounded px-1 py-0.5;
+}
+.prose-kit pre {
+  @apply font-mono text-[13px] bg-surface-2 rounded-lg p-3 overflow-x-auto;
+}
+.prose-kit pre code {
+  @apply bg-transparent p-0;
+}
+.prose-kit table {
+  @apply text-sm border-collapse w-full;
+}
+.prose-kit th,
+.prose-kit td {
+  @apply border border-line px-2 py-1 text-left align-top;
+}
+.prose-kit th {
+  @apply bg-surface-2 font-medium;
+}
+.prose-kit blockquote {
+  @apply border-l-2 border-line-strong pl-3 text-ink-2;
+}
+.prose-kit a {
+  @apply text-accent underline underline-offset-2;
+}
+.prose-kit .katex-display {
+  @apply overflow-x-auto overflow-y-hidden py-1;
+}
+.prose-kit img {
+  @apply max-w-full rounded;
+}
+.prose-kit svg {
+  @apply max-w-full h-auto;
+}
+/* A drawing (```svg): on paper, whatever the theme, so black strokes and currentColor both show. */
+.prose-kit figure.drawing {
+  @apply my-2 mx-auto w-fit max-w-full rounded-lg border border-line bg-white p-2 text-[#1c1a17] overflow-x-auto;
+}
+.prose-kit figure.drawing svg {
+  @apply block mx-auto;
+}
+/* Only a viewBox: no size of its own, so it takes the width of the text, within reason. */
+.prose-kit figure.drawing.fluid {
+  @apply w-full max-w-md;
+}
+.prose-kit figure.drawing.fluid svg {
+  @apply w-full h-auto;
+}
+/* A diagram or chart (```mermaid), drawn in the theme's colours once mounted. */
+.prose-kit figure.mermaid {
+  @apply my-2 overflow-x-auto;
+}
+.prose-kit figure.mermaid svg {
+  @apply mx-auto;
+}
+.prose-kit figure.mermaid-error .mermaid-message {
+  @apply text-xs text-bad mt-1;
+}
+/* Figures of an extracted course page, and the raw text of a formula the extraction could not read. */
+.prose-kit.doc-page img {
+  @apply block my-2 mx-auto max-h-[28rem] border border-line bg-white;
+}
+.prose-kit .formula {
+  @apply font-mono text-[0.92em] text-ink-2 bg-surface-2 rounded px-1.5 py-0.5 whitespace-pre-wrap;
+}
+
+/* Scrollbars that do not fight the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* The card flip of the study page. */
+.flip-scene {
+  perspective: 1600px;
+}
+.flip-card {
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.flip-card.is-flipped {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-card {
+    transition: none;
+  }
+}
+
+/* Safe areas on phones. */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
