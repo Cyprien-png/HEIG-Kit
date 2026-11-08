@@ -46,6 +46,8 @@ export interface Correction {
   notes?: string;
   /** The exam this work answers: a mock exam's statement (`document:<name>`, src/app/exams.ts) or a past exam (`exam:<id>`, src/app/pastexams.ts). */
   exam?: string;
+  /** Whether it counts in the profile (course grade, weaknesses, chapters); true unless the student leaves it out. */
+  affectsProfile: boolean;
   result?: CorrectionResult;
   createdAt: Date;
   updatedAt: Date;
@@ -86,6 +88,7 @@ function row(r: Record<string, unknown>, photos: PhotoMeta[] = []): Correction {
     state: r.state as CorrectionState,
     notes: (r.notes as string | null) ?? undefined,
     exam: (r.exam as string | null) ?? undefined,
+    affectsProfile: r.affects_profile !== false,
     result: (r.result as CorrectionResult | null) ?? undefined,
     createdAt: r.created_at as Date,
     updatedAt: r.updated_at as Date,
@@ -110,6 +113,8 @@ export interface CorrectionInput {
   notes?: string;
   /** The exam being corrected: `document:<name>` (mock exam) or `exam:<id>` (past exam). */
   exam?: string;
+  /** Default true: set false for work that must not change the profile. */
+  affectsProfile?: boolean;
 }
 
 export interface CorrectionPatch {
@@ -118,6 +123,7 @@ export interface CorrectionPatch {
   topic?: string | null;
   notes?: string | null;
   exam?: string | null;
+  affectsProfile?: boolean;
 }
 
 const EXAM_KEY = /^(document:[^/\\]{1,200}|exam:[^\\]{1,300})$/;
@@ -132,7 +138,7 @@ export function checkExam(exam: string | null | undefined): string | null | unde
 
 export async function createCorrection(db: Db, input: CorrectionInput = {}): Promise<Correction> {
   const id = randomUUID();
-  await db.query("INSERT INTO corrections (id, title, course, topic, notes, exam) VALUES ($1, $2, $3, $4, $5, $6)", [id, input.title?.trim() || PENDING_TITLE, input.course ?? null, input.topic ?? null, input.notes ?? null, checkExam(input.exam) ?? null]);
+  await db.query("INSERT INTO corrections (id, title, course, topic, notes, exam, affects_profile) VALUES ($1, $2, $3, $4, $5, $6, $7)", [id, input.title?.trim() || PENDING_TITLE, input.course ?? null, input.topic ?? null, input.notes ?? null, checkExam(input.exam) ?? null, input.affectsProfile !== false]);
   return (await getCorrection(db, id))!;
 }
 
@@ -141,7 +147,7 @@ export async function listCorrections(db: Db, options: { course?: string; state?
     `SELECT c.*, coalesce(json_agg(json_build_object('id', p.id, 'position', p.position, 'contentType', p.content_type, 'bytes', p.bytes, 'createdAt', p.created_at) ORDER BY p.position) FILTER (WHERE p.id IS NOT NULL), '[]') AS photos
      FROM corrections c LEFT JOIN correction_photos p ON p.correction_id = c.id
      WHERE ($1::text IS NULL OR lower(c.course) = lower($1)) AND ($2::text IS NULL OR c.state = $2) AND ($4::text IS NULL OR c.exam = $4)
-     GROUP BY c.id ORDER BY c.created_at DESC LIMIT $3`,
+     GROUP BY c.id ORDER BY c.updated_at DESC, c.created_at DESC LIMIT $3`,
     [options.course ?? null, options.state ?? null, options.limit ?? 100, options.exam ?? null],
   );
   return rows.map((r) => row(r, (r.photos as PhotoMeta[]).map((p) => ({ ...p, id: Number(p.id), createdAt: new Date(p.createdAt) }))));
@@ -161,8 +167,9 @@ export async function updateCorrection(db: Db, id: string, patch: CorrectionPatc
        topic = CASE WHEN $5::boolean THEN $6 ELSE topic END,
        notes = CASE WHEN $7::boolean THEN $8 ELSE notes END,
        exam = CASE WHEN $9::boolean THEN $10 ELSE exam END,
+       affects_profile = coalesce($11::boolean, affects_profile),
        updated_at = now() WHERE id = $1`,
-    [id, patch.title ?? null, patch.course !== undefined, patch.course ?? null, patch.topic !== undefined, patch.topic ?? null, patch.notes !== undefined, patch.notes ?? null, exam !== undefined, exam ?? null],
+    [id, patch.title ?? null, patch.course !== undefined, patch.course ?? null, patch.topic !== undefined, patch.topic ?? null, patch.notes !== undefined, patch.notes ?? null, exam !== undefined, exam ?? null, patch.affectsProfile ?? null],
   );
   return getCorrection(db, id);
 }
@@ -308,7 +315,7 @@ export async function verdictStats(db: Db, course?: string): Promise<{ course: s
             count(*) FILTER (WHERE e->>'verdict' = 'wrong')::int AS wrong,
             count(*) FILTER (WHERE e->>'verdict' = 'missing')::int AS missing
      FROM corrections c, jsonb_array_elements(c.result->'exercises') e
-     WHERE c.state = 'corrected' AND ($1::text IS NULL OR lower(c.course) = lower($1))
+     WHERE c.state = 'corrected' AND c.affects_profile AND ($1::text IS NULL OR lower(c.course) = lower($1))
      GROUP BY c.course ORDER BY c.course`,
     [course ?? null],
   );

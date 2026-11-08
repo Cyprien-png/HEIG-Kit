@@ -84,7 +84,7 @@ export async function listNotes(db: Db, options: { course?: string; kind?: NoteK
   const { rows } = await db.query(
     `SELECT * FROM profile_notes
      WHERE ($1::text IS NULL OR lower(course) = lower($1)) AND ($2::text IS NULL OR kind = $2)
-       AND ($3::text IS NULL OR lower(topic) = lower($3)) AND ($4::boolean OR resolved_at IS NULL)
+       AND ($3::text IS NULL OR lower(topic) = lower($3)) AND ($4::boolean OR resolved_at IS NULL) AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile)
      ORDER BY created_at DESC LIMIT $5`,
     [options.course ?? null, options.kind ?? null, options.topic ?? null, options.resolved ?? false, options.limit ?? 200],
   );
@@ -128,9 +128,9 @@ export async function searchNotes(db: Db, query: string, course?: string, limit 
   }
   const { rows } = await db.query(
     vector
-      ? `SELECT * FROM profile_notes WHERE resolved_at IS NULL AND ($2::text IS NULL OR lower(course) = lower($2)) AND embedding IS NOT NULL
+      ? `SELECT * FROM profile_notes WHERE resolved_at IS NULL AND ($2::text IS NULL OR lower(course) = lower($2)) AND embedding IS NOT NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile)
          ORDER BY embedding <=> $1::vector LIMIT $3`
-      : `SELECT * FROM profile_notes WHERE resolved_at IS NULL AND ($2::text IS NULL OR lower(course) = lower($2))
+      : `SELECT * FROM profile_notes WHERE resolved_at IS NULL AND ($2::text IS NULL OR lower(course) = lower($2)) AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile)
          AND (topic ILIKE '%' || $1 || '%' OR text ILIKE '%' || $1 || '%') ORDER BY created_at DESC LIMIT $3`,
     [vector ?? query, course ?? null, limit],
   );
@@ -473,7 +473,7 @@ async function topics(db: Db, kind: NoteKind, course?: string): Promise<TopicSum
   const { rows } = await db.query(
     `SELECT course, topic, count(*)::int AS count, max(severity)::int AS severity, max(created_at) AS last_at,
             (array_agg(text ORDER BY severity DESC, created_at DESC))[1:3] AS examples
-     FROM profile_notes WHERE kind = $1 AND resolved_at IS NULL AND ($2::text IS NULL OR lower(course) = lower($2))
+     FROM profile_notes WHERE kind = $1 AND resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile) AND ($2::text IS NULL OR lower(course) = lower($2))
      GROUP BY course, topic ORDER BY severity DESC, count DESC, last_at DESC`,
     [kind, course ?? null],
   );
@@ -520,7 +520,7 @@ export async function profileSummary(db: Db, course?: string): Promise<ProfileSu
     const existing = scored.get(key);
     scored.set(key, existing ? { ...existing, count: existing.count + t.count, score: existing.score + score, examples: [...existing.examples, ...t.examples].slice(0, 3) } : { ...t, score });
   }
-  const { rows } = await db.query("SELECT count(*)::int AS open FROM profile_notes WHERE resolved_at IS NULL AND ($1::text IS NULL OR lower(course) = lower($1))", [course ?? null]);
+  const { rows } = await db.query("SELECT count(*)::int AS open FROM profile_notes WHERE resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM corrections x WHERE x.id = profile_notes.correction_id AND NOT x.affects_profile) AND ($1::text IS NULL OR lower(course) = lower($1))", [course ?? null]);
   return { courses, toRevise: [...scored.values()].sort((a, b) => b.score - a.score).slice(0, 12), openNotes: rows[0].open };
 }
 

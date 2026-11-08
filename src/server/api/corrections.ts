@@ -13,6 +13,14 @@ function allowed(principal: Principal, id: string): void {
 
 const ANY = { allow: ["cookie", "bearer", "capture"] as Principal["kind"][] };
 
+/** An optional boolean of a JSON body. */
+function flag(body: Record<string, unknown>, name: string): boolean | undefined {
+  const value = body[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new HttpError(400, `${name} must be true or false`);
+  return value;
+}
+
 export function registerCorrectionRoutes(router: Router, app: App): void {
   router.get("/api/corrections", async ({ url }) => {
     const state = url.searchParams.get("state");
@@ -31,6 +39,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
       topic: stringField(body, "topic", { optional: true, max: 200 }),
       notes: stringField(body, "notes", { optional: true, max: 4000 }),
       exam: stringField(body, "exam", { optional: true, max: 220 }),
+      affectsProfile: flag(body, "affectsProfile"),
     });
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
@@ -60,7 +69,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     const nullable = (name: string, max: number) => (body[name] === null ? null : stringField(body, name, { optional: true, max }));
     let correction;
     try {
-      correction = await updateCorrection(app.db, params.id, { title: stringField(body, "title", { optional: true, max: 200 }), course: nullable("course", 40), topic: nullable("topic", 200), notes: nullable("notes", 4000), exam: nullable("exam", 220) });
+      correction = await updateCorrection(app.db, params.id, { title: stringField(body, "title", { optional: true, max: 200 }), course: nullable("course", 40), topic: nullable("topic", 200), notes: nullable("notes", 4000), exam: nullable("exam", 220), affectsProfile: flag(body, "affectsProfile") });
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }

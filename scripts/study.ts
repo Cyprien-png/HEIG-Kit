@@ -13,7 +13,7 @@
  *   npm run cards -- [list [--course MAD]] | show <deck id> | create "Title" --course MAD --file cards.json
  *   npm run cards -- add <deck id> --file cards.json | study [<deck id>] | delete-deck <id> | delete-card <id>
  *   npm run correction -- new ["Série 3 MAD"] [--course MAD] [--topic …] [--notes …] [--exam document:<name>]   creates it and prints the QR code at once
- *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …] [--exam …]   names it while the student photographs (--exam: the TE blanc it answers)
+ *   npm run correction -- set <id> --title … [--course …] [--topic …] [--notes …] [--exam …] [--no-profile|--profile]   names it while the student photographs (--exam: the TE blanc it answers; --no-profile: leaves it out of the profile, also accepted by `new`)
  *   npm run correction -- list | show <id> [--photos <dir>] | link <id> | submit <id> --file result.json | delete <id>
  *   npm run profile -- [--course MAD] [--json] | notes [--course …] [--kind …] [--query …] | add --file notes.json | resolve <id>
  *                      | set <id> --chapter "2. Relations" [--section "Ordre"] [--topic …]   refiles or renames a note
@@ -63,6 +63,8 @@ const { values, positionals } = parseArgs({
     section: { type: "string" },
     shuffle: { type: "boolean", default: false },
     exam: { type: "string" },
+    "no-profile": { type: "boolean" },
+    profile: { type: "boolean" },
   },
 });
 
@@ -246,7 +248,7 @@ async function correction(api: HeigApi): Promise<void> {
   switch (action) {
     case "new": {
       // No title needed: the QR code comes out at once, `set` names the correction while the student photographs.
-      const c = await api.createCorrection({ title: rest[0] ?? values.title, course: values.course, topic: values.topic, notes: values.notes, exam: values.exam });
+      const c = await api.createCorrection({ title: rest[0] ?? values.title, course: values.course, topic: values.topic, notes: values.notes, exam: values.exam, affectsProfile: values["no-profile"] ? false : undefined });
       if (values.json) return out(c);
       console.log(`Correction ${c.id} created. Scan this code with your phone to photograph your work:\n`);
       console.log(await QRCode.toString(c.captureUrl, { type: "terminal", small: true }));
@@ -256,7 +258,7 @@ async function correction(api: HeigApi): Promise<void> {
     }
     case "set": {
       if (!rest[0] || (values.title === undefined && values.course === undefined && values.topic === undefined && values.notes === undefined && values.exam === undefined)) throw new Error("Usage: npm run correction -- set <id> [--title …] [--course CODE] [--topic …] [--notes …] [--exam document:<name>|none]");
-      const c = await api.updateCorrection(rest[0], { title: values.title, course: values.course, topic: values.topic, notes: values.notes, exam: values.exam === "none" ? null : values.exam });
+      const c = await api.updateCorrection(rest[0], { title: values.title, course: values.course, topic: values.topic, notes: values.notes, exam: values.exam === "none" ? null : values.exam, affectsProfile: values["no-profile"] ? false : values.profile ? true : undefined });
       return out(values.json ? c : `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course})` : ""}${c.exam ? ` · ${c.exam}` : ""}`);
     }
     case "link": {

@@ -59,7 +59,7 @@ const cardSchema = z.object({
 const exerciseSchema = z.object({
   number: z.string().describe("As numbered on the sheet, e.g. '2' or '3b'"),
   title: z.string().optional().describe("Plain text, no Markdown"),
-  statement: z.string().optional().describe(`The statement, when known from the course material (${RICH_MARKDOWN})`),
+  statement: z.string().optional().describe(`The statement of the exercise, always given: the printed statement transcribed from the sheet or the photos, completed from the course material (${RICH_MARKDOWN}); the web app shows it above the answer so that the whole context is in one place`),
   answer: z.string().describe(`The student's answer transcribed as written, mistakes included; their tables as Markdown tables, their drawings, graphs and diagrams redrawn faithfully as \`\`\`svg or \`\`\`mermaid, mistakes included (${RICH_MARKDOWN})`),
   verdict: z.enum(VERDICTS),
   points: z.object({ obtained: z.number(), total: z.number() }).optional(),
@@ -314,11 +314,12 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         topic: z.string().optional(),
         notes: z.string().optional().describe("What the student should photograph, shown on the capture page"),
         exam: z.string().optional().describe("When the work is a mock exam of the library (list_mock_exams): the statement's id, document:<name>, so that the Tests blancs page shows it as done with its grade"),
+        affects_profile: z.boolean().optional().describe("Default true: the correction counts in the profile (course grade, weaknesses, chapters). false when the student asks that this work does not count; then do not call add_profile_notes for it"),
       },
     },
     async (a) => {
       try {
-        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam });
+        const c = await api.createCorrection({ title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam, affectsProfile: a.affects_profile });
         const qr = await QRCode.toString(c.captureUrl, { type: "terminal", small: true });
         const png = (await QRCode.toDataURL(c.captureUrl, { margin: 1, width: 360 })).split(",")[1];
         const text =
@@ -362,12 +363,13 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
         topic: z.string().nullable().optional(),
         notes: z.string().nullable().optional().describe("What the student should photograph, shown on the capture page"),
         exam: z.string().nullable().optional().describe("The mock exam this work answers (list_mock_exams id, document:<name>); null unlinks it"),
+        affects_profile: z.boolean().optional().describe("true: the correction counts in the profile (the default); false: it is left out of the course grade, weaknesses and chapters (its notes are kept and count again if set back to true)"),
       },
     },
     async (a) =>
       respond(async () => {
-        const c = await api.updateCorrection(a.id, { title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam });
-        return `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course}${c.topic ? `, ${c.topic}` : ""})` : ""}, state ${c.state}${c.exam ? `, exam ${c.exam}` : ""}.`;
+        const c = await api.updateCorrection(a.id, { title: a.title, course: a.course, topic: a.topic, notes: a.notes, exam: a.exam, affectsProfile: a.affects_profile });
+        return `Correction ${c.id}: ${c.title}${c.course ? ` (${c.course}${c.topic ? `, ${c.topic}` : ""})` : ""}, state ${c.state}${c.exam ? `, exam ${c.exam}` : ""}${c.affectsProfile ? "" : ", NOT counted in the profile"}.`;
       }),
   );
 
@@ -391,7 +393,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       try {
         const c = await api.correction(a.id);
         if (!c) return { content: [{ type: "text" as const, text: `No correction ${a.id}` }], isError: true };
-        const header = `Correction ${c.id}: ${c.title} (${c.course ?? "no course"}${c.topic ? `, ${c.topic}` : ""}), state ${c.state}, ${c.photos.length} photos${c.sentAt ? `, sent ${c.sentAt}` : ""}${c.exam ? `, mock exam ${c.exam}` : ""}.${c.notes ? `\nNotes: ${c.notes}` : ""}`;
+        const header = `Correction ${c.id}: ${c.title} (${c.course ?? "no course"}${c.topic ? `, ${c.topic}` : ""}), state ${c.state}, ${c.photos.length} photos${c.sentAt ? `, sent ${c.sentAt}` : ""}${c.exam ? `, mock exam ${c.exam}` : ""}${c.affectsProfile ? "" : ", NOT counted in the profile (do not add profile notes)"}.${c.notes ? `\nNotes: ${c.notes}` : ""}`;
         if (c.state === "capture") return { content: [{ type: "text" as const, text: `${header}\nThe student has not sent the photos yet: ask them to open the capture link and press Envoyer, then call again.` }] };
         const content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] = [{ type: "text", text: header }];
         if (a.with_photos !== false) {
@@ -603,7 +605,7 @@ export const CORRECTION_METHOD = `Corrige mon travail photographié (correction 
 
 1. Lis la correction avec get_correction (les photos y sont). Si l'état est encore "capture", dis-moi d'envoyer les photos et attends.
 2. Pour chaque exercice visible, transcris EXACTEMENT ce que j'ai écrit (champ answer, Markdown et LaTeX), erreurs comprises, sans corriger en transcrivant : mes tableaux en tableaux Markdown, mes dessins, graphes, diagrammes (Hasse, automates, courbes, schémas) redessinés fidèlement dans un bloc \`\`\`svg (viewBox, traits en currentColor) ou \`\`\`mermaid (graph, flowchart, xychart-beta…), avec mes erreurs. Si une partie est illisible, écris [illisible] et dis-le dans le feedback. La solution contient le dessin, le graphe ou le tableau correct quand l'exercice en a un.
-3. Retrouve l'énoncé et la solution de référence dans mes supports de cours (get_exercise, search_course_material) quand l'exercice vient du cours ; sinon résous-le toi-même en suivant la méthode du cours.
+3. Écris toujours l'énoncé complet de chaque exercice dans le champ statement (recopié de la feuille ou des photos, ou retrouvé dans mes supports de cours avec get_exercise et search_course_material), pour que je retrouve tout le contexte sur la page. Retrouve aussi la solution de référence dans les supports ; sinon résous l'exercice toi-même en suivant la méthode du cours.
 4. Juge chaque exercice : correct (résultat et démarche justes), partial (démarche juste mais erreur de calcul, étape manquante ou justification insuffisante), wrong (méthode fausse ou résultat faux), missing (non traité).
 5. Pour chaque exercice non correct : dans feedback, montre précisément où est l'erreur (cite ma ligne fautive) et comment il fallait faire, étape par étape ; dans solution, la solution complète ; dans cause, la cause probable en quelques mots (confusion de notions, oubli d'un cas, erreur de calcul, lecture d'énoncé, méthode non maîtrisée…). Pour les exercices corrects, confirme en une phrase et signale une amélioration possible de rédaction s'il y en a.
 6. Donne à chaque exercice ses topics (thèmes courts et réutilisables, en français, p. ex. "inclusion-exclusion", "diagramme de Hasse").

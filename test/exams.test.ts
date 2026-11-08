@@ -6,6 +6,7 @@ import type { LibraryItem } from "../src/app/library.js";
 
 const item = (name: string, title: string, tags: string[], course = "MAD"): LibraryItem => ({ kind: "document", name, title, modifiedAt: "2026-11-05T10:00:00.000Z", files: [], course, tags, tagged: true });
 const correction = (id: string, exam: string | undefined, state: Correction["state"], exercises: Correction["result"] extends infer R ? (R extends { exercises: infer E } ? E : never) : never = []): Correction => ({
+  affectsProfile: true,
   id,
   title: `TE blanc ${id}`,
   course: "MAD",

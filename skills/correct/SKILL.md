@@ -58,7 +58,7 @@ Follow this method, exercise by exercise (it is also the server's `correct_exerc
    ```` ```svg ```` block (a `viewBox`, strokes in `currentColor`, shown on a paper-white card) or a ```` ```mermaid ````
    block (`graph`, `flowchart`, `xychart-beta`, `pie`…) that the web app draws. The `solution` holds the correct
    drawing, graph or table when the exercise has one; `feedback` may show the faulty part alone.
-2. Find the statement and the reference solution in the course material (`heig:teacher`:
+2. Always write the exercise's `statement` (copied from the sheet or the photos, or found in the course material): the web app shows it above the answer so that the whole context is on one page. Find the reference solution in the course material (`heig:teacher`:
    `npm --prefix <root> run -s kb -- exercise <n> --course <CODE>`, `kb -- search …`); otherwise solve it yourself with
    the course's method.
 3. Verdict: `correct` (result and method right), `partial` (right method, calculation slip, missing step or weak
@@ -89,6 +89,9 @@ npm --prefix <root> run -s correction -- submit <id> --file .cache/corrections/<
 ```
 
 ## 4. Record the profile
+
+By default a correction counts in the profile. If the user asks that this work does not count (a trial, an old test),
+create or set it with `--no-profile` (`affects_profile: false` in the MCP tools; `--profile` counts it again), and skip this step.
 
 Write `.cache/corrections/<id>/notes.json` and run `npm --prefix <root> run -s profile -- add --file <it>`:
 one `mistake` note per error (`topic`, `text` = the cause and what happened, `severity` 1 to 3, `correctionId`,

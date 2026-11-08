@@ -44,6 +44,10 @@ export function CorrectionDetail() {
   if (correction.error || !correction.data) return <ErrorBox error={correction.error ?? "Correction introuvable"} retry={correction.reload} />;
   const c = correction.data;
   const v = verdictCounts(c);
+  const setImpact = async (affectsProfile: boolean) => {
+    await api(`/api/corrections/${c.id}`, { method: "PATCH", json: { affectsProfile } });
+    correction.reload();
+  };
   const remove = async () => {
     if (!confirm("Supprimer cette correction et ses photos ?")) return;
     await api(`/api/corrections/${c.id}`, { method: "DELETE" });
@@ -54,13 +58,23 @@ export function CorrectionDetail() {
     <div className="space-y-4">
       <PageHeader
         title={<span className="flex items-center gap-3"><CourseChip code={c.course} /> {c.title}</span>}
-        subtitle={<span className="flex items-center gap-2 flex-wrap"><Badge tone={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>{c.topic && <span>{c.topic}</span>}{c.exam && <Link to="/exams" className="text-accent">· test blanc</Link>}<span>· créée {dateTime(c.createdAt)}</span>{c.correctedAt && <span>· corrigée {dateTime(c.correctedAt)}</span>}</span>}
+        subtitle={<span className="flex items-center gap-2 flex-wrap"><Badge tone={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>{c.topic && <span>{c.topic}</span>}{c.exam && <Link to="/exams" className="text-accent">· test blanc</Link>}{!c.affectsProfile && <Badge>hors profil</Badge>}<span>· créée {dateTime(c.createdAt)}</span>{c.correctedAt && <span>· corrigée {dateTime(c.correctedAt)}</span>}</span>}
         actions={
           c.state === "corrected" ? (
             <Segmented<Level> value={level} onChange={setLevelKeep} options={[{ value: 0, label: <span className="inline-flex items-center gap-1"><EyeSlashIcon className="h-4 w-4" /> Sans correction</span> }, { value: 1, label: "Verdicts" }, { value: 2, label: <span className="inline-flex items-center gap-1"><EyeIcon className="h-4 w-4" /> Détails</span> }]} />
           ) : undefined
         }
       />
+
+      <Card>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--accent,currentColor)]" checked={c.affectsProfile} onChange={(e) => void setImpact(e.target.checked)} />
+          <span className="text-sm">
+            <span className="font-medium">Compte dans mon profil</span>
+            <span className="block text-xs text-ink-2">{c.affectsProfile ? "Les exercices de cette correction comptent dans la note du cours, les points faibles et les chapitres. Décochez pour ne pas les compter." : "Cette correction est laissée de côté : elle ne change ni la note du cours, ni les points faibles, ni les chapitres. Cochez pour la compter à nouveau."}</span>
+          </span>
+        </label>
+      </Card>
 
       {c.state !== "corrected" && (
         <Card>
@@ -150,12 +164,14 @@ function Exercise({ e, level }: { e: CorrectedExercise; level: Level }) {
       </button>
       {open && (
         <div className="border-t border-line px-4 py-3 space-y-4">
-          {e.statement && (
-            <section>
-              <h3 className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Énoncé</h3>
-              <Markdown source={e.statement} className="text-ink-2" />
-            </section>
-          )}
+          <section>
+            <h3 className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Énoncé</h3>
+            {e.statement ? (
+              <div className="rounded-lg border border-line p-3"><Markdown source={e.statement} /></div>
+            ) : (
+              <p className="text-xs text-ink-3">Énoncé non enregistré : demandez à l'agent de le compléter.</p>
+            )}
+          </section>
           <section>
             <h3 className="text-[11px] uppercase tracking-wide text-ink-3 mb-1">Votre réponse (transcrite)</h3>
             <div className="rounded-lg bg-surface-2 p-3"><Markdown source={e.answer} /></div>

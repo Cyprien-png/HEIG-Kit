@@ -249,6 +249,8 @@ export interface Correction {
   notes?: string;
   /** The mock exam this work answers: the library item of its statement (`document:<name>`). */
   exam?: string;
+  /** Counts in the profile (course grade, weaknesses, chapters); true unless left out. */
+  affectsProfile: boolean;
   result?: { summary: string; exercises: CorrectedExercise[]; toRevise?: string[] };
   createdAt: string;
   updatedAt: string;

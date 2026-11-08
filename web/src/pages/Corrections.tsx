@@ -76,6 +76,7 @@ export function Corrections() {
                     <Dot tone={STATE_TONE[c.state]} />
                     <CourseChip code={c.course} link={false} />
                     <Badge tone={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>
+                    {!c.affectsProfile && <Badge>hors profil</Badge>}
                   </div>
                   <h2 className="font-medium mt-2 leading-snug">{c.title}</h2>
                   {c.topic && <p className="text-xs text-ink-2">{c.topic}</p>}
@@ -89,7 +90,7 @@ export function Corrections() {
                   )}
                 </Link>
                 <div className="flex items-center justify-between px-4 py-2 border-t border-line text-xs text-ink-3">
-                  <span>{dateTime(c.createdAt)}</span>
+                  <span>{dateTime(c.updatedAt)}</span>
                   {c.state !== "corrected" && (
                     <Button size="sm" variant="ghost" onClick={() => void openLink(c)}>
                       <CameraIcon className="h-4 w-4" /> Photographier

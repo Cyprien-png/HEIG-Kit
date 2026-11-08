@@ -90,7 +90,7 @@ test("an archive folder is planned into one exam per test, originals named by ro
   assert.deepEqual([te1.branch, te1.year, te1.has.statement, te1.has.statementPdf, te1.has.original], [["MAD"], "2024-2025", true, false, true]);
   assert.deepEqual(onDisk.find((e) => e.id === "PRG1/INF1/2016-2017/INF1_OCE_16-17_TE3")!.branch, ["PRG1", "INF1"]);
 
-  const correction = (id: string, exam: string, state: Correction["state"]): Correction => ({ id, title: id, state, exam, createdAt: new Date(`2026-11-0${id}T10:00:00Z`), updatedAt: new Date(), photos: [], result: state === "corrected" ? { summary: "", exercises: [{ number: "1", answer: "", verdict: "correct", feedback: "", topics: [], points: { obtained: 9, total: 10 } }] } : undefined });
+  const correction = (id: string, exam: string, state: Correction["state"]): Correction => ({ affectsProfile: true, id, title: id, state, exam, createdAt: new Date(`2026-11-0${id}T10:00:00Z`), updatedAt: new Date(), photos: [], result: state === "corrected" ? { summary: "", exercises: [{ number: "1", answer: "", verdict: "correct", feedback: "", topics: [], points: { obtained: 9, total: 10 } }] } : undefined });
   const exams = withAttempts(onDisk, [correction("1", "exam:MAD/2024-2025/MAD_JHH_24-25_TE1", "corrected"), correction("2", "exam:MAD/2016-2017/MAD_JHH_16-17_TE2", "received"), correction("3", "document:other", "corrected")]);
   assert.equal(exams.find((e) => e.id === te1.id)!.status, "done");
   assert.equal(exams.find((e) => e.id === te1.id)!.last!.score!.grade, 5.5);
