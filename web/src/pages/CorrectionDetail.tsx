@@ -95,6 +95,7 @@ export function CorrectionDetail() {
                   <>
                     <div className="text-3xl font-semibold tabular-nums">{v.percent} %<span className="text-ink-3 text-lg font-normal"> de réussite</span>{c.exam && swissGrade(c) !== undefined && <span className="text-ink-3 text-lg font-normal"> · note <Grade grade={swissGrade(c)!} className="text-3xl" /></span>}</div>
                     <div className="mt-2"><VerdictBar c={c} /></div>
+                    {(() => { const pts = c.result.exercises.filter((e) => e.points && e.points.total > 0); if (pts.length === 0) return null; const got = pts.reduce((s, e) => s + e.points!.obtained, 0); const tot = pts.reduce((s, e) => s + e.points!.total, 0); const num = (n: number) => String(Math.round(n * 100) / 100).replace(".", ","); return <div className="mt-1.5 text-sm font-medium tabular-nums">{num(got)} / {num(tot)} pts{pts.length < c.result.exercises.length ? <span className="text-ink-3 font-normal text-xs"> · {pts.length} exercice{pts.length > 1 ? "s" : ""} sur {c.result.exercises.length} avec points</span> : null}</div>; })()}
                     <div className="mt-1.5 text-xs text-ink-2 tabular-nums">{v.correct} juste{v.correct > 1 ? "s" : ""}{v.partial ? ` · ${v.partial} partiel${v.partial > 1 ? "s" : ""}` : ""}{v.wrong ? ` · ${v.wrong} faux` : ""} · {v.total} exercice{v.total > 1 ? "s" : ""}</div>
                   </>
                 ) : (
