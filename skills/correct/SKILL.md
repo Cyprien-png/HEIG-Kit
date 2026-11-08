@@ -59,7 +59,7 @@ Follow this method, exercise by exercise (it is also the server's `correct_exerc
 1. Transcribe **exactly** what the user wrote (`answer`, Markdown and LaTeX), mistakes included; `[illisible]` for
    what cannot be read, and say so in the feedback. Their tables become Markdown tables; their drawings, graphs and
    diagrams (Hasse diagram, automaton, curve, truth table, sketch) are redrawn faithfully, mistakes included, in a
-   ```` ```svg ```` block (a `viewBox`, strokes in `currentColor`, shown on a paper-white card) or a ```` ```mermaid ````
+   ```` ```svg ```` block (a `viewBox` and a `width` in pixels, strokes in `currentColor`, axes flipped by a `<g transform>` inside, shown on a paper-white card) or a ```` ```mermaid ````
    block (`graph`, `flowchart`, `xychart-beta`, `pie`…) that the web app draws. The `solution` holds the correct
    drawing, graph or table when the exercise has one; `feedback` may show the faulty part alone.
 2. Always write the exercise's `statement` (copied from the sheet or the photos, or found in the course material): the web app shows it above the answer so that the whole context is on one page. Find the reference solution in the course material (`heig:teacher`:

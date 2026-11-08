@@ -46,7 +46,7 @@ async function pickCalendar(api: HeigApi, ref: string | number | undefined): Pro
 }
 
 /** What the web app renders in every Markdown field (cards, quiz statements, corrections). */
-export const RICH_MARKDOWN = "Markdown: LaTeX between $…$, GFM tables, ```mermaid diagrams and charts (graph, flowchart, xychart-beta, pie…), ```svg drawings (viewBox, currentColor or black strokes)";
+export const RICH_MARKDOWN = "Markdown: LaTeX between $…$, GFM tables, ```mermaid diagrams and charts (graph, flowchart, xychart-beta, pie…), ```svg drawings (viewBox plus a width in pixels, currentColor or black strokes; flip axes with a <g transform>, not on the <svg>)";
 
 const cardSchema = z.object({
   front: z.string().describe(`Question or notion (${RICH_MARKDOWN})`),
