@@ -37,6 +37,10 @@ The student must never wait for you, nor you for them. Two steps, in this order:
    exercise its `points` (`obtained`, `total`, from the barème of the corrigé) so that the grade is exact. Use this time to also look up the statements and the reference
    solutions in the course material (step 3.2), so that the correction starts as soon as the photos arrive.
 
+A correction can also come from the web app's **Copies** page: the student fills a PDF on screen (pen, text, shapes) and
+presses « Soumettre ». It arrives already named, in state `received`, with the annotated pages as its photos: go straight
+to step 2 (`correction -- show <id> --photos …`); there is no QR code to show.
+
 ## 2. Wait for the photos, then read them
 
 When the user says the photos are sent (or ask them to tell you):

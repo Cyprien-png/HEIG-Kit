@@ -118,6 +118,26 @@ years, then the tests, each with its files, and tracks the student's own attempt
 `exam` = `exam:<id>` (the page's « Photographier » button, or `create_correction`), graded on the Swiss scale. The
 `heig:past-exams` skill describes the agent's work on them.
 
+## PDF reader and work copies (« Copies »)
+
+Every PDF of the application (library, mock exams, past exams, course documents) opens in the same reader
+(`web/src/components/PdfReader.tsx`, pdf.js rendered on canvases): pages at the width of the window, so nothing
+overflows on a phone; zoom with the buttons, Ctrl or ⌘ + wheel, or two fingers; one finger scrolls; page number and
+previous/next; full screen. A PDF opened from a list covers the whole window instead of a small pop-up.
+
+« Faire une copie » (on a mock exam, a clean past exam statement, or « Importer un PDF » on the Copies page) stores a
+copy of the PDF on the server (`data/workcopies/<id>/source.pdf`) and opens it in the editor: pen, highlighter, text, shapes
+(line, arrow, rectangle, ellipse), eraser, move, undo and redo, with a mouse, a finger or a stylus (once a stylus is seen,
+fingers no longer draw, only scroll). Annotations are saved by page in the database a moment after each change, in
+coordinates relative to the page, so they follow the zoom and the screen (`src/app/workcopies.ts`). A copy edited from
+two devices is protected by a revision number: the second device is told « Modifiée ailleurs » and reloads.
+
+« Soumettre » renders the pages of the copy with their annotations as images, creates a correction from them
+(state `received`, linked to the mock exam or past exam, with the choice of counting it in the profile or not) and
+sends it: the agent then corrects it like photographed work (`heig:correct`). Routes: `/api/workcopies` (list, create,
+`PUT …/source`, `GET …/source`, `PATCH` with `rev`, `DELETE`). The reader loads fonts and decoders from `/pdfjs/`
+(copied from pdfjs-dist at build time, see `web/vite.config.ts`).
+
 ## Flashcards
 
 Decks (`decks`) of cards (`cards`, Markdown on both faces, see below) per course. Studying follows a small spaced
