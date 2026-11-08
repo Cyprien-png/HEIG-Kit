@@ -12,6 +12,7 @@ import { registerProfileRoutes } from "./profile.js";
 import { registerQuizRoutes } from "./quizzes.js";
 import { Router } from "./router.js";
 import { registerStatusRoutes } from "./status.js";
+import { registerWorkcopyRoutes } from "./workcopies.js";
 
 /** The REST API of the web application (docs/app.md), one module per domain. */
 export function createApi(app: App): Router {
@@ -28,5 +29,6 @@ export function createApi(app: App): Router {
   registerProfileRoutes(router, app);
   registerQuizRoutes(router, app);
   registerStatusRoutes(router, app);
+  registerWorkcopyRoutes(router, app);
   return router;
 }

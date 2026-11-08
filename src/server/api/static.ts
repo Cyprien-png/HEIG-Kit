@@ -13,7 +13,7 @@ export function webDir(): string | undefined {
 const PAGE_HEADERS = {
   // The app only talks to its own origin; inline styles come from the UI libraries.
   "Content-Security-Policy":
-    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
     "font-src 'self' data:; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'",
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",

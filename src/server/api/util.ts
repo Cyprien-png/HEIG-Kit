@@ -86,6 +86,7 @@ export const CONTENT_TYPES: Record<string, string> = {
   ".md": "text/markdown; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
   ".py": "text/plain; charset=utf-8",
+  ".wasm": "application/wasm",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
   ".ico": "image/x-icon",
