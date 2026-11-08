@@ -20,7 +20,7 @@
     "mcp": "tsx src/mcp/host.ts",
     "server": "tsx src/mcp/host.ts --server",
     "server:start": "docker compose -f rag/compose.yml --profile server up -d --wait",
-    "server:update": "git pull --ff-only && npm ci --no-audit --no-fund && npm run rag:start && docker compose -f rag/compose.yml --profile server pull server render && npm run server:start",
+    "server:update": "git pull --ff-only && npm ci --no-audit --no-fund && npm run rag:start && docker compose -f rag/compose.yml --profile server pull server render && npm run server:start && docker image prune -f",
     "server:build": "docker compose -f rag/compose.yml --profile server up -d --build --wait",
     "server:stop": "docker compose -f rag/compose.yml --profile server down",
     "doc": "tsx modules/documents/render.ts",

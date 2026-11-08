@@ -169,7 +169,9 @@ Every push to `main` publishes new images (`.github/workflows/server-images.yml`
 cd ~/HEIG-Kit && npm run server:update
 ```
 
-It pulls the repository, reinstalls the dependencies, downloads the new images and restarts the containers. A video
+It pulls the repository, reinstalls the dependencies, downloads the new images, restarts the containers and deletes
+the images left without a name by the update (`docker image prune -f`: the previous versions, which would otherwise pile
+up in `/var/lib/containerd`; volumes and images in use are kept). A video
 being rendered at that moment is lost: render it again.
 
 Other versions, with `HEIG_IMAGE_TAG` in the command (the repository stays on its branch: switch it with `git checkout`
