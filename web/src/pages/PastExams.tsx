@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
+import { PdfOverlay } from "../components/PdfOverlay";
 import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, Select, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { bytes, dateTime } from "../lib/format";
@@ -208,6 +209,11 @@ function Viewer({ exam, name, onClose }: { exam: PastExam; name: string; onClose
     if (!isMd) return;
     fetch(url, { credentials: "same-origin" }).then((r) => r.text()).then(setText).catch(() => setText("Impossible de charger le fichier."));
   }, [url, isMd]);
+  if (name.endsWith(".pdf")) {
+    // A clean statement can be copied to fill in; a scan filled by a student or a solution cannot.
+    const copyable = name === "enonce.pdf" || name === "original-vierge.pdf";
+    return <PdfOverlay url={url} title={`${exam.meta.title} · ${name}`} downloadUrl={`${url}?download=1`} copy={copyable ? { title: exam.meta.title, course: exam.meta.course, exam: `exam:${exam.id}`, label: name } : undefined} onClose={onClose} />;
+  }
   return (
     <Modal open onClose={onClose} title={<span>{exam.meta.title} <span className="font-mono text-xs text-ink-3">· {name}</span></span>} wide>
       <div className="space-y-3">
@@ -215,7 +221,7 @@ function Viewer({ exam, name, onClose }: { exam: PastExam; name: string; onClose
           {file && <span>{bytes(file.size)} · {dateTime(file.modifiedAt)}</span>}
           <a href={`${url}?download=1`} className="ml-auto"><Button size="sm"><ArrowDownTrayIcon className="h-4 w-4" /> Télécharger</Button></a>
         </div>
-        {name.endsWith(".pdf") ? <iframe title={name} src={`${url}#view=FitH`} className="w-full h-[75vh] rounded-lg bg-surface-2" /> : isMd ? (text === undefined ? <Loading /> : <Markdown source={text} />) : <img src={url} alt={name} className="w-full rounded-lg" />}
+        {isMd ? (text === undefined ? <Loading /> : <Markdown source={text} />) : <img src={url} alt={name} className="w-full rounded-lg" />}
       </div>
     </Modal>
   );

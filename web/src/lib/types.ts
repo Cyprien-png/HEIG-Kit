@@ -295,6 +295,25 @@ export interface MockExam {
   best?: ExamScore;
 }
 
+// Work copies (mirrors src/app/workcopies.ts)
+
+export interface Workcopy {
+  id: string;
+  title: string;
+  course?: string;
+  exam?: string;
+  sourceLabel?: string;
+  pageCount: number;
+  rev: number;
+  hasSource: boolean;
+  correctionId?: string;
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  annotatedPages: number;
+  annotations?: Record<string, import("./annotations").Op[]>;
+}
+
 // Past exams (mirrors src/app/pastexams.ts)
 
 export interface PastExamFile {

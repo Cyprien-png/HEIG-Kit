@@ -2,6 +2,7 @@ import { ArrowDownTrayIcon, DocumentIcon, FilmIcon, MagnifyingGlassIcon, TrashIc
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
+import { PdfOverlay } from "../components/PdfOverlay";
 import { Markdown } from "../components/Markdown";
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Input, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
@@ -101,7 +102,7 @@ export function Library() {
           ))}
         </div>
       )}
-      {opened && <Viewer file={opened} onClose={() => navigate("/library")} />}
+      {opened && <Viewer file={opened} item={all.find((i) => i.files.some((f) => f.id === opened.id))} onClose={() => navigate("/library")} />}
     </div>
   );
 }
@@ -149,7 +150,10 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
   );
 }
 
-function Viewer({ file, onClose }: { file: LibraryFile; onClose: () => void }) {
+/** The exam a library document is the statement of: a mock exam (tagged « te blanc »), not its solutions. */
+const examOf = (item?: LibraryItem) => (item && item.tags.includes("te blanc") && !/corrig|solution/i.test(item.name) ? `document:${item.name}` : undefined);
+
+function Viewer({ file, item, onClose }: { file: LibraryFile; item?: LibraryItem; onClose: () => void }) {
   const [text, setText] = useState<string>();
   const url = fileUrl(file);
   const isVideo = [".mp4", ".mov", ".gif"].includes(file.ext);
@@ -158,6 +162,7 @@ function Viewer({ file, onClose }: { file: LibraryFile; onClose: () => void }) {
     if (!isText) return;
     fetch(url, { credentials: "same-origin" }).then((r) => r.text()).then(setText).catch(() => setText("Impossible de charger le fichier."));
   }, [url, isText]);
+  if (file.ext === ".pdf") return <PdfOverlay url={url} title={item?.title ?? file.name} downloadUrl={`${url}?download=1`} copy={{ title: item?.title ?? file.name.replace(/\.pdf$/i, ""), course: item?.course, exam: examOf(item), label: file.name }} onClose={onClose} />;
   return (
     <Modal open onClose={onClose} title={<span className="font-mono text-sm">{file.name}</span>} wide>
       <div className="space-y-3">
@@ -172,8 +177,6 @@ function Viewer({ file, onClose }: { file: LibraryFile; onClose: () => void }) {
           <video src={url} controls playsInline preload="metadata" className="w-full rounded-lg bg-black aspect-video" />
         ) : file.ext === ".gif" ? (
           <img src={url} alt={file.name} className="w-full rounded-lg" />
-        ) : file.ext === ".pdf" ? (
-          <iframe title={file.name} src={`${url}#view=FitH`} className="w-full h-[75vh] rounded-lg bg-surface-2" />
         ) : isText ? (
           text === undefined ? <Loading /> : file.ext === ".md" ? <Markdown source={text} /> : <pre className="text-xs font-mono bg-surface-2 rounded-lg p-3 overflow-auto max-h-[70vh]">{text}</pre>
         ) : (

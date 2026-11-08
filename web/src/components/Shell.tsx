@@ -1,4 +1,5 @@
 import {
+  PencilSquareIcon,
   AcademicCapIcon,
   ArchiveBoxIcon,
   ArrowRightStartOnRectangleIcon,
@@ -34,7 +35,7 @@ export interface NavItem {
 export const TABS: NavItem[] = [
   { to: "/", label: "Accueil", icon: HomeIcon },
   { to: "/calendar", label: "Calendrier", icon: CalendarDaysIcon },
-  { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/exams", "/past-exams", "/courses", "/documents", "/library", "/corrections", "/profile"] },
+  { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/exams", "/past-exams", "/courses", "/documents", "/library", "/copies", "/corrections", "/profile"] },
   { to: "/etudes", label: "Études", icon: AcademicCapIcon, under: ["/studies", "/grades"] },
 ];
 
@@ -46,6 +47,7 @@ export const REVISION: NavItem[] = [
   { to: "/past-exams", label: "Anciens TE", icon: ArchiveBoxIcon, hint: "Les TE des années précédentes, par branche et année" },
   { to: "/courses", label: "Cours", icon: Squares2X2Icon, hint: "Supports indexés et recherche" },
   { to: "/library", label: "Bibliothèque", icon: FolderIcon, hint: "Documents et vidéos générés" },
+  { to: "/copies", label: "Copies", icon: PencilSquareIcon, hint: "PDF remplis sur l'écran, envoyés en correction" },
   { to: "/corrections", label: "Corrections", icon: CheckBadgeIcon, hint: "Vos exercices photographiés" },
   { to: "/profile", label: "Profil", icon: UserCircleIcon, hint: "Points forts, points faibles" },
 ];
@@ -55,7 +57,7 @@ export const ETUDES: NavItem[] = [
 ];
 
 /** Routes shown without the phone's header and bottom bar: a card fills the screen and has its own way out. */
-const IMMERSIVE = /^\/(study|quiz\/play)(\/|$)/;
+const IMMERSIVE = /^\/(study|quiz\/play|copies\/[^/]+)(\/|$)/;
 
 const isUnder = (pathname: string, item: NavItem) => (item.to === "/" ? pathname === "/" : [item.to, ...(item.under ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`)));
 

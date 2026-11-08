@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
 import { Markdown } from "../components/Markdown";
+import { PdfReader } from "../components/PdfReader";
 import { Badge, Button, Card, ErrorBox, Input, Loading, PageHeader, Segmented } from "../components/ui";
 import { useApi } from "../lib/api";
 import type { DocumentText } from "../lib/types";
@@ -71,9 +72,7 @@ export function DocumentView() {
         }
       />
       {viewMode === "pdf" ? (
-        <Card padded={false} className="overflow-hidden">
-          <iframe title={d.title} src={`${fileUrl}#page=${page}&view=FitH`} className="w-full h-[calc(100vh-14rem)] min-h-[480px] bg-surface-2" />
-        </Card>
+        <PdfReader url={fileUrl} title={d.title} downloadUrl={fileUrl} initialPage={page} />
       ) : (
         <div className="space-y-3">
           <div className="flex items-center gap-2">

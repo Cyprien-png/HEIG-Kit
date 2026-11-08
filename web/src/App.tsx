@@ -18,6 +18,8 @@ const Quizzes = lazy(() => import("./pages/Quizzes").then((m) => ({ default: m.Q
 const QuizPlay = lazy(() => import("./pages/QuizPlay").then((m) => ({ default: m.QuizPlay })));
 const QuizResult = lazy(() => import("./pages/QuizResult").then((m) => ({ default: m.QuizResult })));
 const MockExams = lazy(() => import("./pages/MockExams").then((m) => ({ default: m.MockExams })));
+const WorkCopies = lazy(() => import("./pages/WorkCopies").then((m) => ({ default: m.WorkCopies })));
+const WorkCopyEditor = lazy(() => import("./pages/WorkCopies").then((m) => ({ default: m.WorkCopyEditor })));
 const PastExams = lazy(() => import("./pages/PastExams").then((m) => ({ default: m.PastExams })));
 const Corrections = lazy(() => import("./pages/Corrections").then((m) => ({ default: m.Corrections })));
 const CorrectionDetail = lazy(() => import("./pages/CorrectionDetail").then((m) => ({ default: m.CorrectionDetail })));
@@ -70,6 +72,8 @@ export function App() {
                       <Route path="exams" element={<MockExams />} />
                       <Route path="past-exams" element={<PastExams />} />
                       <Route path="past-exams/*" element={<PastExams />} />
+                      <Route path="copies" element={<WorkCopies />} />
+                      <Route path="copies/:id" element={<WorkCopyEditor />} />
                       <Route path="corrections" element={<Corrections />} />
                       <Route path="corrections/:id" element={<CorrectionDetail />} />
                       <Route path="profile" element={<Profile />} />
