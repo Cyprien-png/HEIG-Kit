@@ -1,5 +1,5 @@
-import { ArrowPathIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowPathIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, Squares2X2Icon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, ErrorBox, IconButton, Loading, Modal, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { F, addDays, day, mondayOf, today } from "../lib/format";
@@ -42,6 +42,15 @@ export function Calendar() {
   const [layersOpen, setLayersOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string>();
+  const [syncOutcome, setSyncOutcome] = useState<"ok" | "failed">();
+  const outcomeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(outcomeTimer.current), []);
+  /** Shows a check or a cross on the refresh button for a few seconds. */
+  const flashOutcome = (outcome: "ok" | "failed") => {
+    clearTimeout(outcomeTimer.current);
+    setSyncOutcome(outcome);
+    outcomeTimer.current = setTimeout(() => setSyncOutcome(undefined), 2500);
+  };
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -99,12 +108,15 @@ export function Calendar() {
   const refresh = async () => {
     setSyncing(true);
     setSyncError(undefined);
+    setSyncOutcome(undefined);
     try {
       for (const kind of ["gaps", "cyberlearn"]) {
         const { run } = await api<{ run: { ok: boolean; message?: string } }>("/api/status/sync", { method: "POST", json: { kind } });
         if (!run.ok) throw new Error(run.message ?? `La synchronisation ${kind} a échoué`);
       }
+      flashOutcome("ok");
     } catch (e) {
+      flashOutcome("failed");
       const message = e instanceof Error ? e.message : String(e);
       setSyncError(/two-step|code/i.test(message) ? "edu-ID demande un code de connexion : reconnectez-vous depuis la page Statut." : message);
     } finally {
@@ -163,8 +175,12 @@ export function Calendar() {
         </div>
         <div className="flex items-center gap-2">
           <Segmented value={view} onChange={setView} options={[{ value: "week", label: "Semaine" }, { value: "month", label: "Mois" }, { value: "agenda", label: "Agenda" }]} />
-          <IconButton label={syncing ? "Synchronisation en cours" : "Actualiser depuis GAPS et Cyberlearn"} onClick={() => void refresh()} disabled={syncing}>
-            <ArrowPathIcon className={cx("h-5 w-5", syncing && "animate-spin")} />
+          <IconButton
+            label={syncing ? "Synchronisation en cours" : syncOutcome === "ok" ? "Calendrier à jour" : syncOutcome === "failed" ? "La synchronisation a échoué" : "Actualiser depuis GAPS et Cyberlearn"}
+            onClick={() => void refresh()}
+            disabled={syncing}
+          >
+            {syncOutcome === "ok" ? <CheckIcon className="h-5 w-5 text-ok" /> : syncOutcome === "failed" ? <XMarkIcon className="h-5 w-5 text-bad" /> : <ArrowPathIcon className={cx("h-5 w-5", syncing && "animate-spin")} />}
           </IconButton>
           <IconButton label="Calendriers" className="lg:hidden" onClick={() => setLayersOpen(true)}>
             <Squares2X2Icon className="h-5 w-5" />
