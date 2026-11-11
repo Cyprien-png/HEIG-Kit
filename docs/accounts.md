@@ -13,7 +13,10 @@ server is not open: nobody creates an account over the network.
 | Quizzes and their questions | Study progress on the cards, quiz attempts and scores |
 | | The edu-ID session and credentials, the rendering jobs |
 
-- A shared item is **changed or deleted only by its author or an administrator**; everyone else gets `403`.
+- A shared item is **changed only by its author or an administrator**, and **deleted only by an administrator**, its
+  author included (a deck, a card, a quiz, a document or a video): a deletion takes it, and the progress made on it,
+  away from the whole class. Everyone else gets `403`; the database enforces it too (`019_admin_delete.sql`). Personal
+  things (calendar events, corrections, profile notes) stay deletable by their owner.
 - **A similar item is never created twice.** Creating a deck, a quiz, a document or a video close to an existing one is
   refused (`409`, with the list of similar items). The call is accepted only with `checked` (the references of the
   items that were read) and `new_because` (what is needed that each of them lacks). The MCP instructions and the skills
@@ -74,7 +77,7 @@ and MCP alike; an application waiting for an authorization (Claude, the CLI) is 
 
 `student`, or `admin`, who also sees the **status page** of the server, the **journal** (the accounts, and for each
 one the latest requests: time, action, route or tool, answer; never their content; kept 30 days), may change or delete
-any shared item, and runs the housekeeping. Roles are set with `npm run users`.
+any shared item, is the only one who deletes them, and runs the housekeeping. Roles are set with `npm run users`.
 
 ## Housekeeping
 
@@ -87,7 +90,8 @@ abandoned captures, expired tokens, files of interrupted uploads.
 
 - The course material is indexed by `npm run ingest` on the machine with the edu-ID account of `.env`: the shared
   knowledge base covers the courses of **that** account (plus `RAG_EXTRA_COURSES`).
-- Deleting a shared deck or quiz removes the progress of everyone who studied it.
+- Deleting a shared deck or quiz removes the progress of everyone who studied it, which is why only administrators
+  delete.
 - Syncs with GAPS and Cyberlearn run one account at a time.
 - The administrator of the machine can read the personal data in the database (not the edu-ID credentials): row level
   security protects accounts from each other, not from whoever owns the server.

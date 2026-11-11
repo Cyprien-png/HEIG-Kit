@@ -36,8 +36,8 @@ sidebar.
   answers `403` with `setup`. State-changing requests with a cookie must also carry the header
   `X-Requested-With: heig-kit` (no cross-site form can add it).
 - Agents and the CLI: `Authorization: Bearer <access token>` obtained through OAuth ([server.md](server.md)), as for
-  MCP. Every route answers for the account of the token only; shared items carry `createdBy`, `author`, `mine` and
-  `editable`, and creating a similar one answers `409` with `similar` ([accounts.md](accounts.md)).
+  MCP. Every route answers for the account of the token only; shared items carry `createdBy`, `author`, `mine`,
+  `editable` and `deletable` (administrators only), and creating a similar one answers `409` with `similar` ([accounts.md](accounts.md)).
 - Capture pages (phone): a JWT limited to one correction, for a few hours, in the link of the QR code. It can only
   read and add photos of that correction.
 

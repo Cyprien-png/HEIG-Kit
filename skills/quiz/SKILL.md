@@ -18,7 +18,8 @@ author, and everyone plays them with their own attempts and score. You MUST NOT 
 the chapter and the kind asked: start that one (`start_quiz`) and say who made it. The server refuses a similar quiz
 and lists the existing ones; it only accepts after you read them (`quiz -- show <id>`) and call again with `checked`
 (their references) and `new_because` (what the user needs that each of them lacks; CLI: `--checked`, `--new-because`).
-Never invent these to get through, and never delete a quiz made by someone else (the server refuses it).
+Never invent these to get through. Deleting a quiz is reserved to administrators there, even for its author: a
+refusal is final, tell the user to ask one.
 
 1. Read the material first (`heig:teacher`: `kb -- search`, `kb -- document`, the chapter's exercises and the class
    quizzes when the course has some). Cover the chapters the user names, or those of the next exam.

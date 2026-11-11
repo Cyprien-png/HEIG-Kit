@@ -51,7 +51,8 @@ a remote server), the library is the whole class's: also run `npm --prefix <root
 the request: give that one to the user and say who made it. The server refuses a similar item and lists the existing
 ones; it only accepts after you read them and call again with `checked` (their references) and `new_because` (what the
 user needs that each of them lacks). Never invent these to get through, never rename a file to dodge the check, and
-never change or delete an item made by someone else (the server refuses it): make your own for what is missing.
+never change an item made by someone else (the server refuses it): make your own for what is missing. Deleting an
+item of the library is reserved to administrators, even for its author.
 
 ## Steps: one render, opened as soon as it is ready
 
