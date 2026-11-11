@@ -5,7 +5,7 @@ import { outputDir } from "../vendor.js";
 export type OutputKind = "documents" | "videos";
 
 /** What can be downloaded: never scene sources' neighbours such as hidden files or anything else in the folders. */
-const DOWNLOADABLE = new Set([".pdf", ".docx", ".html", ".md", ".mp4", ".mov", ".gif", ".py"]);
+const DOWNLOADABLE = new Set([".pdf", ".docx", ".html", ".md", ".mp4", ".mov", ".gif", ".py", ".tsx"]);
 
 export const CONTENT_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",

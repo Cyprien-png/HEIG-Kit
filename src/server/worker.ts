@@ -84,7 +84,20 @@ async function handle(id: string): Promise<void> {
   const args =
     request.kind === "document"
       ? [path.join(ROOT, "modules", "documents", "render.ts"), source, ...request.formats.map((f: string) => `--${f}`), "--out", output]
-      : [path.join(ROOT, "modules", "visuals", "render.ts"), source, request.scene, "--quality", request.quality, "--frames", "--out", output, ...(request.voice ? ["--voice"] : [])];
+      : request.kind === "hqvideo"
+        ? [
+            path.join(ROOT, "modules", "hqvideo", "render.ts"),
+            source,
+            "--quality",
+            request.quality,
+            "--frames",
+            "--out",
+            output,
+            ...(request.audio ? ["--audio"] : []),
+            ...(request.check ? ["--check"] : []),
+            ...(request.subtitles === false ? ["--no-subtitles"] : []),
+          ]
+        : [path.join(ROOT, "modules", "visuals", "render.ts"), source, request.scene, "--quality", request.quality, "--frames", "--out", output, ...(request.voice ? ["--voice"] : [])];
   const result = await runRenderer(args);
 
   const frames = /^Frames: (.+)$/m.exec(result.output)?.[1]?.trim();

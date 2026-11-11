@@ -107,7 +107,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Runs the code written by the AI (manim scenes, HTML in a browser): no network, no .env, no data, read-only system.
+  # Runs the code written by the AI (manim scenes, HTML and video scenes in a browser): no network, no .env, no data,
+  # read-only system.
   # Handles one job and exits: `restart: always` gives a fresh container for the next one.
   render:
     profiles: ["server"]
@@ -130,7 +131,8 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 1024
-    mem_limit: 6g
+    # The voice of the high quality videos holds its model in memory (about 4 GB), then the browser draws the frames.
+    mem_limit: 8g
     restart: always
 
 volumes:

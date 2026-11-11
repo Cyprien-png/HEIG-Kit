@@ -1,4 +1,4 @@
-# Render worker of the remote server: manim, LaTeX, Chromium, pandoc and the voice. Run without network and secrets, see
+# Render worker of the remote server: manim, LaTeX, Chromium, pandoc, the voice and the high quality videos. Run without network and secrets, see
 # rag/compose.yml. System packages rather than TinyTeX and Puppeteer's Chromium, which do not exist for every architecture.
 FROM node:22-bookworm-slim
 ENV PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium HOME=/tmp PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -24,6 +24,16 @@ RUN python3 -m venv vendor/kokoro/.venv \
   && vendor/kokoro/.venv/bin/pip install --quiet --retries 6 kokoro-onnx==0.6.1 \
   && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/kokoro-v1.0.int8.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx \
   && curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o vendor/kokoro/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+# High quality videos: Remotion and its own headless browser (downloaded now: the worker has no network), then OmniVoice
+# with the CPU build of PyTorch and its model, about 5 GB. Same versions as src/setup/modules/hqvideo.ts.
+COPY modules/hqvideo/package.json modules/hqvideo/package-lock.json ./modules/hqvideo/
+RUN cd modules/hqvideo && npm ci --no-audit --no-fund && cd /app \
+  && node -e "require('./modules/hqvideo/node_modules/@remotion/renderer').ensureBrowser().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); })"
+RUN python3 -m venv vendor/omnivoice/.venv \
+  && vendor/omnivoice/.venv/bin/pip install --quiet --upgrade pip \
+  && vendor/omnivoice/.venv/bin/pip install --quiet --retries 6 --extra-index-url https://download.pytorch.org/whl/cpu torch==2.8.0 torchaudio==2.8.0 \
+  && vendor/omnivoice/.venv/bin/pip install --quiet --retries 6 --extra-index-url https://download.pytorch.org/whl/cpu omnivoice==0.2.1 \
+  && HF_HOME=/app/vendor/omnivoice/hf vendor/omnivoice/.venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('k2-fsa/OmniVoice')"
 COPY tsconfig.json ./
 COPY src ./src
 COPY modules ./modules

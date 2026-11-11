@@ -227,6 +227,33 @@ test("a job whose status is a link or has no usable file fails, and the queue is
   assert.throws(() => queue.submit({ kind: "document", name: "d", formats: ["pdf"] }, "d.md", ""), /Too many/);
 });
 
+test("a high quality video is queued with its narration, and its check succeeds with key frames only", () => {
+  const jobs = path.join(base, "jobs4");
+  const queue = new JobQueue(jobs, path.join(base, "records4"));
+  const request = { kind: "hqvideo" as const, name: "v", audio: false, check: true, quality: "high" as const, subtitles: true };
+  const job = queue.submit(request, "v.tsx", "code", [], [{ name: "v.narration.json", content: "[]" }]);
+  assert.equal(job.source, "videos/v.tsx");
+  const dir = path.join(jobs, job.id);
+  assert.equal(readFileSync(path.join(dir, "input", "videos", "v.narration.json"), "utf-8"), "[]", "the worker gets the narration next to the scenes");
+  assert.equal(readFileSync(path.join(base, "out", "videos", "v.narration.json"), "utf-8"), "[]");
+  assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "request.json"), "utf-8")), { ...request, source: "input/videos/v.tsx" });
+
+  mkdirSync(path.join(dir, "output"));
+  writeFileSync(path.join(dir, "output", "frames.png"), "png");
+  writeFileSync(path.join(dir, "status.json"), JSON.stringify({ state: "done", files: [], log: "Video OK: 1 scene, 3.0 s without the voice." }));
+  const done = queue.get(job.id)!;
+  assert.equal(done.state, "done", "a check gives no video");
+  assert.equal(done.frames, true);
+  assert.deepEqual(done.files, []);
+
+  const rendered = queue.submit({ ...request, check: false }, "w.tsx", "code");
+  mkdirSync(path.join(jobs, rendered.id, "output"));
+  writeFileSync(path.join(jobs, rendered.id, "output", "w.mp4"), "video");
+  writeFileSync(path.join(jobs, rendered.id, "output", "w.mov"), "other type");
+  writeFileSync(path.join(jobs, rendered.id, "status.json"), JSON.stringify({ state: "done", files: ["w.mp4", "w.mov"], log: "" }));
+  assert.deepEqual(queue.get(rendered.id)?.files, ["videos/w.mp4"]);
+});
+
 test("names cannot leave the output folder and embedded videos are looked up by name only", () => {
   assert.equal(safeBaseName("../../etc/passwd"), "etc-passwd");
   assert.equal(safeBaseName(".env"), "document");

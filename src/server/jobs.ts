@@ -13,7 +13,8 @@ export type JobState = "queued" | "running" | "done" | "failed";
 
 export type JobRequest =
   | { kind: "document"; name: string; formats: ("pdf" | "docx" | "html")[] }
-  | { kind: "animation"; name: string; scene: string; quality: "low" | "medium" | "high"; voice: boolean };
+  | { kind: "animation"; name: string; scene: string; quality: "low" | "medium" | "high"; voice: boolean }
+  | { kind: "hqvideo"; name: string; audio: boolean; check: boolean; quality: "low" | "medium" | "high"; subtitles: boolean };
 
 export interface JobRecord {
   id: string;
@@ -33,7 +34,7 @@ export interface JobRecord {
 export const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** File names accepted back from the worker. */
 const SAFE_NAME = /^[\p{L}\p{N}_-][\p{L}\p{N}._-]*$/u;
-const ALLOWED = { document: new Set([".pdf", ".docx", ".html"]), animation: new Set([".mp4", ".mov", ".gif"]) };
+const ALLOWED = { document: new Set([".pdf", ".docx", ".html"]), animation: new Set([".mp4", ".mov", ".gif"]), hqvideo: new Set([".mp4"]) };
 const MAX_ACTIVE = 3;
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4 * 1024 ** 3;
@@ -81,8 +82,11 @@ export class JobQueue {
       .map((f) => JSON.parse(readFileSync(path.join(this.records, f), "utf-8")) as JobRecord);
   }
 
-  /** The source is saved in the output folder, so that list_generated finds it; the job appears atomically to the worker. */
-  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = []): JobRecord {
+  /**
+   * The source is saved in the output folder, so that list_generated finds it; the job appears atomically to the worker.
+   * `extra`: other files of the source, saved next to it (the narration of a high quality video).
+   */
+  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = [], extra: { name: string; content: string }[] = []): JobRecord {
     if (this.all().filter((r) => r.state === "queued" || r.state === "running").length >= MAX_ACTIVE) {
       throw new Error("Too many renderings are already waiting: try again when one has finished (get_job)");
     }
@@ -91,11 +95,13 @@ export class JobQueue {
     const folder = outputDir(kind);
     mkdirSync(folder, { recursive: true });
     writeFileSync(path.join(folder, sourceName), content);
+    for (const file of extra) writeFileSync(path.join(folder, file.name), file.content);
 
     const temp = path.join(this.jobsDir, `.incoming-${id}`);
     const input = path.join(temp, "input", kind);
     mkdirSync(input, { recursive: true });
     writeFileSync(path.join(input, sourceName), content);
+    for (const file of extra) writeFileSync(path.join(input, file.name), file.content);
     if (videos.length > 0) {
       const copies = path.join(temp, "input", "videos");
       mkdirSync(copies, { recursive: true });
@@ -163,8 +169,9 @@ export class JobQueue {
 
     if (status?.state === "done" || status?.state === "failed") {
       const files = status.state === "done" ? this.bringBack(record, dir, status.files) : [];
-      const failed = status.state === "failed" || files.length === 0;
-      const frames = !failed && this.bringBackFrames(record, dir);
+      const frames = status.state === "done" && this.bringBackFrames(record, dir);
+      // A check of a high quality video only gives its key frames.
+      const failed = status.state === "failed" || (files.length === 0 && !frames);
       this.save({ ...record, state: failed ? "failed" : "done", files, log: log || (failed ? "The worker produced no usable file." : ""), frames });
       rmSync(dir, { recursive: true, force: true });
       return;
