@@ -41,6 +41,20 @@ export function kokoroVoicesFile(): string {
   return path.join(KOKORO_DIR, "voices-v1.0.bin");
 }
 
+/** Speech synthesis of the high quality videos module: OmniVoice, in its own Python environment. */
+export const OMNIVOICE_DIR = path.join(VENDOR_DIR, "omnivoice");
+/** Identifies the speech in the cache: a new model, reference voice or pace must not reuse former files. */
+export const HQ_VOICE_ID = "omnivoice-0.2.1/reference-1/speed-0.92";
+
+export function omnivoicePython(): string {
+  return windows ? path.join(OMNIVOICE_DIR, ".venv", "Scripts", "python.exe") : path.join(OMNIVOICE_DIR, ".venv", "bin", "python");
+}
+
+/** Hugging Face cache holding the OmniVoice model (HF_HOME of the synthesis), so that removing vendor/omnivoice removes everything. */
+export function omnivoiceHome(): string {
+  return path.join(OMNIVOICE_DIR, "hf");
+}
+
 /** TinyTeX installation folder: TinyTeX on macOS and Windows, .TinyTeX on Linux (the installer's own naming). */
 export function tinytexDir(): string {
   return path.join(VENDOR_DIR, process.platform === "linux" ? ".TinyTeX" : "TinyTeX");

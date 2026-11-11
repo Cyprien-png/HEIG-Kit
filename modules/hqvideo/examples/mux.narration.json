@@ -1,0 +1,75 @@
+[
+  {
+    "scene": "intro",
+    "lines": [
+      {"id": "i1", "text": "Série six, exercice quatre."},
+      {"id": "i2", "text": "On te donne trois fonctions logiques, et on te demande de les réaliser avec un multiplexeur huit vers un, puis avec un multiplexeur quatre vers un."},
+      {"id": "i3", "text": "Bonne nouvelle : c'est toujours la même recette. On la déroule ensemble."}
+    ]
+  },
+  {
+    "scene": "mux",
+    "lines": [
+      {"id": "m1", "text": "D'abord, un rappel. Un multiplexeur, c'est un aiguillage."},
+      {"id": "m2", "text": "Il a plusieurs entrées de données, et une seule sortie."},
+      {"id": "m3", "text": "Les entrées de sélection forment un numéro en binaire."},
+      {"id": "m4", "text": "Ce numéro désigne l'entrée qui est recopiée sur la sortie."},
+      {"id": "m5", "text": "Si la sélection vaut deux, c'est l'entrée numéro deux qui passe. Toutes les autres sont ignorées."}
+    ]
+  },
+  {
+    "scene": "fa",
+    "lines": [
+      {"id": "a1", "text": "Regarde maintenant la première fonction. Elle vaut un pour les mintermes zéro, un, trois, quatre, cinq, six et sept.", "tts": "Regarde maintenant la première fonction. Elle vaut un pour les mine-termes zéro, un, trois, quatre, cinq, six et sept."},
+      {"id": "a2", "text": "Autrement dit, elle vaut zéro uniquement sur la ligne deux."},
+      {"id": "a3", "text": "L'idée clé : une table de vérité fait exactement la même chose qu'un multiplexeur."},
+      {"id": "a4", "text": "Les variables choisissent une ligne, et la ligne donne la valeur."},
+      {"id": "a5", "text": "Donc on branche C, B et A sur la sélection, avec C en poids fort."},
+      {"id": "a6", "text": "Puis on recopie la colonne de la fonction sur les huit entrées de données."},
+      {"id": "a7", "text": "Vérifions. C, B, A valent zéro, un, zéro. Ça fait deux."},
+      {"id": "a8", "text": "Le multiplexeur prend l'entrée deux, et la sortie vaut zéro. C'est bien notre fonction."},
+      {"id": "r1", "text": "Avec un multiplexeur quatre vers un, il ne reste que deux entrées de sélection. On y branche C et B."},
+      {"id": "r2", "text": "La variable A, elle, passe du côté des données."},
+      {"id": "r3", "text": "On regroupe donc les lignes deux par deux. Dans chaque paire, C et B sont fixes, et seul A change."},
+      {"id": "r4", "text": "Il n'y a que quatre cas possibles."},
+      {"id": "r5", "text": "Zéro puis zéro : on câble zéro."},
+      {"id": "r6", "text": "Un puis un : on câble un."},
+      {"id": "r7", "text": "Zéro puis un : la fonction copie A, on câble A."},
+      {"id": "r8", "text": "Un puis zéro : c'est l'inverse, on câble non A."},
+      {"id": "r9", "text": "Pour notre fonction, ça donne : un, A, un, et un. Quatre entrées au lieu de huit."}
+    ]
+  },
+  {
+    "scene": "fb",
+    "lines": [
+      {"id": "b1", "text": "Deuxième fonction : mintermes zéro, un, quatre, cinq, six et sept.", "tts": "Deuxième fonction : mine-termes zéro, un, quatre, cinq, six et sept."},
+      {"id": "b2", "text": "Sur le huit vers un, on recopie simplement la colonne."},
+      {"id": "b3", "text": "On regroupe par paires : un, zéro, un, un."},
+      {"id": "b4", "text": "Tiens, A n'apparaît nulle part. La fonction ne dépend que de C et B."},
+      {"id": "b5", "text": "On peut alors aller plus loin, et ne garder que C en sélection."},
+      {"id": "b6", "text": "Quand C vaut zéro, la fonction vaut non B."},
+      {"id": "b7", "text": "Quand C vaut un, elle vaut toujours un."},
+      {"id": "b8", "text": "Un multiplexeur deux vers un suffit."}
+    ]
+  },
+  {
+    "scene": "fc",
+    "lines": [
+      {"id": "c1", "text": "Troisième fonction : mintermes zéro, un, cinq et sept.", "tts": "Troisième fonction : mine-termes zéro, un, cinq et sept."},
+      {"id": "c2", "text": "Par paires, on obtient un, zéro, A, et A."},
+      {"id": "c3", "text": "Et en ne gardant que C : pour C égal zéro, la fonction vaut non B."},
+      {"id": "c4", "text": "Pour C égal un, elle vaut A."},
+      {"id": "c5", "text": "Là encore, un deux vers un suffit."}
+    ]
+  },
+  {
+    "scene": "recap",
+    "lines": [
+      {"id": "z1", "text": "À retenir. Un : écris la table de vérité."},
+      {"id": "z2", "text": "Deux : choisis les variables de sélection, en respectant les poids."},
+      {"id": "z3", "text": "Trois : regroupe les lignes, et compare la fonction à la variable qui reste."},
+      {"id": "z4", "text": "Zéro, un, la variable, ou son inverse."},
+      {"id": "z5", "text": "Et si une variable disparaît, tu peux prendre un multiplexeur plus petit. À toi de jouer."}
+    ]
+  }
+]

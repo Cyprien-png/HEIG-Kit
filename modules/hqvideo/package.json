@@ -1,0 +1,16 @@
+{
+  "name": "heig-kit-hqvideo",
+  "private": true,
+  "description": "HEIG-Kit high quality videos module: React, HTML and SVG scenes rendered to video with Remotion",
+  "type": "module",
+  "dependencies": {
+    "@remotion/bundler": "4.0.543",
+    "@remotion/renderer": "4.0.543",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remotion": "4.0.543"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0"
+  }
+}

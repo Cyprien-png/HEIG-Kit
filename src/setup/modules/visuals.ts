@@ -18,7 +18,7 @@ const TEX_PACKAGES = [
 const PYTHON_VERSIONS = ["3.12", "3.11", "3.13"];
 
 /** A Python 3.11 to 3.13 interpreter, installing Python 3.12 when none is found. */
-function findPython(): string[] {
+export function findPython(): string[] {
   const find = () => {
     for (const version of PYTHON_VERSIONS) {
       if (isWindows) {

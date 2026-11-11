@@ -1,0 +1,1 @@
+Bonjour ! Aujourd'hui, on va regarder ensemble comment réaliser une fonction logique avec un multiplexeur. Tu vas voir, c'est plus simple qu'il n'y paraît.
