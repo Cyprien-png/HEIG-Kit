@@ -29,4 +29,5 @@ tool calls, and answers depend on its quality.
 
 The Docker service `mcp` (port 8765) only exposes the knowledge base tools, for clients that cannot reach your computer.
 
-To host it elsewhere, with an account, isolated rendering and downloads, see [the remote server](server.md).
+To host it elsewhere, for you or a whole class, with accounts, isolated rendering and downloads, see
+[the remote server](server.md) and [its accounts](accounts.md).

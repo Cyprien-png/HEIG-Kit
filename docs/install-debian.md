@@ -71,11 +71,10 @@ openssl rand -hex 32    # for HEIG_JWT_SECRET
 nano .env
 ```
 
-In `.env`, fill your edu-ID credentials (`HEIG_EMAIL`, `HEIG_PASSWORD`) and uncomment the "Remote server" section:
+In `.env`, fill your edu-ID credentials (`HEIG_EMAIL`, `HEIG_PASSWORD`: they index the courses of the shared knowledge
+base) and uncomment the "Remote server" section:
 
 ```sh
-HEIG_AUTH_USERNAME=me
-HEIG_AUTH_PASSWORD=a-long-password-of-yours     # 12 characters at least, not your edu-ID password
 HEIG_JWT_SECRET=<output of openssl rand -hex 32>
 HEIG_PUBLIC_URL=https://heig.example.org
 HEIG_TRUST_PROXY=1
@@ -106,7 +105,16 @@ curl -s http://127.0.0.1:8766/health    # ok
 ```
 
 The `server` image also holds the web application ([app.md](app.md)); once HTTPS is set up (next step), open
-`https://heig.example.org` and log in with `HEIG_AUTH_USERNAME` / `HEIG_AUTH_PASSWORD`.
+`https://heig.example.org`.
+
+Create the accounts, yours first (it is an administrator); each command prints a first password once
+([accounts.md](accounts.md)):
+
+```sh
+npm run users -- add prenom.nom@heig-vd.ch
+```
+
+At the first login the web application makes each person choose a password, then connect their edu-ID account.
 
 ## 8. HTTPS
 

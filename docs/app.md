@@ -23,15 +23,21 @@ each course of the current semester on its exercises, corrected exercises and qu
 today's events), **Calendrier**,
 **Révision** (cards, quizzes, mock exams, courses, library, corrections, profile) and **Études** (study plan with folding years and
 modules, grades grouped by module with the credit-weighted module average and the usual promotion rule, the
-transcript). The cog opens the settings panel: theme, server status, logout. On a desktop the same places form the
+transcript). The cog opens the settings panel: theme, the account (password, edu-ID connection), logout, and for administrators the
+server status and the journal of the accounts ([accounts.md](accounts.md)). On a desktop the same places form the
 sidebar.
 
 ## Authentication
 
-- Browser: `POST /api/auth/login` with the account of `.env` sets an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
-  holding the same JWT as the MCP access token. State-changing requests with a cookie must also carry the header
+- Browser: `POST /api/auth/login` (`{"email", "password"}`) sets an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
+  holding a JWT of the account. `GET /api/auth/me` describes it (`setup`: `password`, `campus` or null);
+  `POST /api/auth/password` and `POST /api/auth/campus` are the two steps of its setup, the second answering `409` with
+  `needs` (`credentials`, `code`, `account_password`) until GAPS accepted the login. Until then every other route
+  answers `403` with `setup`. State-changing requests with a cookie must also carry the header
   `X-Requested-With: heig-kit` (no cross-site form can add it).
-- Agents and the CLI: `Authorization: Bearer <access token>` from `POST /auth/login`, as for MCP.
+- Agents and the CLI: `Authorization: Bearer <access token>` obtained through OAuth ([server.md](server.md)), as for
+  MCP. Every route answers for the account of the token only; shared items carry `createdBy`, `author`, `mine` and
+  `editable`, and creating a similar one answers `409` with `similar` ([accounts.md](accounts.md)).
 - Capture pages (phone): a JWT limited to one correction, for a few hours, in the link of the QR code. It can only
   read and add photos of that correction.
 
@@ -226,7 +232,8 @@ descriptions and the skills tell the AI to redraw a student's sketches and graph
 
 ## Status
 
-`/api/status` reports what the server can check without Docker access: database, embedding service, extraction
+`/api/status` (administrators only; `POST /api/me/sync` lets anyone refresh their own GAPS and Cyberlearn data, and
+`/api/admin/users`, `/api/admin/activity?user=` feed the journal) reports what the server can check without Docker access: database, embedding service, extraction
 service, render worker (last job), edu-ID session and Cyberlearn token, last syncs (`sync_runs`: GAPS, Cyberlearn, the
 Cyberlearn check, and the GitHub repositories the server indexes itself), ingestion (last run,
 documents changed on Cyberlearn but not indexed yet), and the last requests (`request_log`: route, status, tool,
