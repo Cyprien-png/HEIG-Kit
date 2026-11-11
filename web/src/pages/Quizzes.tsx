@@ -72,8 +72,8 @@ export function Quizzes() {
                     {q.description && <p className="text-sm text-ink-2 mt-1 line-clamp-2">{q.description}</p>}
                     {!q.mine && q.author && <p className="text-xs text-ink-3 mt-1">par {q.author}</p>}
                   </div>
-                  {/* A shared quiz is deleted by its author (or an administrator) only. */}
-                  {q.editable !== false && (
+                  {/* A shared quiz is deleted by an administrator only. */}
+                  {q.deletable !== false && (
                     <IconButton label="Supprimer" onClick={() => void remove(q)} className="shrink-0 -mr-2 -mt-1">
                       <TrashIcon className="h-4.5 w-4.5" />
                     </IconButton>

@@ -44,6 +44,8 @@ export function DeckDetail() {
 
   // A shared deck is changed by its author (or an administrator) only; everyone studies it.
   const editable = d.editable !== false;
+  // Deleting takes the deck or the card, and everyone's progress on it, away from the class: administrators only.
+  const deletable = d.deletable !== false;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -77,7 +79,7 @@ export function DeckDetail() {
                   {editable && (
                     <span className="ml-auto flex items-center">
                       <IconButton label="Modifier" className="h-7 w-7" onClick={() => setEditing(c)}><PencilSquareIcon className="h-4 w-4" /></IconButton>
-                      <IconButton label="Supprimer" className="h-7 w-7" onClick={() => void removeCard(c)}><TrashIcon className="h-4 w-4" /></IconButton>
+                      {deletable && <IconButton label="Supprimer" className="h-7 w-7" onClick={() => void removeCard(c)}><TrashIcon className="h-4 w-4" /></IconButton>}
                     </span>
                   )}
                 </div>
@@ -86,12 +88,12 @@ export function DeckDetail() {
           })}
         </div>
       )}
-      {editable ? (
+      {deletable ? (
         <div className="pt-4">
           <Button variant="danger" size="sm" onClick={removeDeck}><TrashIcon className="h-4 w-4" /> Supprimer le paquet</Button>
         </div>
       ) : (
-        <p className="pt-4 text-xs text-ink-3">Paquet partagé{d.author ? ` par ${d.author}` : ""} : vous l'étudiez avec votre propre progression ; seul son auteur le modifie.</p>
+        <p className="pt-4 text-xs text-ink-3">{editable ? "Paquet partagé avec la classe : vous le modifiez, seul un administrateur peut supprimer un paquet ou une carte." : `Paquet partagé${d.author ? ` par ${d.author}` : ""} : vous l'étudiez avec votre propre progression ; seul son auteur le modifie.`}</p>
       )}
       {editing && <CardEditor deckId={d.id} card={editing === "new" ? undefined : editing} onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); void deck.reload(); }} />}
       {editingDeck && <DeckEditor deck={d} onClose={() => setEditingDeck(false)} onSaved={() => { setEditingDeck(false); void deck.reload(); }} />}

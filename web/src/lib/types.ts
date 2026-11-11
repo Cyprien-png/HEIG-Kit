@@ -178,8 +178,10 @@ export interface Authorship {
   author?: string;
   /** Created by the current account. */
   mine?: boolean;
-  /** The current account may change or delete it (its author, or an administrator). */
+  /** The current account may change it (its author, or an administrator). */
   editable?: boolean;
+  /** The current account may delete it (administrators only). */
+  deletable?: boolean;
 }
 
 /** The account of the session (GET /api/auth/me). */

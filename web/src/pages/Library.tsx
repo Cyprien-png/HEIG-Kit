@@ -93,8 +93,8 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
             <Badge>{f.ext.slice(1)}</Badge>
           </button>
         ))}
-        {/* A shared item is deleted by its author (or an administrator) only. */}
-        {item.editable !== false && (
+        {/* A shared item is deleted by an administrator only. */}
+        {item.deletable !== false && (
           <IconButton label="Supprimer" onClick={remove} className="h-7 w-7">
             <TrashIcon className="h-4 w-4" />
           </IconButton>
