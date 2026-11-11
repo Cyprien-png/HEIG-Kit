@@ -10,6 +10,14 @@ effort: medium
 skill needs the `visuals` module: if a command reports that manim is not installed, tell the user to run
 `npm --prefix <root> run setup -- visuals` (one time, installs manim, Python, FFmpeg and LaTeX automatically).
 
+## First, the two questions
+
+A video request that does not already say it starts with two questions, asked together and before anything else
+(`AskUserQuestion` when available): **normal or High quality?** (normal is this skill, manim: fast, the right tool for
+curves, geometry and LaTeX-heavy mathematics; High quality is `heig:hqvideo`: polished typography, cards, circuits,
+tables, a more natural voice, slower to render) and **with or without audio?** Never choose for the user. If they
+chose High quality, follow `heig:hqvideo` instead; if they chose audio, see "Voice" below.
+
 ## Always start from what already exists, in one call
 
 Every round trip costs several seconds: gather everything in **a single Bash call** at the start, before writing
@@ -66,7 +74,8 @@ uses, then call `Write` at once: the scene's steps are decided while writing it 
 ## Voice, only when asked
 
 Videos are silent by default, which is faster. Add a voice only when the user asks for one ("avec une voix", "narré",
-"commenté à l'oral"), or on an existing scene to give it a voice: add the lines, keep the rest. It needs the `voice`
+"commenté à l'oral") or answered "with audio" to the first question, or on an existing scene to give it a voice: add
+the lines, keep the rest. It needs the `voice`
 module: if the command reports that the voice is not installed, tell the user to run
 `npm --prefix <root> run setup -- voice`, and meanwhile render the video silently.
 
