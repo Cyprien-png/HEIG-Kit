@@ -15,7 +15,8 @@ cards live on the remote server when `HEIG_REMOTE_URL` is set, otherwise in the 
 - `npm --prefix <root> run -s cards -- create "<title>" --course <CODE> --file cards.json`: a new deck with its cards.
 - `npm --prefix <root> run -s cards -- add <deck id> --file cards.json`: more cards.
 - `npm --prefix <root> run -s cards -- study [<deck id>]`: what is due now (to quiz the user in the terminal).
-- `cards -- delete-card <id>`, `cards -- delete-deck <id>`.
+- `cards -- delete-card <id>`, `cards -- delete-deck <id>`: only what the user made themselves; a deleted deck is gone
+  for everyone who studied it.
 
 `cards.json` is `{ "cards": [ { "front": "…", "back": "…", "hint": "…", "tags": ["…"], "source": "Cours MAD ch. 1 p. 32" } ] }`,
 Markdown with LaTeX between `$…$` on both faces (`"$|A \\cup B| = |A| + |B| - |A \\cap B|$"`); a face may also hold a
@@ -24,7 +25,14 @@ which the web app renders.
 
 ## Making good cards
 
-1. `cards -- list` first: complete an existing deck on the topic rather than making a second one.
+1. **`cards -- list` first, always** (MCP: `list_decks`; `--mine` / `mine: true` for your own). On a shared server
+   (`HEIG_REMOTE_URL` set, or a remote MCP server) the decks are the whole class's, each with its author, and everyone
+   studies them with their own progress. You MUST NOT create a deck when one already covers the topic: give it to the
+   user (say who made it), and add the missing cards to a deck of theirs. The server refuses a similar deck and lists
+   the existing ones; it only accepts after you read them (`cards -- show <id>`) and call again with
+   `--checked "deck 3,deck 7" --new-because "<what the user needs that each of them lacks>"` (MCP: `checked`,
+   `new_because`). Never invent these to get through, and never change or delete a deck or a card made by someone
+   else (the server refuses it).
 2. Read the course material (`heig:teacher`: `kb -- search`, `kb -- document`) and write 20 to 40 cards per chapter:
    one notion per card; a precise question on the front (a definition to give, a formula to complete, a method to
    state, a trap to spot); a short exact answer on the back; the `source` (document, page) on each card; French.

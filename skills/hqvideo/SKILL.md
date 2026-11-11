@@ -34,6 +34,14 @@ cd <root> && npm run -s generated -- <keywords> ; npm run -s hqvideo -- --where 
 Reuse or adapt an existing video (`<name>.tsx` and `<name>.narration.json` in the videos folder) rather than
 regenerating it. Follow the course's notation and cite the exercise or chapter in the video (`Header` tag).
 
+**On a shared server this is mandatory, not a courtesy.** When `HEIG_REMOTE_URL` is set (or the MCP tools are those of
+a remote server), the library is the whole class's: also run `npm --prefix <root> run -s library -- items` (MCP:
+`list_library`), which names the author of each item. You MUST NOT create an item when one of the class already covers
+the request: give that one to the user and say who made it. The server refuses a similar item and lists the existing
+ones; it only accepts after you read them and call again with `checked` (their references) and `new_because` (what the
+user needs that each of them lacks). Never invent these to get through, never rename a file to dodge the check, and
+never change or delete an item made by someone else (the server refuses it): make your own for what is missing.
+
 ## A video is two files
 
 In the folder printed by `hqvideo -- --where`, with the same descriptive name (no spaces):

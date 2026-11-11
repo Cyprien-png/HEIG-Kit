@@ -45,6 +45,14 @@ uses, then call `Write` at once: the scene's steps are decided while writing it 
 - Adapt an existing Markdown file or scene (edit it, then render again) when the request is a variation of it.
 - Only create a new file when nothing relevant exists.
 
+**On a shared server this is mandatory, not a courtesy.** When `HEIG_REMOTE_URL` is set (or the MCP tools are those of
+a remote server), the library is the whole class's: also run `npm --prefix <root> run -s library -- items` (MCP:
+`list_library`), which names the author of each item. You MUST NOT create an item when one of the class already covers
+the request: give that one to the user and say who made it. The server refuses a similar item and lists the existing
+ones; it only accepts after you read them and call again with `checked` (their references) and `new_because` (what the
+user needs that each of them lacks). Never invent these to get through, never rename a file to dodge the check, and
+never change or delete an item made by someone else (the server refuses it): make your own for what is missing.
+
 ## Steps: one render, opened as soon as it is ready
 
 1. The output folder is the one printed by `video -- --where` above (e.g. `~/Documents/HEIG-Kit/videos`).
