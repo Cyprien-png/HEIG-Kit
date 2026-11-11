@@ -10,6 +10,8 @@ The repository is also the `heig` Claude Code plugin (`.claude-plugin/`), each s
 Follow the `heig:planning` (`skills/planning/SKILL.md`), `heig:deadlines` (`skills/deadlines/SKILL.md`),
 `heig:courses` (`skills/courses/SKILL.md`), `heig:teacher` (`skills/teacher/SKILL.md`, course knowledge base),
 `heig:documents` (`skills/documents/SKILL.md`, PDF/DOCX/HTML), `heig:visuals` (`skills/visuals/SKILL.md`, manim),
+`heig:hqvideo` (`skills/hqvideo/SKILL.md`, High quality videos with Remotion; a video request that does not say it first
+asks: normal or High quality, with or without audio),
 `heig:studies` (`skills/studies/SKILL.md`, study plan and course sheets), `heig:grades` (`skills/grades/SKILL.md`,
 grades and absences), `heig:calendar` (events, exams, overrides), `heig:flashcards` (decks), `heig:quiz` (true/false and QCM quizzes, also aloud), `heig:correct`
 (photographed work, QR code), `heig:past-exams` (scanned tests of former years: import, énoncé and corrigé, corrections)
@@ -17,7 +19,7 @@ and `heig:profile` (weak points, targeted revisions) skills.
 
 ## Modules
 
-HEIG-Kit is a template made of optional modules (campus, knowledge, documents, visuals, voice, shortcuts, claude), installed with
+HEIG-Kit is a template made of optional modules (campus, knowledge, documents, visuals, voice, hqvideo, shortcuts, claude), installed with
 `npm run setup -- <module…>` (`--status` to check them). Each module is defined in `src/setup/modules/<id>.ts` (install and
 check functions) and registered in `src/setup/registry.ts`; system packages go through `src/setup/system.ts` (Homebrew,
 winget, apt, dnf, pacman) so that every module installs on macOS, Linux and Windows. User documentation is in `docs/`;
@@ -66,6 +68,11 @@ Never print or commit the content of `.env` or `.cache/`.
   manim and TinyTeX live in `vendor/` (see `src/vendor.ts`)
 - `modules/voice/`: `synth.py` (Kokoro speech synthesis, in `vendor/kokoro`), `track.ts` (soundtrack from the spoken lines);
   `render.ts --voice` speaks the `self.voice` lines of a `CourseScene` (no effect on silent renders)
+- `modules/hqvideo/`: High quality videos (`npm run hqvideo`, own package.json: Remotion, React): `render.ts` (narration →
+  duration of each line, spoken by `synth.py` with OmniVoice in `vendor/omnivoice` and cached in `.cache/hqvoice`, or read
+  in a silent video; the video file bundled with `entry.tsx`; frames drawn in parallel browser tabs; `--check` renders
+  only the key frames), `timeline.ts` (timing shared by the renderer and the page, tested), `kit/` (`heigkit`: look,
+  `useLines`, `TruthTable`, `Mux`, `Fly`), `voice/reference.wav` (the voice every video clones), `examples/mux.tsx`
 - `scripts/setup.ts`: module installer (`npm run setup`)
 - `scripts/generated.ts`: lists and reopens generated documents and videos (`npm run generated`), checked by the skills
   before creating anything new

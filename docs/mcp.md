@@ -12,7 +12,7 @@ npm run -s mcp -- --http      # http://127.0.0.1:8766/mcp, header "Authorization
 
 The server also gives clients usage instructions and two prompts (`teacher`, `practice_exam`). Tools that need
 GAPS or Cyberlearn accept an `mfa_code` when edu-ID asks for a two-step login code. Features follow the installed
-modules (knowledge base: `knowledge`; documents: `documents`; animations: `visuals`).
+modules (knowledge base: `knowledge`; documents: `documents`; animations: `visuals`; High quality videos: `hqvideo`).
 
 ## Clients
 

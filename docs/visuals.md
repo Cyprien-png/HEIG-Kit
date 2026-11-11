@@ -29,7 +29,8 @@ npm run video -- scene.py MyScene --voice           # with a spoken explanation 
 npm run video -- --where                            # default folder used by the assistant
 ```
 
-Videos are silent unless you ask for a voice: see the optional [`voice`](voice.md) module.
+Videos are silent unless you ask for a voice: see the optional [`voice`](voice.md) module. For explanations with a more
+polished look and a more natural voice, see the [`hqvideo`](hqvideo.md) module; the assistant asks which kind you want.
 
 A scene is first run without rendering (dry run): errors show up in seconds, the layout is checked at the end of every
 animation (texts over each other, a line through a text, something off screen), and the duration of each animation is
