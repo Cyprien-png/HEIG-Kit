@@ -3,7 +3,7 @@ import { authenticate, changePassword, getUser } from "../../accounts/users.js";
 import type { App } from "../app.js";
 import { clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
 import type { Principal, Router } from "./router.js";
-import { HttpError, json, readJson, stringField } from "./util.js";
+import { HttpError, json, readJson, rethrowRefusal, stringField } from "./util.js";
 
 const SETUP = { setup: true };
 
@@ -63,6 +63,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
       try {
         changed = await changePassword(app.db, user, password, key);
       } catch (error) {
+        rethrowRefusal(error);
         throw new HttpError(400, error instanceof Error ? error.message : String(error));
       }
       app.vault.unlock(changed.user.id, changed.vaultKey);
@@ -96,6 +97,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
           mfaCode: stringField(body, "mfa_code", { optional: true, max: 12 })?.replace(/\s+/g, ""),
         });
       } catch (error) {
+        rethrowRefusal(error);
         if (!(error instanceof ConnectError)) throw error;
         const { status, needs } = CONNECT_STATUS[error.problem];
         throw new HttpError(status, error.message, {}, needs ? { needs } : {});

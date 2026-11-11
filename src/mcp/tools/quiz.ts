@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { HeigApi } from "../../app/api.js";
 import { LETTERS, lettersOf, parseChoice, speakResult } from "../../app/quizzes.js";
-import { respond } from "../common.js";
+import { respond, REUSE_RULE, reuseInput, reuseOf } from "../common.js";
 
 const questionSchema = z.object({
   statement: z.string().describe("A statement that is true or false, or the question of a QCM; written to be read aloud: no formula, no symbol the voice cannot say"),
@@ -38,8 +38,10 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
     "list_quizzes",
     {
       title: "Quizzes",
-      description: "The student's quizzes (true/false, QCM or both) with their number of questions and last score; with quiz_id, the full quiz with its answers (never read those aloud during a quiz).",
-      inputSchema: { course: z.string().optional(), quiz_id: z.number().int().optional() },
+      description:
+        "The quizzes of the server (true/false, QCM or both), shared by every account (each says who made it), with their number of questions and the student's own last score; " +
+        "with quiz_id, the full quiz with its answers (never read those aloud during a quiz). Call it before creating a quiz.",
+      inputSchema: { course: z.string().optional(), quiz_id: z.number().int().optional(), mine: z.boolean().optional().describe("Only the quizzes this account created") },
       annotations: { readOnlyHint: true },
     },
     async (a) =>
@@ -51,9 +53,9 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
             .map((q) => `${q.position}. ${q.statement}${q.options ? `\n${q.options.map((o, i) => `   ${LETTERS[i]}. ${o}`).join("\n")}\n   → ${lettersOf(q.correct ?? [])}` : ` → ${q.answer ? "VRAI" : "FAUX"}`}${q.explanation ? ` · ${q.explanation}` : ""}${q.source ? ` (${q.source})` : ""}`)
             .join("\n")}`;
         }
-        const quizzes = await api.quizzes(a.course);
+        const quizzes = (await api.quizzes(a.course)).filter((q) => !a.mine || q.mine);
         if (quizzes.length === 0) return "No quizzes yet. Create one with create_quiz from the course material.";
-        return quizzes.map((q) => `[${q.id}] ${q.course ? `${q.course} · ` : ""}${q.title} (${q.kind === "mcq" ? "QCM" : q.kind === "mixed" ? "vrai/faux et QCM" : "vrai/faux"}): ${q.questions} questions, ${q.attempts} attempt${q.attempts === 1 ? "" : "s"}${q.last ? `, last ${q.last.score}/${q.last.total}` : ""}${q.best ? `, best ${q.best.score}/${q.best.total}` : ""}`).join("\n");
+        return quizzes.map((q) => `[${q.id}] ${q.course ? `${q.course} · ` : ""}${q.title}${q.mine ? "" : q.author ? ` — by ${q.author}` : ""} (${q.kind === "mcq" ? "QCM" : q.kind === "mixed" ? "vrai/faux et QCM" : "vrai/faux"}): ${q.questions} questions, ${q.attempts} attempt${q.attempts === 1 ? "" : "s"}${q.last ? `, last ${q.last.score}/${q.last.total}` : ""}${q.best ? `, best ${q.best.score}/${q.best.total}` : ""}`).join("\n");
       }),
   );
 
@@ -67,12 +69,13 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
         "A QCM question (when the student asks for a QCM, or to vary) has `options` (3 or 4, short) and `correct` (the letters of the right ones; " +
         "several only if the statement says « plusieurs réponses »); wrong options are the course's real pitfalls and the right letter changes from one question to the next. " +
         "Both kinds can be mixed in one quiz. Each question has an explanation and a source. Statements must read well aloud: spell units and symbols out, no LaTeX; a quiz meant for the " +
-        "screen only may use LaTeX, a Markdown table or a small ```mermaid / ```svg figure in a statement.",
+        `screen only may use LaTeX, a Markdown table or a small \`\`\`mermaid / \`\`\`svg figure in a statement. Quizzes are shared: call list_quizzes first. ${REUSE_RULE}`,
       inputSchema: {
         title: z.string(),
         course: z.string().optional().describe("Course code, e.g. RXI"),
         description: z.string().optional().describe("What it covers, e.g. 'Chapitres 2 à 4, quiz de classe'"),
         questions: z.array(questionSchema).min(1),
+        ...reuseInput,
       },
     },
     async (a) =>
@@ -83,7 +86,7 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
           if (correct.length === 0 || correct.some((c) => c < 0 || c >= q.options!.length)) throw new Error(`question ${i + 1}: correct must be letters among ${lettersOf(q.options.map((_, j) => j))}`);
           return { ...q, correct };
         });
-        const quiz = await api.createQuiz({ title: a.title, course: a.course, description: a.description }, questions);
+        const quiz = await api.createQuiz({ title: a.title, course: a.course, description: a.description, reuse: reuseOf(a) }, questions);
         return `Quiz ${quiz.id} "${quiz.title}" created with ${quiz.questionList.length} questions. Start it with start_quiz, or on the web app's Quiz page.`;
       }),
   );

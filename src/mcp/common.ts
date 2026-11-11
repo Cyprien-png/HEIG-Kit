@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 import { type IncomingMessage, createServer } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -79,3 +80,16 @@ export function serveHttp(buildServer: () => Promise<McpServer>, port: number, t
     }
   }).listen(port, host, () => console.error(`HEIG-Kit MCP server on http://${host ?? "0.0.0.0"}:${port}/mcp`));
 }
+
+/** The two inputs every creating tool has: what the caller says when similar items already exist (src/app/reuse.ts). */
+export const reuseInput = {
+  checked: z.array(z.string()).optional().describe("Only after a refusal for similar existing items: the references of those you looked at, as listed in the refusal"),
+  new_because: z.string().optional().describe("Only after such a refusal and only if none of them fits: one sentence saying what the user needs that each of them lacks"),
+};
+
+export const reuseOf = (a: { checked?: string[]; new_because?: string }) => (a.checked || a.new_because ? { checked: a.checked, newBecause: a.new_because } : undefined);
+
+/** Said in the description of every creating tool. */
+export const REUSE_RULE =
+  "What exists is shared and must be reused: the call is refused when a similar item exists, and lists them. Read them and give the user the one that fits; " +
+  "create another only when none does, by calling again with `checked` and `new_because`.";

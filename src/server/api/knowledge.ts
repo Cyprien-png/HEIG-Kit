@@ -3,7 +3,7 @@ import path from "node:path";
 import { LocalKnowledge } from "../../app/knowledge.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { CONTENT_TYPES, HttpError, intParam, readJson, sendFile, stringField } from "./util.js";
+import { CONTENT_TYPES, HttpError, intParam, readJson, rethrowRefusal, sendFile, stringField } from "./util.js";
 
 const DOC_TYPES = new Set(["lecture", "exercises", "solutions", "exam", "lab", "planning", "other"]);
 
@@ -57,6 +57,7 @@ export function registerKnowledgeRoutes(router: Router, app: App): void {
     try {
       return { message: await app.repos.add(stringField(body, "url", { max: 500 })!, stringField(body, "course", { max: 40 })!, stringField(body, "branch", { optional: true, max: 200 }), exclude as string[]) };
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
   });
@@ -67,6 +68,7 @@ export function registerKnowledgeRoutes(router: Router, app: App): void {
     try {
       return { message: await app.repos.remove(address) };
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(/not an indexed/.test(String(error)) ? 404 : 400, error instanceof Error ? error.message : String(error));
     }
   });
@@ -76,6 +78,7 @@ export function registerKnowledgeRoutes(router: Router, app: App): void {
     try {
       return { message: await app.repos.update() };
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(502, error instanceof Error ? error.message : String(error));
     }
   });

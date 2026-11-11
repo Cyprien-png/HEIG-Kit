@@ -2,7 +2,7 @@ import path from "node:path";
 import { deletePastExamFile, listPastExamFiles, listPastExams, pastExamFile, savePastExamFile } from "../../app/pastexams.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { CONTENT_TYPES, HttpError, readBody, sendFile } from "./util.js";
+import { CONTENT_TYPES, HttpError, readBody, rethrowRefusal, sendFile } from "./util.js";
 
 const MAX_UPLOAD_BYTES = 4 * 1024 ** 3;
 const TYPES: Record<string, string> = { ...CONTENT_TYPES, ".md": "text/markdown; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".json": "application/json" };
@@ -30,6 +30,7 @@ export function registerPastExamRoutes(router: Router, app: App): void {
     try {
       return savePastExamFile(params.rest, content, typeof mtime === "string" ? new Date(mtime) : undefined);
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
   });

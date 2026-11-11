@@ -3,6 +3,7 @@
  * on the server and on a stand-alone computer the local database; on a computer connected to a server, its API.
  * Values are JSON-shaped (dates as ISO strings) so that both sides agree.
  */
+import type { ReuseClaim } from "./reuse.js";
 import { readFileSync } from "node:fs";
 import type { Db } from "../rag/db.js";
 import type { RemoteClient } from "../remote/client.js";
@@ -54,7 +55,8 @@ export interface HeigApi {
 
   decks(course?: string): Promise<Deck[]>;
   deck(id: number): Promise<(Deck & { cardList: Card[] }) | undefined>;
-  createDeck(input: { title: string; course?: string; description?: string }, cards?: flashcards.CardInput[]): Promise<Deck>;
+  /** Refused when similar decks exist, unless `reuse` says why another one is needed (src/app/reuse.ts). */
+  createDeck(input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, cards?: flashcards.CardInput[]): Promise<Deck>;
   addCards(deckId: number, cards: flashcards.CardInput[]): Promise<Card[]>;
   updateCard(id: number, patch: Partial<flashcards.CardInput>): Promise<Card | undefined>;
   deleteCard(id: number): Promise<boolean>;
@@ -90,7 +92,8 @@ export interface HeigApi {
 
   quizzes(course?: string): Promise<QuizSummary[]>;
   quiz(id: number): Promise<Quiz | undefined>;
-  createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]): Promise<Quiz>;
+  /** Refused when similar quizzes exist, unless `reuse` says why another one is needed. */
+  createQuiz(input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, questions: quizzes.QuestionInput[]): Promise<Quiz>;
   deleteQuiz(id: number): Promise<boolean>;
   startQuiz(quizId: number, mode?: quizzes.AttemptMode, shuffle?: boolean): Promise<QuizProgress>;
   answerQuiz(attemptId: number, answer: quizzes.QuizAnswerValue, questionId?: number): Promise<QuizAnswered>;
@@ -174,7 +177,7 @@ export class LocalApi implements HeigApi {
   async deck(id: number) {
     return json(await flashcards.getDeck(this.db, id));
   }
-  async createDeck(input: { title: string; course?: string; description?: string }, cards: flashcards.CardInput[] = []) {
+  async createDeck(input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, cards: flashcards.CardInput[] = []) {
     const deck = await flashcards.createDeck(this.db, input);
     const added = await flashcards.addCards(this.db, deck.id, cards);
     return json({ ...deck, cards: added.length, fresh: added.length });
@@ -274,7 +277,7 @@ export class LocalApi implements HeigApi {
   async quiz(id: number) {
     return json(await quizzes.getQuiz(this.db, id));
   }
-  async createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]) {
+  async createQuiz(input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, questions: quizzes.QuestionInput[]) {
     return json(await quizzes.createQuiz(this.db, input, questions));
   }
   deleteQuiz(id: number) {
@@ -367,8 +370,8 @@ export class RemoteApi implements HeigApi {
   async deck(id: number) {
     return this.client.get<Deck & { cardList: Card[] }>(`/api/decks/${id}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
-  createDeck(input: { title: string; course?: string; description?: string }, cards: flashcards.CardInput[] = []) {
-    return this.client.post<Deck>("/api/decks", { ...input, cards });
+  createDeck({ reuse, ...input }: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, cards: flashcards.CardInput[] = []) {
+    return this.client.post<Deck>("/api/decks", { ...input, cards, checked: reuse?.checked, new_because: reuse?.newBecause });
   }
   async addCards(deckId: number, cards: flashcards.CardInput[]) {
     return (await this.client.post<{ cards: Card[] }>(`/api/decks/${deckId}/cards`, { cards })).cards;
@@ -461,8 +464,8 @@ export class RemoteApi implements HeigApi {
   async quiz(id: number) {
     return this.client.get<Quiz>(`/api/quizzes/${id}`).catch((e) => (notFound(e) ? undefined : Promise.reject(e)));
   }
-  createQuiz(input: { title: string; course?: string; description?: string }, questions: quizzes.QuestionInput[]) {
-    return this.client.post<Quiz>("/api/quizzes", { ...input, questions });
+  createQuiz({ reuse, ...input }: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, questions: quizzes.QuestionInput[]) {
+    return this.client.post<Quiz>("/api/quizzes", { ...input, questions, checked: reuse?.checked, new_because: reuse?.newBecause });
   }
   async deleteQuiz(id: number) {
     return this.client.delete(`/api/quizzes/${id}`).then(() => true, (e) => (notFound(e) ? false : Promise.reject(e)));

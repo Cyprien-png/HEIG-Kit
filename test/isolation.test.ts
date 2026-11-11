@@ -76,7 +76,9 @@ test("decks are shared, changed by their author or an administrator, and studied
 
   assert.equal((await runAs(bob, () => listDecks(db!))).length, 1);
   await assert.rejects(runAs(bob, () => addCards(db!, deck.id, [{ front: "x", back: "y" }])), AccessDenied);
-  assert.equal(await runAs(bob, () => deleteDeck(db!, deck.id)), false);
+  await assert.rejects(runAs(bob, () => deleteDeck(db!, deck.id)), AccessDenied);
+  // The database itself leaves the row alone, even for a query that would skip the check above.
+  assert.equal((await runAs(bob, () => db!.query("DELETE FROM decks WHERE id = $1", [deck.id]))).rowCount, 0);
 
   // Bob's reviews do not move Alice's cards.
   await runAs(bob, () => review(db!, card.id, 3));

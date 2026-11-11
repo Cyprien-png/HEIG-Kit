@@ -282,3 +282,34 @@ test("the status and the journal are for administrators; the journal says who as
   assert.equal(mine.status, 200);
   assert.equal(((await mine.json()) as { campus: { state: string } }).campus.state, "ok");
 });
+
+test("shared items over HTTP: the author's name, 403 for someone else's, 409 for a copy", { skip: NO_DB }, async () => {
+  const asLea = { ...(await bearer(lea)), "Content-Type": "application/json" };
+  const asNoe = { ...(await bearer(noe)), "Content-Type": "application/json" };
+  const put = (headers: Record<string, string>, id: string, body: string) => fetch(`${origin}/api/library/files/${id}`, { method: "PUT", headers, body });
+
+  assert.equal((await put(asLea, "documents/RXI-couche-transport.md", "# Couche transport")).status, 200);
+  const taken = await put(asNoe, "documents/RXI-couche-transport.md", "# Écrasé");
+  assert.equal(taken.status, 403);
+  assert.match(((await taken.json()) as { error: string }).error, /created by Lea Premiere/);
+  assert.equal(readFileSync(path.join(base, "out", "documents", "RXI-couche-transport.md"), "utf-8"), "# Couche transport");
+  assert.equal((await put(asNoe, "documents/RXI-couche-transport.pdf", "pdf")).status, 403, "another file of the same item");
+  assert.equal((await fetch(`${origin}/api/library/files/documents/RXI-couche-transport.md`, { method: "DELETE", headers: asNoe })).status, 403);
+  assert.equal((await fetch(`${origin}/api/library/items/document/RXI-couche-transport`, { method: "PATCH", headers: asNoe, body: JSON.stringify({ tags: ["révision"] }) })).status, 403);
+  // Reading is for everyone, with the author's name.
+  assert.equal((await fetch(`${origin}/api/library/files/documents/RXI-couche-transport.md`, { headers: asNoe })).status, 200);
+  const { items } = (await (await fetch(`${origin}/api/library`, { headers: asNoe })).json()) as { items: { name: string; author?: string; mine: boolean; editable: boolean }[] };
+  const item = items.find((i) => i.name === "RXI-couche-transport")!;
+  assert.deepEqual([item.author, item.mine, item.editable], ["Lea Premiere", false, false]);
+
+  const deck = (body: unknown, headers = asNoe) => fetch(`${origin}/api/decks`, { method: "POST", headers, body: JSON.stringify(body) });
+  const first = (await (await deck({ title: "Couche transport", course: "RXI", cards: [{ front: "TCP ?", back: "Fiable" }] }, asLea)).json()) as { id: number };
+  const copy = await deck({ title: "La couche transport", course: "RXI" });
+  assert.equal(copy.status, 409);
+  const refusal = (await copy.json()) as { error: string; similar: { ref: string; author: string }[] };
+  assert.deepEqual(refusal.similar.map((s) => [s.ref, s.author]), [[`deck ${first.id}`, "Lea Premiere"]]);
+  assert.match(refusal.error, /new_because/);
+  assert.equal((await deck({ title: "La couche transport", course: "RXI", checked: [`deck ${first.id}`], new_because: "It has a single card and the user revises the whole chapter." })).status, 200);
+  assert.equal((await fetch(`${origin}/api/decks/${first.id}`, { method: "DELETE", headers: asNoe })).status, 403);
+  assert.equal((await fetch(`${origin}/api/decks/${first.id}/cards`, { method: "POST", headers: asNoe, body: JSON.stringify({ cards: [{ front: "UDP ?", back: "Sans connexion" }] }) })).status, 403);
+});

@@ -16,7 +16,8 @@ import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
 import { type User, identityOf, listUsers } from "../accounts/users.js";
 import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
-import { requireIdentity } from "../identity.js";
+import { adoptLibrary } from "../app/library.js";
+import { LOCAL_OWNER, requireIdentity } from "../identity.js";
 import { captureUrl } from "../app/corrections.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
 import { type CourseRepos, RemoteRepos } from "../app/repos.js";
@@ -78,7 +79,7 @@ const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_gen
   links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
 
 /** How the server exposes files and rendering: on this computer by default. */
-let registerOutputs: (server: McpServer) => void = registerOutputTools;
+let registerOutputs: (server: McpServer) => void = (server) => registerOutputTools(server, study);
 let instructions = INSTRUCTIONS;
 /** Where the GitHub repositories of courses are listed and indexed: here, on the remote server, or the server itself. */
 let repos: { store: CourseRepos; where: "this computer" | "the server" } = { store: localRepos(), where: "this computer" };
@@ -171,10 +172,13 @@ if (values.server) {
   study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id, requireIdentity().id)) });
   if (process.env.HEIG_AUTH_USERNAME || process.env.HEIG_AUTH_PASSWORD) console.error("HEIG_AUTH_USERNAME and HEIG_AUTH_PASSWORD are no longer used: remove them from .env. Accounts are created with `npm run users -- add <email>`.");
   if ((await listUsers(db)).length === 0) console.error("No account yet: nobody can log in. Create the first one (an administrator) with `npm run users -- add prenom.nom@heig-vd.ch`.");
+  // What was generated before the accounts existed belongs to the account that took the installation over.
+  const adopted = await adoptLibrary(db, LOCAL_OWNER.id);
+  if (adopted > 0) console.error(`${adopted} library items without a known author now belong to the first account.`);
   if (config.syncMinutes > 0) app.syncer.start();
   repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;
-  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
+  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes, db);
   createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
 } else if (values.http) {
   const tokenFile = path.join(DATA_DIR, "mcp-token");

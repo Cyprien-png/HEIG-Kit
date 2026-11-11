@@ -1,7 +1,7 @@
 import { RevisionConflict, MAX_SOURCE_BYTES, checkAnnotations, createWorkcopy, deleteWorkcopy, getWorkcopy, listWorkcopies, saveSource, sourceFile, updateWorkcopy } from "../../app/workcopies.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, intParam, json, readBody, readJson, sendFile, stringField } from "./util.js";
+import { HttpError, intParam, json, readBody, readJson, rethrowRefusal, sendFile, stringField } from "./util.js";
 
 const MAX_ANNOTATIONS_BYTES = 16 * 1024 ** 2;
 
@@ -20,6 +20,7 @@ export function registerWorkcopyRoutes(router: Router, app: App): void {
         pageCount: typeof body.pageCount === "number" ? body.pageCount : undefined,
       });
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
   });
@@ -36,6 +37,7 @@ export function registerWorkcopyRoutes(router: Router, app: App): void {
       if (!copy) throw new HttpError(404, "no such copy");
       return copy;
     } catch (error) {
+      rethrowRefusal(error);
       if (error instanceof HttpError) throw error;
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
@@ -69,6 +71,7 @@ export function registerWorkcopyRoutes(router: Router, app: App): void {
       if (!copy) throw new HttpError(404, "no such copy");
       return copy;
     } catch (error) {
+      rethrowRefusal(error);
       if (error instanceof RevisionConflict) {
         json(res, 409, { error: error.message, current: error.current });
         return undefined;

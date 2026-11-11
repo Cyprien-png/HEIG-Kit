@@ -29,13 +29,16 @@ export interface JobRecord {
   log: string;
   /** The worker's key frames were kept. */
   frames: boolean;
+  /** The account that asked for it: the only one, with the administrators, that reads its result. */
+  userId?: number;
 }
 
 export const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** File names accepted back from the worker. */
 const SAFE_NAME = /^[\p{L}\p{N}_-][\p{L}\p{N}._-]*$/u;
 const ALLOWED = { document: new Set([".pdf", ".docx", ".html"]), animation: new Set([".mp4", ".mov", ".gif"]), hqvideo: new Set([".mp4"]) };
-const MAX_ACTIVE = 3;
+const MAX_ACTIVE = 6;
+const MAX_ACTIVE_PER_ACCOUNT = 2;
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4 * 1024 ** 3;
 const MAX_STATUS_BYTES = 256 * 1024;
@@ -86,9 +89,12 @@ export class JobQueue {
    * The source is saved in the output folder, so that list_generated finds it; the job appears atomically to the worker.
    * `extra`: other files of the source, saved next to it (the narration of a high quality video).
    */
-  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = [], extra: { name: string; content: string }[] = []): JobRecord {
-    if (this.all().filter((r) => r.state === "queued" || r.state === "running").length >= MAX_ACTIVE) {
-      throw new Error("Too many renderings are already waiting: try again when one has finished (get_job)");
+  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = [], extra: { name: string; content: string }[] = [], userId?: number): JobRecord {
+    const active = this.all().filter((r) => r.state === "queued" || r.state === "running");
+    if (active.length >= MAX_ACTIVE) throw new Error("Too many renderings are already waiting: try again when one has finished (get_job)");
+    // On a shared server nobody fills the queue alone.
+    if (userId !== undefined && active.filter((r) => r.userId === userId).length >= MAX_ACTIVE_PER_ACCOUNT) {
+      throw new Error("You already have renderings waiting: follow them with get_job before asking for another one");
     }
     const id = randomUUID();
     const kind = request.kind === "document" ? "documents" : "videos";
@@ -108,7 +114,7 @@ export class JobQueue {
       for (const video of videos) copyFileSync(video, path.join(copies, path.basename(video)));
     }
     writeFileSync(path.join(temp, "request.json"), JSON.stringify({ ...request, source: `input/${kind}/${sourceName}` }));
-    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false };
+    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false, userId };
     this.save(record);
     renameSync(temp, path.join(this.jobsDir, id));
     return record;

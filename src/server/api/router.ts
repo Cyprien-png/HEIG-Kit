@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { User } from "../../accounts/users.js";
+import { AlreadyExists } from "../../app/reuse.js";
 import { AccessDenied } from "../../identity.js";
 import { HttpError, json } from "./util.js";
 
@@ -122,6 +123,8 @@ export async function runRoute(route: Route, ctx: RouteContext): Promise<void> {
     if (error instanceof HttpError) return void json(ctx.res, error.status, { error: error.message, ...error.details }, error.headers);
     // What belongs to another account is refused out loud, whatever the route.
     if (error instanceof AccessDenied) return void json(ctx.res, 403, { error: error.message });
+    // A creation that looks like existing items: the caller reads them, then says why another one is needed.
+    if (error instanceof AlreadyExists) return void json(ctx.res, 409, { error: error.message, similar: error.similar });
     console.error(error);
     json(ctx.res, 500, { error: "internal error" });
   }

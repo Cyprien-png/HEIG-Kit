@@ -263,10 +263,13 @@ test("a job whose status is a link or has no usable file fails, and the queue is
   writeFileSync(path.join(jobs, job.id, "status.json"), JSON.stringify({ state: "done", files: ["nothing.mp4"] }));
   assert.equal(queue.get(job.id)?.state, "failed");
 
-  queue.submit({ kind: "document", name: "a", formats: ["pdf"] }, "a.md", "");
-  queue.submit({ kind: "document", name: "b", formats: ["pdf"] }, "b.md", "");
-  queue.submit({ kind: "document", name: "c", formats: ["pdf"] }, "c.md", "");
-  assert.throws(() => queue.submit({ kind: "document", name: "d", formats: ["pdf"] }, "d.md", ""), /Too many/);
+  // One account cannot fill the queue alone, and the queue itself is bounded.
+  const doc = (name: string, userId?: number) => queue.submit({ kind: "document", name, formats: ["pdf"] }, `${name}.md`, "", [], [], userId);
+  assert.equal(doc("a", 7).userId, 7);
+  doc("b", 7);
+  assert.throws(() => doc("c", 7), /already have renderings/);
+  for (const [name, userId] of [["c", 8], ["d", 8], ["e", 9], ["f", 9]] as const) doc(name, userId);
+  assert.throws(() => doc("g", 10), /Too many/);
 });
 
 test("a high quality video is queued with its narration, and its check succeeds with key frames only", () => {

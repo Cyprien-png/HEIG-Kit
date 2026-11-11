@@ -27,6 +27,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import QRCode from "qrcode";
 import { type HeigApi, LocalApi, RemoteApi } from "../src/app/api.js";
+import { reuseClaim } from "../src/app/reuse.js";
 import { chapterLabel, formatProfile, profileSince } from "../src/app/profile.js";
 import { LETTERS, type QuestionInput, lettersOf, parseChoice } from "../src/app/quizzes.js";
 import { TIME_ZONE } from "../src/dates.js";
@@ -67,6 +68,9 @@ const { values, positionals } = parseArgs({
     "no-profile": { type: "boolean" },
     profile: { type: "boolean" },
     since: { type: "string" },
+    // After a refusal for similar existing decks or quizzes: those looked at (comma separated) and why another is needed.
+    checked: { type: "string" },
+    "new-because": { type: "string" },
   },
 });
 
@@ -225,7 +229,7 @@ async function cards(api: HeigApi): Promise<void> {
     case "create": {
       if (!rest[0]) throw new Error('Usage: npm run cards -- create "Title" --course MAD --file cards.json');
       const list = readJsonFile<{ cards?: unknown[] } | unknown[]>(values.file, "cards");
-      const deck = await api.createDeck({ title: rest[0], course: values.course, description: values.details }, (Array.isArray(list) ? list : (list.cards ?? [])) as never);
+      const deck = await api.createDeck({ title: rest[0], course: values.course, description: values.details, reuse: reuseClaim(values.checked, values["new-because"]) }, (Array.isArray(list) ? list : (list.cards ?? [])) as never);
       return out(`Deck ${deck.id} "${deck.title}" created with ${deck.cards} cards.`);
     }
     case "add": {
@@ -372,7 +376,7 @@ async function quiz(api: HeigApi): Promise<void> {
     }
     case "create": {
       const plan = readJsonFile<{ title: string; course?: string; description?: string; questions: QuestionInput[] }>(values.file, "quiz");
-      const q = await api.createQuiz({ title: plan.title, course: plan.course ?? values.course, description: plan.description }, plan.questions);
+      const q = await api.createQuiz({ title: plan.title, course: plan.course ?? values.course, description: plan.description, reuse: reuseClaim(values.checked, values["new-because"]) }, plan.questions);
       return out(`Quiz ${q.id} "${q.title}" created with ${q.questionList.length} questions.`);
     }
     case "play": {

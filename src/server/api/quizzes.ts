@@ -1,7 +1,8 @@
 import { type AttemptMode, LETTERS, type QuestionInput, answerQuestion, attemptResult, createQuiz, deleteQuiz, finishAttempt, getQuiz, listAttempts, listQuizzes, startAttempt } from "../../app/quizzes.js";
+import { reuseClaim } from "../../app/reuse.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, intParam, readJson, stringField } from "./util.js";
+import { HttpError, intParam, readJson, rethrowRefusal, stringField } from "./util.js";
 
 const MAX_QUESTIONS = 200;
 const MODES: AttemptMode[] = ["web", "voice", "cli"];
@@ -44,6 +45,7 @@ async function domain<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
+    rethrowRefusal(error);
     const message = error instanceof Error ? error.message : String(error);
     throw new HttpError(/^No (quiz|attempt|question)/.test(message) ? 404 : 400, message);
   }
@@ -59,7 +61,7 @@ export function registerQuizRoutes(router: Router, app: App): void {
     return domain(() =>
       createQuiz(
         app.db,
-        { title: stringField(body, "title", { max: 200 })!, course: stringField(body, "course", { optional: true, max: 40 }), description: stringField(body, "description", { optional: true, max: 2000 }) },
+        { title: stringField(body, "title", { max: 200 })!, course: stringField(body, "course", { optional: true, max: 40 }), description: stringField(body, "description", { optional: true, max: 2000 }), reuse: reuseClaim(body.checked, body.new_because) },
         questions.map(questionFrom),
       ),
     );
