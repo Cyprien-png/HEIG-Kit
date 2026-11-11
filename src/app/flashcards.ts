@@ -199,7 +199,7 @@ export async function review(db: Db, cardId: number, grade: Grade): Promise<Card
   const next = schedule(card.state, grade);
   await db.query(
     `INSERT INTO card_state (card_id, due_at, interval_days, ease, reps, lapses, last_grade, reviewed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (card_id) DO UPDATE SET due_at = EXCLUDED.due_at, interval_days = EXCLUDED.interval_days, ease = EXCLUDED.ease,
+     ON CONFLICT (user_id, card_id) DO UPDATE SET due_at = EXCLUDED.due_at, interval_days = EXCLUDED.interval_days, ease = EXCLUDED.ease,
        reps = EXCLUDED.reps, lapses = EXCLUDED.lapses, last_grade = EXCLUDED.last_grade, reviewed_at = EXCLUDED.reviewed_at`,
     [cardId, next.dueAt, next.intervalDays, next.ease, next.reps, next.lapses, grade, next.reviewedAt],
   );

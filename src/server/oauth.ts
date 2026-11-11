@@ -132,7 +132,7 @@ export class OAuth {
   // Clients
 
   async client(id: string): Promise<OAuthClient | undefined> {
-    const { rows } = await this.app.db.query<{ id: string; name: string; redirect_uris: string[]; secret_hash: string | null }>("SELECT id, name, redirect_uris, secret_hash FROM oauth_clients WHERE id = $1", [id]);
+    const { rows } = await this.app.db.system.query<{ id: string; name: string; redirect_uris: string[]; secret_hash: string | null }>("SELECT id, name, redirect_uris, secret_hash FROM oauth_clients WHERE id = $1", [id]);
     return rows[0] ? { id: rows[0].id, name: rows[0].name, redirectUris: rows[0].redirect_uris, secretHash: rows[0].secret_hash ?? undefined } : undefined;
   }
 
@@ -155,12 +155,12 @@ export class OAuth {
     if (!["none", "client_secret_post", "client_secret_basic"].includes(authMethod as string)) throw new OAuthError("invalid_client_metadata", "unsupported token_endpoint_auth_method");
     const grants = Array.isArray(body.grant_types) ? body.grant_types : ["authorization_code"];
     if (!grants.every((g) => g === "authorization_code" || g === "refresh_token")) throw new OAuthError("invalid_client_metadata", "only authorization_code and refresh_token are supported");
-    const { rows } = await this.app.db.query<{ n: string }>("SELECT count(*) AS n FROM oauth_clients");
+    const { rows } = await this.app.db.system.query<{ n: string }>("SELECT count(*) AS n FROM oauth_clients");
     if (Number(rows[0].n) >= MAX_CLIENTS) throw new OAuthError("too_many_clients", "too many registered clients", 429);
 
     const id = secret();
     const clientSecret = authMethod === "none" ? undefined : secret();
-    await this.app.db.query("INSERT INTO oauth_clients (id, name, redirect_uris, secret_hash) VALUES ($1, $2, $3, $4)", [id, name, JSON.stringify(uris), clientSecret ? sha256(clientSecret) : null]);
+    await this.app.db.system.query("INSERT INTO oauth_clients (id, name, redirect_uris, secret_hash) VALUES ($1, $2, $3, $4)", [id, name, JSON.stringify(uris), clientSecret ? sha256(clientSecret) : null]);
     console.error(`OAuth client registered: ${name} (${(uris as string[]).join(", ")})`);
     json(
       res,
@@ -247,7 +247,7 @@ export class OAuth {
     }
     this.app.limiter.succeed(client);
     const code = secret();
-    await this.app.db.query("INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6)", [
+    await this.app.db.system.query("INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6)", [
       sha256(code),
       request.client.id,
       request.redirectUri,
@@ -282,7 +282,7 @@ export class OAuth {
     let scope: string | undefined;
     if (grant === "authorization_code") {
       const code = form.get("code") ?? "";
-      const { rows } = await this.app.db.query<{ client_id: string; redirect_uri: string; code_challenge: string; scope: string | null; expires_at: Date; used_at: Date | null }>(
+      const { rows } = await this.app.db.system.query<{ client_id: string; redirect_uri: string; code_challenge: string; scope: string | null; expires_at: Date; used_at: Date | null }>(
         "UPDATE oauth_codes SET used_at = now() WHERE code_hash = $1 AND used_at IS NULL RETURNING client_id, redirect_uri, code_challenge, scope, expires_at, used_at",
         [sha256(code)],
       );
@@ -293,17 +293,17 @@ export class OAuth {
       scope = row.scope ?? undefined;
     } else if (grant === "refresh_token") {
       const presented = form.get("refresh_token") ?? "";
-      const { rows } = await this.app.db.query<{ client_id: string; scope: string | null; expires_at: Date; revoked_at: Date | null }>("SELECT client_id, scope, expires_at, revoked_at FROM oauth_refresh_tokens WHERE token_hash = $1", [sha256(presented)]);
+      const { rows } = await this.app.db.system.query<{ client_id: string; scope: string | null; expires_at: Date; revoked_at: Date | null }>("SELECT client_id, scope, expires_at, revoked_at FROM oauth_refresh_tokens WHERE token_hash = $1", [sha256(presented)]);
       const row = rows[0];
       if (!row || row.client_id !== client.id) throw new OAuthError("invalid_grant", "unknown refresh token");
       if (row.revoked_at) {
         // A rotated token presented again means it leaked: everything of this client is revoked.
-        await this.app.db.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND revoked_at IS NULL", [client.id]);
+        await this.app.db.system.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND revoked_at IS NULL", [client.id]);
         console.error(`OAuth refresh token reused by client ${client.name}: its tokens are revoked`);
         throw new OAuthError("invalid_grant", "refresh token already used");
       }
       if (row.expires_at < new Date()) throw new OAuthError("invalid_grant", "refresh token expired");
-      await this.app.db.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE token_hash = $1", [sha256(presented)]);
+      await this.app.db.system.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE token_hash = $1", [sha256(presented)]);
       scope = row.scope ?? undefined;
     } else {
       throw new OAuthError("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
@@ -311,9 +311,9 @@ export class OAuth {
 
     const { token, expiresAt } = await this.app.auth.issueToken(ACCESS_DAYS);
     const refresh = secret();
-    await this.app.db.query("INSERT INTO oauth_refresh_tokens (token_hash, client_id, scope, expires_at) VALUES ($1, $2, $3, $4)", [sha256(refresh), client.id, scope ?? null, new Date(Date.now() + this.app.config.tokenDays * 86_400_000)]);
-    await this.app.db.query("UPDATE oauth_clients SET last_used_at = now() WHERE id = $1", [client.id]);
-    await this.app.db.query("DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'");
+    await this.app.db.system.query("INSERT INTO oauth_refresh_tokens (token_hash, client_id, scope, expires_at) VALUES ($1, $2, $3, $4)", [sha256(refresh), client.id, scope ?? null, new Date(Date.now() + this.app.config.tokenDays * 86_400_000)]);
+    await this.app.db.system.query("UPDATE oauth_clients SET last_used_at = now() WHERE id = $1", [client.id]);
+    await this.app.db.system.query("DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'");
     json(res, 200, { access_token: token, token_type: "Bearer", expires_in: Math.floor((expiresAt.getTime() - Date.now()) / 1000), refresh_token: refresh, ...(scope ? { scope } : {}) }, NO_STORE);
     return undefined;
   }

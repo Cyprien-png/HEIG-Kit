@@ -124,7 +124,7 @@ export async function collectStatus(deps: StatusDeps): Promise<StatusReport> {
 }
 
 async function lastOkRuns(db: Db): Promise<Record<string, Date>> {
-  const { rows } = await db.query("SELECT kind, max(finished_at) AS at FROM sync_runs WHERE ok GROUP BY kind");
+  const { rows } = await db.system.query("SELECT kind, max(finished_at) AS at FROM sync_runs WHERE ok GROUP BY kind");
   return Object.fromEntries(rows.map((r) => [r.kind, r.at]));
 }
 

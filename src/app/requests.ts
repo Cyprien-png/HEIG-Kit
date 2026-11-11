@@ -33,7 +33,7 @@ export class RequestLog {
     this.pending = [];
     if (batch.length === 0) return;
     try {
-      await this.db.query(
+      await this.db.system.query(
         `INSERT INTO request_log (at, client, method, path, status, ms, tool, note)
          SELECT * FROM unnest($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::text[])`,
         [
@@ -54,12 +54,12 @@ export class RequestLog {
   }
 
   async prune(): Promise<void> {
-    await this.db.query("DELETE FROM request_log WHERE at < now() - make_interval(days => $1)", [KEEP_DAYS]);
-    await this.db.query("DELETE FROM request_log WHERE id < (SELECT coalesce(max(id), 0) - $1 FROM request_log)", [MAX_ROWS]);
+    await this.db.system.query("DELETE FROM request_log WHERE at < now() - make_interval(days => $1)", [KEEP_DAYS]);
+    await this.db.system.query("DELETE FROM request_log WHERE id < (SELECT coalesce(max(id), 0) - $1 FROM request_log)", [MAX_ROWS]);
   }
 
   async recent(limit = 100): Promise<RequestEntry[]> {
-    const { rows } = await this.db.query(
+    const { rows } = await this.db.system.query(
       "SELECT at, client, method, path, status, ms, tool, note FROM request_log ORDER BY at DESC LIMIT $1",
       [limit],
     );
@@ -68,7 +68,7 @@ export class RequestLog {
 
   /** Requests of the last 24 hours in numbers, for the status page. */
   async summary(): Promise<{ total: number; errors: number; unauthorized: number; lastUnauthorizedAt?: Date; lastMcpAt?: Date }> {
-    const { rows } = await this.db.query(
+    const { rows } = await this.db.system.query(
       `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE status >= 500)::int AS errors,
               count(*) FILTER (WHERE status = 401 AND note = 'invalid token')::int AS unauthorized,

@@ -125,7 +125,7 @@ export class Syncer {
   }
 
   private async run(kind: RunKind, work: () => Promise<Record<string, unknown>>): Promise<SyncRun> {
-    const { rows } = await this.db.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind) VALUES ($1) RETURNING id, started_at", [kind]);
+    const { rows } = await this.db.system.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind) VALUES ($1) RETURNING id, started_at", [kind]);
     const id = Number(rows[0].id);
     let ok = false;
     let message: string | undefined;
@@ -142,7 +142,7 @@ export class Syncer {
       }
       this.log(`Sync ${kind} failed: ${message}`);
     }
-    await this.db.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
+    await this.db.system.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
     return { id, kind, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
   }
 
@@ -253,12 +253,12 @@ export class Syncer {
 
 /** Last run of each kind. */
 export async function lastRuns(db: Db): Promise<SyncRun[]> {
-  const { rows } = await db.query("SELECT DISTINCT ON (kind) * FROM sync_runs ORDER BY kind, started_at DESC");
+  const { rows } = await db.system.query("SELECT DISTINCT ON (kind) * FROM sync_runs ORDER BY kind, started_at DESC");
   return rows.map(toRun);
 }
 
 export async function recentRuns(db: Db, limit = 30): Promise<SyncRun[]> {
-  const { rows } = await db.query("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT $1", [limit]);
+  const { rows } = await db.system.query("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT $1", [limit]);
   return rows.map(toRun);
 }
 
