@@ -1,4 +1,5 @@
 import { type CorrectionState, addPhoto, captureUrl, createCorrection, deleteCorrection, deletePhoto, getCorrection, listCorrections, markSent, photoFile, reorderPhotos, replacePhoto, submitResult, updateCorrection } from "../../app/corrections.js";
+import { requireIdentity } from "../../identity.js";
 import type { App } from "../app.js";
 import type { Principal, Router } from "./router.js";
 import { HttpError, intParam, readBody, readJson, sendFile, stringField } from "./util.js";
@@ -44,7 +45,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
-    const token = await app.auth.issueCaptureToken(correction.id);
+    const token = await app.auth.issueCaptureToken(correction.id, requireIdentity().id);
     return { ...correction, captureUrl: captureUrl(app.config.publicUrl, correction.id, token) };
   });
 
@@ -61,7 +62,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     const correction = await getCorrection(app.db, params.id);
     if (!correction) throw new HttpError(404, "no such correction");
     if (correction.state === "corrected") throw new HttpError(409, "this correction is done");
-    return { captureUrl: captureUrl(app.config.publicUrl, correction.id, await app.auth.issueCaptureToken(correction.id)) };
+    return { captureUrl: captureUrl(app.config.publicUrl, correction.id, await app.auth.issueCaptureToken(correction.id, requireIdentity().id)) };
   });
 
   router.patch("/api/corrections/:id", async ({ req, params }) => {

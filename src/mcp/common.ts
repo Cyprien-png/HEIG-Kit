@@ -3,8 +3,20 @@ import { type IncomingMessage, createServer } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { MfaRequiredError } from "../auth/eduid.js";
+import { type Identity, runAs } from "../identity.js";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+
+/**
+ * Makes every tool registered on `server` from now on run as `identity`: on the shared server, a server is built for
+ * each request with the account of its token, and its tools can act as no other.
+ */
+export function bindTools(server: McpServer, identity: Identity): McpServer {
+  const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
+  (server as { registerTool: unknown }).registerTool = (name: unknown, config: unknown, handler: (...args: unknown[]) => unknown) =>
+    register(name, config, (...args: unknown[]) => runAs(identity, () => handler(...args)));
+  return server;
+}
 
 /** Runs a tool, turning its result into text content and its errors into readable error results for the model. */
 export async function respond(run: () => Promise<string>): Promise<ToolResult> {

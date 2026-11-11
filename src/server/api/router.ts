@@ -1,8 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { User } from "../../accounts/users.js";
+import { AccessDenied } from "../../identity.js";
 import { HttpError, json } from "./util.js";
 
-/** Who is calling: the browser (cookie), an agent or the CLI (bearer token), or a phone capturing photos. */
-export type Principal = { kind: "cookie" } | { kind: "bearer" } | { kind: "capture"; correctionId: string };
+/**
+ * Who is calling: an account from its browser (cookie) or through an agent or the CLI (bearer token), or a phone
+ * capturing photos for one correction of one account. The account always comes from the token, never from the request.
+ */
+export type Principal =
+  | { kind: "cookie"; user: User; token: string }
+  | { kind: "bearer"; user: User; token: string }
+  | { kind: "capture"; correctionId: string; userId: number };
 
 export interface RouteContext {
   req: IncomingMessage;
@@ -22,6 +30,10 @@ export interface RouteOptions {
   allow?: Principal["kind"][];
   /** No authentication at all (login, health). */
   public?: boolean;
+  /** Administrators only. */
+  admin?: boolean;
+  /** Usable by an account that has not finished its setup (first password, edu-ID): the routes of the setup itself. */
+  setup?: boolean;
 }
 
 interface Route {
@@ -107,7 +119,9 @@ export async function runRoute(route: Route, ctx: RouteContext): Promise<void> {
     json(ctx.res, 200, result);
   } catch (error) {
     if (ctx.res.headersSent) return void ctx.res.destroy();
-    if (error instanceof HttpError) return void json(ctx.res, error.status, { error: error.message }, error.headers);
+    if (error instanceof HttpError) return void json(ctx.res, error.status, { error: error.message, ...error.details }, error.headers);
+    // What belongs to another account is refused out loud, whatever the route.
+    if (error instanceof AccessDenied) return void json(ctx.res, 403, { error: error.message });
     console.error(error);
     json(ctx.res, 500, { error: "internal error" });
   }

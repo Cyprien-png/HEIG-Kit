@@ -4,7 +4,7 @@
  *
  *   npm run -s mcp                 stdio (Claude Desktop, Claude Code, mcpo for Open WebUI…)
  *   npm run -s mcp -- --http       Streamable HTTP on http://127.0.0.1:8766/mcp, with the token of data/mcp-token
- *   npm run -s server              remote server: account and tokens from .env, isolated rendering, downloads (docs/server.md)
+ *   npm run -s server              shared remote server: accounts (npm run users), isolated rendering, downloads (docs/server.md)
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -14,7 +14,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
+import { type User, identityOf, listUsers } from "../accounts/users.js";
 import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
+import { requireIdentity } from "../identity.js";
 import { captureUrl } from "../app/corrections.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
 import { type CourseRepos, RemoteRepos } from "../app/repos.js";
@@ -24,7 +26,7 @@ import { createApp } from "../server/app.js";
 import { loadServerConfig } from "../server/config.js";
 import { createRemoteServer } from "../server/http.js";
 import { JobQueue } from "../server/jobs.js";
-import { serveHttp } from "./common.js";
+import { bindTools, serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerLibraryTools } from "./tools/library.js";
@@ -81,8 +83,10 @@ let instructions = INSTRUCTIONS;
 /** Where the GitHub repositories of courses are listed and indexed: here, on the remote server, or the server itself. */
 let repos: { store: CourseRepos; where: "this computer" | "the server" } = { store: localRepos(), where: "this computer" };
 
-async function buildServer(): Promise<McpServer> {
+/** The server of one MCP session; on the shared server, of one request and of the account of its token. */
+async function buildServer(user?: User): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
+  if (user) bindTools(server, identityOf(user));
   registerCampusTools(server);
   await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
@@ -163,7 +167,10 @@ if (values.server) {
   if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
   const app = createApp(config, db, queue);
   knowledge = new LocalKnowledge(db);
-  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
+  // One API for every account: each call works on the rows of the account its request runs as (src/rag/db.ts).
+  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id, requireIdentity().id)) });
+  if (process.env.HEIG_AUTH_USERNAME || process.env.HEIG_AUTH_PASSWORD) console.error("HEIG_AUTH_USERNAME and HEIG_AUTH_PASSWORD are no longer used: remove them from .env. Accounts are created with `npm run users -- add <email>`.");
+  if ((await listUsers(db)).length === 0) console.error("No account yet: nobody can log in. Create the first one (an administrator) with `npm run users -- add prenom.nom@heig-vd.ch`.");
   if (config.syncMinutes > 0) app.syncer.start();
   repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;

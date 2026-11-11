@@ -7,6 +7,8 @@ export class HttpError extends Error {
     readonly status: number,
     message: string,
     readonly headers: Record<string, string> = {},
+    /** Other fields of the JSON answer, next to `error`. */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
   }

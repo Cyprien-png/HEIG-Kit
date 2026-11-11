@@ -9,24 +9,34 @@ import { createApp } from "../src/server/app.js";
 import { loadServerConfig } from "../src/server/config.js";
 import { createRemoteServer } from "../src/server/http.js";
 import { pkceMatches, validRedirectUri } from "../src/server/oauth.js";
+import { authenticate, changePassword } from "../src/accounts/users.js";
+import { FAST, type TestAccount, newAccount, readyAccount } from "./helpers/accounts.js";
 import { testDb } from "./helpers/db.js";
 
 const db = await testDb("heigkit_test_oauth");
 after(async () => db?.end());
 process.env.HEIG_WEB_DIR = "/nonexistent-web-dir";
-const ENV = { HEIG_AUTH_USERNAME: "me", HEIG_AUTH_PASSWORD: "correct-horse-battery", HEIG_JWT_SECRET: "x".repeat(40), HEIG_PUBLIC_URL: "http://127.0.0.1", HEIG_SYNC_MINUTES: "0" };
+const ENV = { HEIG_JWT_SECRET: "0123456789abcdef".repeat(3), HEIG_PUBLIC_URL: "http://127.0.0.1", HEIG_SYNC_MINUTES: "0" };
+let lea: TestAccount;
+let noe: TestAccount;
+let fresh: TestAccount;
+let auth: Auth;
 let server: Server;
 let origin: string;
 
 before(async () => {
   if (!db) return;
+  lea = await readyAccount(db, "lea.premiere@heig-vd.ch");
+  noe = await readyAccount(db, "noe.second@heig-vd.ch");
+  fresh = await newAccount(db, "ada.nouvelle@heig-vd.ch");
   const config = loadServerConfig(ENV);
-  const probe = createRemoteServer(createApp(config, db, undefined, new Auth(config)), async () => new McpServer({ name: "t", version: "1" }));
+  const probe = createRemoteServer(createApp(config, db, undefined, { auth: new Auth(config) }), async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
   const port = (probe.address() as AddressInfo).port;
   probe.close();
   origin = `http://127.0.0.1:${port}`;
-  server = createRemoteServer(createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, new Auth(config)), async () => new McpServer({ name: "t", version: "1" }));
+  auth = new Auth(config);
+  server = createRemoteServer(createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, { auth }), async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 });
 after(() => server?.close());
@@ -71,9 +81,10 @@ test("the OAuth flow: metadata, registration, login page, code with PKCE, tokens
   assert.match(pageRes.headers.get("content-security-policy") ?? "", /form-action 'self' https:/, "the redirect to the client's callback must be allowed by the CSP");
   assert.equal((await fetch(`${meta.authorization_endpoint}?${new URLSearchParams({ ...Object.fromEntries(query), redirect_uri: "https://evil.example/cb" })}`)).status, 400);
 
-  const submit = (password: string) => fetch(meta.authorization_endpoint, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...Object.fromEntries(query), username: "me", password }) });
+  const submit = (password: string, account = lea) => fetch(meta.authorization_endpoint, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...Object.fromEntries(query), email: account.email, password }) });
   assert.equal((await submit("wrong")).status, 401);
-  const ok = await submit(ENV.HEIG_AUTH_PASSWORD);
+  assert.equal((await submit(noe.password)).status, 401, "the password of another account");
+  const ok = await submit(lea.password);
   assert.equal(ok.status, 302);
   const location = new URL(ok.headers.get("location")!);
   assert.equal(location.origin + location.pathname, redirect);
@@ -83,7 +94,7 @@ test("the OAuth flow: metadata, registration, login page, code with PKCE, tokens
   const tokenReq = (body: Record<string, string>) => fetch(meta.token_endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body) });
   assert.equal((await tokenReq({ grant_type: "authorization_code", code, client_id, redirect_uri: redirect, code_verifier: "wrong-verifier-wrong-verifier-wrong-verifier-wrong" })).status, 400);
   // The code was consumed by the failed attempt: get a fresh one.
-  const code2 = new URL((await submit(ENV.HEIG_AUTH_PASSWORD)).headers.get("location")!).searchParams.get("code")!;
+  const code2 = new URL((await submit(lea.password)).headers.get("location")!).searchParams.get("code")!;
   const tokens = await tokenReq({ grant_type: "authorization_code", code: code2, client_id, redirect_uri: redirect, code_verifier: verifier });
   assert.equal(tokens.status, 200);
   const { access_token, refresh_token, expires_in } = (await tokens.json()) as { access_token: string; refresh_token: string; expires_in: number };
@@ -99,4 +110,52 @@ test("the OAuth flow: metadata, registration, login page, code with PKCE, tokens
   assert.notEqual(next.refresh_token, refresh_token);
   assert.equal((await tokenReq({ grant_type: "refresh_token", refresh_token, client_id })).status, 400, "a rotated refresh token is refused");
   assert.equal((await tokenReq({ grant_type: "refresh_token", refresh_token: next.refresh_token, client_id })).status, 400, "and its reuse revoked the family");
+
+  // The tokens are those of the account that logged in, and of no other.
+  const whoami = async (token: string) => ((await (await fetch(`${origin}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })).json()) as { email: string }).email;
+  assert.equal(await whoami(access_token), lea.email);
+  const noeCode = new URL((await submit(noe.password, noe)).headers.get("location")!).searchParams.get("code")!;
+  const noeTokens = (await (await tokenReq({ grant_type: "authorization_code", code: noeCode, client_id, redirect_uri: redirect, code_verifier: verifier })).json()) as { access_token: string; refresh_token: string };
+  assert.equal(await whoami(noeTokens.access_token), noe.email);
+
+  // An account that has not finished its setup gets no code: it is sent to the web application, logged in there.
+  const sent = await submit(fresh.password, fresh);
+  assert.equal(sent.status, 302);
+  assert.match(sent.headers.get("location")!, /^\/\?next=%2Foauth%2Fauthorize%3F/);
+  assert.match(sent.headers.get("set-cookie") ?? "", /^heig_session=/);
+
+  // A browser already logged in confirms instead of typing its password again; the form only works for its session.
+  const session = `heig_session=${(await auth.issueToken(noe.user)).token}`;
+  const confirmPage = await (await fetch(`${meta.authorization_endpoint}?${query}`, { headers: { Cookie: session } })).text();
+  assert.match(confirmPage, /Noe Second/);
+  assert.doesNotMatch(confirmPage, /name="password"/);
+  const consent = /name="consent" value="([^"]+)"/.exec(confirmPage)![1];
+  const confirm = (cookie: string, value: string) => fetch(meta.authorization_endpoint, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie }, body: new URLSearchParams({ ...Object.fromEntries(query), consent: value }) });
+  assert.equal((await confirm(`heig_session=${(await auth.issueToken(lea.user)).token}`, consent)).status, 401, "a form shown to another session");
+  assert.equal((await confirm("", consent)).status, 401);
+  const confirmed = await confirm(session, consent);
+  assert.equal(confirmed.status, 302);
+  const confirmedCode = new URL(confirmed.headers.get("location")!).searchParams.get("code")!;
+  const confirmedTokens = (await (await tokenReq({ grant_type: "authorization_code", code: confirmedCode, client_id, redirect_uri: redirect, code_verifier: verifier })).json()) as { access_token: string };
+  assert.equal(await whoami(confirmedTokens.access_token), noe.email);
+
+  // A new password ends every grant of the account: its access and refresh tokens stop at once.
+  const login = (await authenticate(db!, noe.email, noe.password))!;
+  await changePassword(db!, login.user, "un tout autre mot de passe", login.vaultKey, FAST);
+  assert.equal((await fetch(`${origin}/api/auth/me`, { headers: { Authorization: `Bearer ${noeTokens.access_token}` } })).status, 401);
+  assert.equal((await tokenReq({ grant_type: "refresh_token", refresh_token: noeTokens.refresh_token, client_id })).status, 400);
+  assert.equal(await whoami(access_token), lea.email, "the other account is untouched");
+});
+
+test("the CLI logs in with the authorization code flow on a loopback port", { skip: !db && "no local database" }, async () => {
+  const { RemoteClient, remoteLogin } = await import("../src/remote/client.js");
+  const url = new URL(origin);
+  const saved = await remoteLogin(url, async (loginUrl) => {
+    // The person's browser: the login page, then the redirection back to this computer.
+    const answer = await fetch(loginUrl, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...Object.fromEntries(new URL(loginUrl).searchParams), email: lea.email, password: lea.password }) });
+    assert.equal(answer.status, 302);
+    void fetch(answer.headers.get("location")!);
+  });
+  assert.ok(saved.refreshToken);
+  assert.equal((await new RemoteClient(url, saved.token).get<{ email: string }>("/api/auth/me")).email, lea.email);
 });

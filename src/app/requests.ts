@@ -9,6 +9,8 @@ export interface RequestEntry {
   ms: number;
   tool?: string;
   note?: string;
+  /** The account of the request, when its token named one. */
+  userId?: number;
 }
 
 const KEEP_DAYS = 7;
@@ -34,8 +36,8 @@ export class RequestLog {
     if (batch.length === 0) return;
     try {
       await this.db.system.query(
-        `INSERT INTO request_log (at, client, method, path, status, ms, tool, note)
-         SELECT * FROM unnest($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::text[])`,
+        `INSERT INTO request_log (at, client, method, path, status, ms, tool, note, user_id)
+         SELECT * FROM unnest($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::text[], $9::bigint[])`,
         [
           batch.map((e) => e.at),
           batch.map((e) => e.client),
@@ -45,6 +47,7 @@ export class RequestLog {
           batch.map((e) => Math.round(e.ms)),
           batch.map((e) => e.tool ?? null),
           batch.map((e) => e.note ?? null),
+          batch.map((e) => e.userId ?? null),
         ],
       );
       if (++this.writes % 200 === 0) await this.prune();
