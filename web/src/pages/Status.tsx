@@ -1,6 +1,7 @@
 import { ArrowPathIcon, KeyIcon } from "@heroicons/react/24/outline";
-import { type FormEvent, useState } from "react";
-import { Badge, Button, Card, Dot, Empty, ErrorBox, Input, Loading, PageHeader, Table, Td, cx } from "../components/ui";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, PageHeader, Table, Td, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { dateTime, relative } from "../lib/format";
 import type { RequestEntry, StatusReport, SyncRun } from "../lib/types";
@@ -14,8 +15,6 @@ export function Status() {
   const requests = useApi<{ requests: RequestEntry[] }>("/api/status/requests?limit=80", [], { refreshMs: 20_000 });
   const [busy, setBusy] = useState<string>();
   const [message, setMessage] = useState<{ tone: "ok" | "bad" | "warn"; text: string }>();
-  const [code, setCode] = useState("");
-  const [askCode, setAskCode] = useState(false);
   const s = status.data;
 
   const run = async (label: string, fn: () => Promise<unknown>, done: string) => {
@@ -26,10 +25,7 @@ export function Status() {
       setMessage({ tone: "ok", text: done });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/two-step|code/i.test(msg)) {
-        setAskCode(true);
-        setMessage({ tone: "warn", text: "edu-ID demande le code de votre application d'authentification." });
-      } else setMessage({ tone: "bad", text: msg });
+      setMessage({ tone: "bad", text: msg });
     } finally {
       setBusy(undefined);
       void status.reload();
@@ -37,13 +33,6 @@ export function Status() {
     }
   };
   const sync = (kind?: string) => run(kind ?? "all", () => api("/api/status/sync", { method: "POST", json: kind ? { kind } : {} }), "Synchronisation terminée.");
-  const reconnect = (e?: FormEvent) => {
-    e?.preventDefault();
-    return run("reconnect", () => api("/api/status/reconnect", { method: "POST", json: code ? { mfa_code: code } : {} }), "Reconnecté : GAPS et Cyberlearn répondent.").then(() => {
-      setCode("");
-      setAskCode(false);
-    });
-  };
 
   return (
     <div className="space-y-5">
@@ -67,7 +56,7 @@ export function Status() {
               </ul>
             </Card>
 
-            <Card title="Connexion edu-ID" actions={<Button size="sm" variant={s.login.needsCode ? "primary" : "secondary"} onClick={() => (s.login.needsCode ? setAskCode(true) : void reconnect())} disabled={Boolean(busy)}><KeyIcon className="h-4 w-4" /> Reconnecter</Button>}>
+            <Card title="Ma connexion edu-ID" actions={<Link to="/account"><Button size="sm" variant={s.login.needsCode ? "primary" : "secondary"}><KeyIcon className="h-4 w-4" /> {s.login.needsCode ? "Reconnecter" : "Gérer"}</Button></Link>}>
               <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
                 <dt className="text-ink-3">État</dt>
                 <dd>{s.login.needsCode ? <Badge tone="bad">code 2FA demandé</Badge> : <Badge tone="ok">session valide</Badge>}</dd>
@@ -80,15 +69,6 @@ export function Status() {
                 <dt className="text-ink-3">Dernier Cyberlearn OK</dt>
                 <dd>{s.login.lastCyberlearnOk ? relative(s.login.lastCyberlearnOk) : "jamais"}</dd>
               </dl>
-              {(askCode || s.login.needsCode) && (
-                <form onSubmit={reconnect} className="mt-3 flex gap-2 items-end">
-                  <label className="flex-1">
-                    <span className="block text-xs text-ink-2 mb-1">Code à 6 chiffres de l'application d'authentification</span>
-                    <Input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" className="font-mono tracking-widest" />
-                  </label>
-                  <Button type="submit" variant="primary" disabled={code.length !== 6 || Boolean(busy)}>{busy === "reconnect" ? "Connexion…" : "Valider"}</Button>
-                </form>
-              )}
             </Card>
           </div>
 

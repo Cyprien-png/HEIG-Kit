@@ -2,7 +2,8 @@ import { type ReactNode, Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { Loading } from "./components/ui";
-import { SessionProvider, useSession } from "./lib/auth";
+import { SessionProvider, pendingAuthorization, useSession } from "./lib/auth";
+import { Account, Setup } from "./pages/Account";
 import { Login } from "./pages/Login";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
@@ -27,16 +28,31 @@ const Capture = lazy(() => import("./pages/Capture").then((m) => ({ default: m.C
 const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
 const Grades = lazy(() => import("./pages/Grades").then((m) => ({ default: m.Grades })));
 const Studies = lazy(() => import("./pages/Studies").then((m) => ({ default: m.Studies })));
+const Journal = lazy(() => import("./pages/Journal").then((m) => ({ default: m.Journal })));
 const Status = lazy(() => import("./pages/Status").then((m) => ({ default: m.Status })));
 const Revision = lazy(() => import("./pages/Hub").then((m) => ({ default: m.Revision })));
 const Etudes = lazy(() => import("./pages/Hub").then((m) => ({ default: m.Etudes })));
 
 function Protected({ children }: { children: ReactNode }) {
-  const { username, ready } = useSession();
+  const { me, ready } = useSession();
   const location = useLocation();
   if (!ready) return <Loading />;
-  if (!username) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (!me) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  // Until the first password is replaced and edu-ID connected, the application is this and nothing else.
+  if (me.setup) return <Setup me={me} />;
+  // An application (Claude, the CLI) sent the person here to log in: back to its authorization.
+  const waiting = pendingAuthorization(location.search);
+  if (waiting) {
+    window.location.replace(waiting);
+    return <Loading />;
+  }
   return <Shell>{children}</Shell>;
+}
+
+/** Pages of the administrators; the server refuses their data to anyone else anyway. */
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === "admin" ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 export function App() {
@@ -79,7 +95,10 @@ export function App() {
                       <Route path="profile" element={<Profile />} />
                       <Route path="grades" element={<Grades />} />
                       <Route path="studies" element={<Studies />} />
-                      <Route path="status" element={<Status />} />
+                      <Route path="account" element={<Account />} />
+                      <Route path="status" element={<AdminOnly><Status /></AdminOnly>} />
+                      <Route path="journal" element={<AdminOnly><Journal /></AdminOnly>} />
+                      <Route path="journal/:id" element={<AdminOnly><Journal /></AdminOnly>} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Suspense>

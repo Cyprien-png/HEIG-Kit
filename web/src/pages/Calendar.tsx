@@ -111,14 +111,14 @@ export function Calendar() {
     setSyncOutcome(undefined);
     try {
       for (const kind of ["gaps", "cyberlearn"]) {
-        const { run } = await api<{ run: { ok: boolean; message?: string } }>("/api/status/sync", { method: "POST", json: { kind } });
+        const { run } = await api<{ run: { ok: boolean; message?: string } }>("/api/me/sync", { method: "POST", json: { kind } });
         if (!run.ok) throw new Error(run.message ?? `La synchronisation ${kind} a échoué`);
       }
       flashOutcome("ok");
     } catch (e) {
       flashOutcome("failed");
       const message = e instanceof Error ? e.message : String(e);
-      setSyncError(/two-step|code/i.test(message) ? "edu-ID demande un code de connexion : reconnectez-vous depuis la page Statut." : message);
+      setSyncError(/two-step|code|edu-ID session/i.test(message) ? "Votre session edu-ID a pris fin : reconnectez-la depuis « Mon compte » (réglages)." : message);
     } finally {
       setSyncing(false);
       reloadAll();

@@ -24,8 +24,8 @@ const SPEC: FilterSpec<LibraryItem> = {
   serverSearch: true,
   course: (i) => i.course,
   date: (i) => i.modifiedAt,
-  categories: (i) => i.tags,
-  kinds: TYPE_TAGS,
+  categories: (i) => [i.mine && "créés par moi", ...i.tags],
+  kinds: ["créés par moi", ...TYPE_TAGS],
 };
 
 export function Library() {
@@ -75,6 +75,7 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
           <div className="min-w-0">
             <h2 className="font-medium leading-snug line-clamp-2">{item.title}</h2>
             <p className="text-xs text-ink-3 mt-1 font-mono truncate">{item.name}</p>
+            {!item.mine && item.author && <p className="text-xs text-ink-3 mt-0.5">par {item.author}</p>}
             {item.tags.length > 0 && (
               <div className={cx("flex flex-wrap gap-1 mt-2", !item.tagged && "opacity-60")} title={item.tagged ? undefined : "Classement automatique, pas encore tagué"}>
                 {[...item.tags].sort(tagOrder).map((t) => (
@@ -92,9 +93,12 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
             <Badge>{f.ext.slice(1)}</Badge>
           </button>
         ))}
-        <IconButton label="Supprimer" onClick={remove} className="h-7 w-7">
-          <TrashIcon className="h-4 w-4" />
-        </IconButton>
+        {/* A shared item is deleted by its author (or an administrator) only. */}
+        {item.editable !== false && (
+          <IconButton label="Supprimer" onClick={remove} className="h-7 w-7">
+            <TrashIcon className="h-4 w-4" />
+          </IconButton>
+        )}
       </div>
     </Card>
   );

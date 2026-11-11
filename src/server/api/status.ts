@@ -29,19 +29,4 @@ export function registerStatusRoutes(router: Router, app: App): void {
     await app.syncer.runAll();
     return { ok: true };
   }, ADMIN);
-
-  /**
-   * Logs in to edu-ID again, with the two-step code typed on the page when edu-ID asks for one, then syncs
-   * everything. Without a code, answers 409 when a code is needed.
-   */
-  router.post("/api/status/reconnect", async ({ req }) => {
-    const body = await readJson(req);
-    const code = stringField(body, "mfa_code", { optional: true, max: 10 })?.replace(/\s+/g, "");
-    const run = await app.syncer.runOne("gaps", code);
-    if (!run.ok && run.stats?.needsCode) throw new HttpError(409, run.message ?? "edu-ID asks for a two-step login code");
-    if (!run.ok) throw new HttpError(502, run.message ?? "login failed");
-    const cyberlearn = await app.syncer.runOne("cyberlearn", code);
-    void app.syncer.runOne("ingest-check");
-    return { gaps: run, cyberlearn };
-  }, ADMIN);
 }

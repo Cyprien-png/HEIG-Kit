@@ -1,39 +1,57 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, setUnauthorizedHandler } from "./api";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { api, setSetupRequiredHandler, setUnauthorizedHandler } from "./api";
+import type { Account } from "./types";
 
 interface Session {
-  username?: string;
+  /** The account of the session; undefined when nobody is logged in. */
+  me?: Account;
   ready: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<Account>;
   logout: () => Promise<void>;
+  /** Reads the account again (after a step of its setup, or when the server says something changed). */
+  refresh: () => Promise<void>;
+  setMe: (me: Account) => void;
 }
 
-const Ctx = createContext<Session>({ ready: false, login: async () => {}, logout: async () => {} });
+const Ctx = createContext<Session>({ ready: false, login: async () => Promise.reject(new Error("no session")), logout: async () => {}, refresh: async () => {}, setMe: () => {} });
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [username, setUsername] = useState<string>();
+  const [me, setMe] = useState<Account>();
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    setUnauthorizedHandler(() => setUsername(undefined));
-    api<{ username: string }>("/api/auth/me")
-      .then((me) => setUsername(me.username))
-      .catch(() => setUsername(undefined))
-      .finally(() => setReady(true));
-  }, []);
+  const refresh = useCallback(
+    () =>
+      api<Account>("/api/auth/me")
+        .then(setMe)
+        .catch(() => setMe(undefined)),
+    [],
+  );
 
-  const login = async (user: string, password: string) => {
-    const me = await api<{ username: string }>("/api/auth/login", { method: "POST", json: { username: user, password } });
-    setUsername(me.username);
+  useEffect(() => {
+    setUnauthorizedHandler(() => setMe(undefined));
+    setSetupRequiredHandler(() => void refresh());
+    void refresh().finally(() => setReady(true));
+  }, [refresh]);
+
+  const login = async (email: string, password: string) => {
+    const account = await api<Account>("/api/auth/login", { method: "POST", json: { email, password } });
+    setMe(account);
+    return account;
   };
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    setUsername(undefined);
+    setMe(undefined);
   };
-  return <Ctx.Provider value={{ username, ready, login, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ me, ready, login, logout, refresh, setMe }}>{children}</Ctx.Provider>;
 }
 
 export const useSession = () => useContext(Ctx);
+
+/** Where to go once logged in and set up: back to an authorization asked by an application (Claude, the CLI), if any. */
+export function pendingAuthorization(search: string): string | undefined {
+  const next = new URLSearchParams(search).get("next");
+  return next?.startsWith("/oauth/authorize?") ? next : undefined;
+}
 
 /** Light, dark or the system's choice, remembered in this browser. */
 export function useTheme(): [string, (t: string) => void] {

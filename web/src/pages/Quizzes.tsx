@@ -24,8 +24,8 @@ const SPEC: FilterSpec<QuizSummary> = {
   text: (q) => [q.description],
   course: (q) => q.course,
   date: (q) => q.last?.finishedAt ?? q.createdAt,
-  categories: (q) => [KIND_LABEL[q.kind], resultOf(q)],
-  kinds: [...Object.values(KIND_LABEL), ...Object.values(RESULT_LABEL)],
+  categories: (q) => [q.mine && "créés par moi", KIND_LABEL[q.kind], resultOf(q)],
+  kinds: ["créés par moi", ...Object.values(KIND_LABEL), ...Object.values(RESULT_LABEL)],
 };
 
 export function Quizzes() {
@@ -70,10 +70,14 @@ export function Quizzes() {
                     </div>
                     <h2 className="font-semibold mt-1.5 leading-snug">{q.title}</h2>
                     {q.description && <p className="text-sm text-ink-2 mt-1 line-clamp-2">{q.description}</p>}
+                    {!q.mine && q.author && <p className="text-xs text-ink-3 mt-1">par {q.author}</p>}
                   </div>
-                  <IconButton label="Supprimer" onClick={() => void remove(q)} className="shrink-0 -mr-2 -mt-1">
-                    <TrashIcon className="h-4.5 w-4.5" />
-                  </IconButton>
+                  {/* A shared quiz is deleted by its author (or an administrator) only. */}
+                  {q.editable !== false && (
+                    <IconButton label="Supprimer" onClick={() => void remove(q)} className="shrink-0 -mr-2 -mt-1">
+                      <TrashIcon className="h-4.5 w-4.5" />
+                    </IconButton>
+                  )}
                 </div>
                 <div className="mt-3 flex items-end justify-between gap-3 text-sm">
                   <div className="text-ink-2">

@@ -5,6 +5,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The other fields of the server's answer (`needs`, `setup`, `similar`…). */
+    readonly data: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -13,6 +15,10 @@ export class ApiError extends Error {
 let onUnauthorized: (() => void) | undefined;
 export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
+}
+let onSetupRequired: (() => void) | undefined;
+export function setSetupRequiredHandler(handler: () => void): void {
+  onSetupRequired = handler;
 }
 
 export async function api<T = unknown>(path: string, init: RequestInit & { json?: unknown; capture?: string } = {}): Promise<T> {
@@ -33,13 +39,16 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
   }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
+    let data: Record<string, unknown> = {};
     try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
+      data = (await res.json()) as Record<string, unknown>;
+      if (typeof data.error === "string") message = data.error;
     } catch {
       // Not JSON.
     }
-    throw new ApiError(res.status, message);
+    // The account lost its right to use the application (a password reset by the administrator, an edu-ID to connect).
+    if (res.status === 403 && typeof data.setup === "string") onSetupRequired?.();
+    throw new ApiError(res.status, message, data);
   }
   if (res.status === 204) return undefined as T;
   const type = res.headers.get("content-type") ?? "";
