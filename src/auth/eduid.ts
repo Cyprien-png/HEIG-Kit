@@ -80,24 +80,24 @@ export async function loginWithEduId(session: Session, start: Page, creds: Crede
     } else if ($('a[name="to-password"]').length > 0) {
       const href = $('a[name="to-password"]').attr("href");
       if (!href) {
-        throw new Error("Lien de connexion par mot de passe introuvable");
+        throw new Error("edu-ID password login link not found");
       }
       page = await session.get(new URL(href, page.url).toString());
     } else if ($("input[name=j_username]").length > 0) {
-    const form = parseForm(page, "form:has(input[name=j_username])");
-    if (!form) {
-      throw new Error("Formulaire edu-ID introuvable");
-    }
-    const fields: Record<string, string> = {
-      j_username: creds.email,
-    };
+      const form = parseForm(page, "form:has(input[name=j_username])");
+      if (!form) {
+        throw new Error("edu-ID login form not found");
+      }
+      const fields: Record<string, string> = {
+        j_username: creds.email,
+      };
 
-    if ($('button[name="_eventId_submit"], input[name="_eventId_submit"]').length > 0) {
-      fields._eventId_submit = "";
-    }
+      if ($('button[name="_eventId_submit"], input[name="_eventId_submit"]').length > 0) {
+        fields._eventId_submit = "";
+      }
 
-    page = await session.submit(form, fields);
-  } else if ($("input[name=shib_idp_ls_supported]").length > 0) {
+      page = await session.submit(form, fields);
+    } else if ($("input[name=shib_idp_ls_supported]").length > 0) {
       // Browser local storage probe, answered as a browser without local storage.
       page = await session.submit(parseForm(page)!, { shib_idp_ls_supported: "false", _eventId_proceed: "" });
     } else {
