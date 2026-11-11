@@ -77,7 +77,21 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 
 const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
 - This server is remote: render_document, render_animation and render_hq_video queue a job, followed with get_job, which gives download
-  links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
+  links valid a few minutes. Give these links to the user; nothing opens on their computer.
+- This server is SHARED BY A WHOLE CLASS, and every call runs as the account of its access token, which nothing in a
+  call can change. Personal and closed to the others: timetable, calendars, grades, absences, profile, corrections,
+  work copies, study progress and quiz attempts. Shared with everyone, each item with its author: the course material,
+  the library (documents, videos), the flashcard decks and the quizzes.
+- BEFORE CREATING ANYTHING SHARED YOU MUST LOOK FOR IT: list_library (and list_generated) before render_document,
+  render_animation or render_hq_video; list_decks before create_deck; list_quizzes before create_quiz. If an item of
+  anyone in the class covers the request, give that one to the user and name its author; do not make a copy. The server
+  refuses a similar item with the list of those that exist: read them, and only if none fits call again with
+  \`checked\` (the references it listed) and \`new_because\` (one sentence: what the user needs that each of them lacks).
+  Never fill these without having read the items, never rename something to get around the refusal.
+- An item is changed or deleted only by its author (or an administrator): a refusal there is final, do not retry or
+  work around it; create the user's own item for what is missing. \`mine: true\` on the list tools shows only theirs.
+- A refusal saying the account is not ready, or that its edu-ID session ended, is fixed by the user in the web
+  application of the server (its password, its edu-ID connection), never by you: tell them, and never ask for a password.`;
 
 /** How the server exposes files and rendering: on this computer by default. */
 let registerOutputs: (server: McpServer) => void = (server) => registerOutputTools(server, study);
