@@ -7,7 +7,8 @@ import { generatedId, resolveGenerated } from "../../server/files.js";
 import { type JobQueue, safeBaseName } from "../../server/jobs.js";
 import { annotatedLibrary, claimLibraryItems, requireNewLibraryItem } from "../../app/library.js";
 import type { ReuseClaim } from "../../app/reuse.js";
-import { isAdmin, requireIdentity } from "../../identity.js";
+import { formatHousekeeping, runHousekeeping } from "../../app/housekeeping.js";
+import { AccessDenied, isAdmin, requireIdentity } from "../../identity.js";
 import type { Db } from "../../rag/db.js";
 import { REUSE_RULE, respond, reuseInput, reuseOf } from "../common.js";
 import { ASK_VIDEO_KIND, HQ_VIDEO_API, hqVideoInput } from "./hqvideo.js";
@@ -152,6 +153,22 @@ export function registerRemoteOutputTools(server: McpServer, auth: Auth, publicU
         const job = jobs.submit(request, `${name}.tsx`, a.code, [], [{ name: `${name}.narration.json`, content: JSON.stringify(a.narration, null, 2) }], userId);
         const wait = a.check ? "about 30 seconds" : a.audio ? "a few minutes: the voice takes about as long as the video lasts, or more on a server without graphics card" : "about a minute";
         return `Queued. Job id: ${job.id}. Call get_job in ${wait}.`;
+      }),
+  );
+
+  server.registerTool(
+    "run_housekeeping",
+    {
+      title: "Tidy the server's storage (administrators)",
+      description:
+        "Compresses the photos of finished corrections and removes what nobody will read again (old journals and jobs, captures never used, interrupted uploads). " +
+        "The server does it by itself every day; only an administrator may ask for it. dry_run says what it would do without changing anything.",
+      inputSchema: { dry_run: z.boolean().optional() },
+    },
+    async (a) =>
+      respond(async () => {
+        if (!isAdmin()) throw new AccessDenied("Refused: the housekeeping of the server is reserved to its administrators.");
+        return formatHousekeeping(await runHousekeeping(db, { dryRun: a.dry_run ?? false, pruneJobs: queue ? () => queue.prune() : undefined }));
       }),
   );
 

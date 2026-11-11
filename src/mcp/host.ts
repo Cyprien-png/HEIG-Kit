@@ -16,6 +16,7 @@ import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
 import { type User, identityOf, listUsers } from "../accounts/users.js";
 import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
+import { scheduleHousekeeping } from "../app/housekeeping.js";
 import { adoptLibrary } from "../app/library.js";
 import { LOCAL_OWNER, requireIdentity } from "../identity.js";
 import { captureUrl } from "../app/corrections.js";
@@ -175,6 +176,7 @@ if (values.server) {
   // What was generated before the accounts existed belongs to the account that took the installation over.
   const adopted = await adoptLibrary(db, LOCAL_OWNER.id);
   if (adopted > 0) console.error(`${adopted} library items without a known author now belong to the first account.`);
+  scheduleHousekeeping(db, { pruneJobs: queue ? () => queue.prune() : undefined });
   if (config.syncMinutes > 0) app.syncer.start();
   repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;

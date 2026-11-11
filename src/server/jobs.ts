@@ -151,6 +151,19 @@ export class JobQueue {
     return this.all().sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   }
 
+  /** Forgets the jobs finished for more than `days`, with their key frames. Their files stay in the library. */
+  prune(days = 30): number {
+    let removed = 0;
+    for (const record of this.all()) {
+      if (record.state !== "done" && record.state !== "failed") continue;
+      if (Date.now() - record.createdAt < days * 86_400_000) continue;
+      rmSync(this.recordFile(record.id), { force: true });
+      rmSync(this.framesFile(record.id), { force: true });
+      removed++;
+    }
+    return removed;
+  }
+
   framesFile(id: string): string {
     return path.join(this.records, `${id}.png`);
   }

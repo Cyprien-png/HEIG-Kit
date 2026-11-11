@@ -28,6 +28,7 @@
     "generated": "tsx scripts/generated.ts",
     "remote": "tsx scripts/remote.ts",
     "users": "tsx scripts/users.ts",
+    "housekeeping": "tsx scripts/housekeeping.ts",
     "library": "tsx scripts/library.ts",
     "exams": "tsx scripts/exams.ts",
     "calendar": "tsx scripts/study.ts calendar",
@@ -55,6 +56,7 @@
     "node-ical": "^0.27.3",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
+    "sharp": "^0.35.5",
     "tough-cookie": "^6.0.2",
     "zod": "^4.6.7"
   },

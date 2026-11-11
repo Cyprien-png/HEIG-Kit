@@ -1,7 +1,8 @@
 import { type User, getUser, listUsers, setupStep } from "../../accounts/users.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError } from "./util.js";
+import { runHousekeeping } from "../../app/housekeeping.js";
+import { HttpError, readJson } from "./util.js";
 
 const ADMIN = { admin: true };
 
@@ -51,6 +52,16 @@ export function registerAdminRoutes(router: Router, app: App): void {
       if (before && Number.isNaN(before.getTime())) throw new HttpError(400, "before must be a date");
       const entries = await app.requests.activity({ userId, before, actionsOnly: url.searchParams.get("actions") === "1", limit: Number(url.searchParams.get("limit") ?? 100) || 100 });
       return { user: user ? accountRow(user) : undefined, entries: entries.map((e) => ({ ...e, at: e.at.toISOString() })) };
+    },
+    ADMIN,
+  );
+
+  /** Runs the storage housekeeping now (the server does it every day): `dry_run` only says what it would do. */
+  router.post(
+    "/api/admin/housekeeping",
+    async ({ req }) => {
+      const body = await readJson(req);
+      return runHousekeeping(app.db, { dryRun: body.dry_run === true, pruneJobs: app.queue ? () => app.queue!.prune() : undefined, log: (line) => console.error(line) });
     },
     ADMIN,
   );
