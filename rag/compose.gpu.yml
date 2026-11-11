@@ -1,0 +1,8 @@
+# NVIDIA GPU for the embedding model, added to rag/compose.yml by src/compose.ts (npm run rag:start, setup, server:*)
+# when the machine has an NVIDIA GPU that Docker can use, or when HEIG_GPU=nvidia in .env. Docker refuses to create the
+# container without an NVIDIA GPU and the NVIDIA Container Toolkit (or Docker Desktop with WSL2 on Windows): that is why
+# this setting is not in rag/compose.yml.
+
+services:
+  embedder:
+    gpus: all

@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { DATA_DIR, ROOT } from "../../paths.js";
+import { runCompose } from "../../compose.js";
+import { DATA_DIR } from "../../paths.js";
 import { ensureEmbeddingModel } from "../../rag/embed.js";
 import { type Module, runScript } from "../module.js";
-import { commandExists, ensureDockerRunning, installPackage, isWindows, run } from "../system.js";
-
-const COMPOSE = path.join(ROOT, "rag", "compose.yml");
+import { commandExists, ensureDockerRunning, installPackage, isWindows } from "../system.js";
 
 async function mcpHealthy(): Promise<boolean> {
   try {
@@ -30,7 +29,7 @@ export const knowledge: Module = {
     await ensureDockerRunning();
     runScript("scripts/mcp-token.ts");
     console.log("  starting the database, the embedding service and the MCP server…");
-    run("docker", ["compose", "-f", COMPOSE, "up", "-d", "--build", "--wait"]);
+    runCompose("up", "-d", "--build", "--wait");
     console.log("  downloading the embedding model if needed (about 1.2 GB, once)…");
     await ensureEmbeddingModel();
     if (options.ingest) {

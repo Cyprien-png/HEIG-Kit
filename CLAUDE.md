@@ -55,7 +55,8 @@ Never print or commit the content of `.env` or `.cache/`.
   (stdio or `--http` 8766), tools in `src/mcp/tools/`; `src/mcp/server.ts`: knowledge-only MCP server in Docker (8765).
   Add every new feature both as a CLI command and as an MCP tool
 - `rag/compose.yml`: Docker services (db, embedder, docling for ingestion only, mcp); kept out of the root so Compose
-  does not read the root `.env`
+  does not read the root `.env`. Always run it through `src/compose.ts` (`runCompose`, `scripts/compose.ts` in the npm
+  scripts), which adds `rag/compose.gpu.yml` (NVIDIA GPU for the embedder) according to `HEIG_GPU` (auto, nvidia, cpu)
 - `data/`: downloaded documents, extracted text and MCP token; `vendor/`: installed programs; never commit them, nor any
   capture of a GAPS or Cyberlearn page (they contain personal data): keep experiments in `.cache/`
 - `modules/documents/`: Markdown → PDF/HTML/DOCX renderer (own package.json: markdown-it, KaTeX, Mermaid, puppeteer;
