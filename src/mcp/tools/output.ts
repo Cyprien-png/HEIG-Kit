@@ -9,6 +9,7 @@ import { formatGenerated, listGenerated, openGenerated } from "../../generated.j
 import { ROOT } from "../../paths.js";
 import { outputDir } from "../../vendor.js";
 import { respond } from "../common.js";
+import { ASK_VIDEO_KIND, HQ_VIDEO_API, hqVideoInput } from "./hqvideo.js";
 
 const run = promisify(execFile);
 const TSX = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
@@ -98,7 +99,8 @@ export function registerOutputTools(server: McpServer): void {
         "other, lines through texts, off screen) and an image of its key frames: fix them and call again. Ready-made pieces: `from heigkit_manim import *` (title_card, Panel, colored, live_value, approach, " +
         "hole, vertical_asymptote, sign_line, value_table, UnitCircle, recap, source_line). Never create Text or Tex inside " +
         "always_redraw or an updater. On failure, returns manim's error so you can fix the code and call again. Give each " +
-        "Scene class a one-line docstring saying what it shows. Requires the visuals module.",
+        "Scene class a one-line docstring saying what it shows. Requires the visuals module. " +
+        ASK_VIDEO_KIND,
       inputSchema: {
         name: z.string().describe("File name without spaces, e.g. divisibilite_antisymetrie"),
         code: z.string().describe("Python source of the scene(s)"),
@@ -106,7 +108,7 @@ export function registerOutputTools(server: McpServer): void {
         quality: z.enum(["low", "medium", "high"]).optional().describe("medium (720p) by default"),
         open: z.boolean().optional().describe("Open the video (default: true)"),
         voice: z.boolean().optional().describe(
-          "Speak the scene's lines, only when the user asks for a voice (default: false, silent and faster; requires the voice module). " +
+          "Speak the scene's lines: the user's choice, ask them if they did not say (default: false, silent and faster; requires the voice module). " +
             "In a CourseScene, self.voice(\"spoken French, formulas in words\") starts a line while the next animations run, after the previous line ended; self.wait_voice() holds the picture until it ends.",
         ),
       },
@@ -142,6 +144,55 @@ export function registerOutputTools(server: McpServer): void {
         const output = error as { stdout?: string; stderr?: string };
         const log = `${output.stderr ?? ""}\n${output.stdout ?? ""}`.replace(/\r/g, "\n").split("\n").filter((l) => l.trim() && !/it\/s\]|\d+%\|/.test(l));
         return { content: [{ type: "text" as const, text: `Rendering failed. Scene file: ${source}\n${log.slice(-40).join("\n")}` }], isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "render_hq_video",
+    {
+      title: "Create a High quality video",
+      description:
+        "Writes a High quality video (scenes and narration) to the user's videos folder, renders it to MP4 and opens it, then returns an " +
+        "image of its key frames (the end of each line): check the layout, fix the scenes and call again. On failure, returns the error " +
+        `to fix. Requires the hqvideo module. ${ASK_VIDEO_KIND} ${HQ_VIDEO_API}`,
+      inputSchema: { ...hqVideoInput, open: z.boolean().optional().describe("Open the video (default: true)") },
+    },
+    async (a) => {
+      if (!existsSync(path.join(ROOT, "modules", "hqvideo", "node_modules", "remotion"))) {
+        return { content: [{ type: "text" as const, text: "The hqvideo module is not installed: the user should run `npm run setup -- hqvideo`" }], isError: true };
+      }
+      const folder = outputDir("videos");
+      await mkdir(folder, { recursive: true });
+      const source = path.join(folder, `${fileName(a.name)}.tsx`);
+      await writeFile(source, a.code);
+      await writeFile(path.join(folder, `${fileName(a.name)}.narration.json`), JSON.stringify(a.narration, null, 2));
+      const args = [TSX, path.join(ROOT, "modules", "hqvideo", "render.ts"), source, "--quality", a.quality ?? "high", "--frames"];
+      if (a.check) args.push("--check");
+      else if (a.open !== false) args.push("--open");
+      if (a.audio) args.push("--audio");
+      if (a.subtitles === false) args.push("--no-subtitles");
+      try {
+        const { stdout } = await run(process.execPath, args, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024 });
+        const lines = stdout.split(/[\r\n]+/).map((l) => l.trim());
+        const video = lines.find((l) => l.endsWith(".mp4") && path.isAbsolute(l) && existsSync(l));
+        const frames = lines.find((l) => l.startsWith("Frames: "))?.slice("Frames: ".length);
+        const summary = [
+          `Scenes: ${source}`,
+          a.check ? (lines.find((l) => l.startsWith("Video OK")) ?? "Checked.") : `Video: ${video ?? "(see the videos folder)"}${a.open !== false ? " (opened)" : ""}`,
+          ...lines.filter((l) => l.startsWith("Voice:") || l.startsWith("Rendered in")),
+        ].join("\n");
+        if (!frames || !existsSync(frames)) return { content: [{ type: "text" as const, text: summary }] };
+        return {
+          content: [
+            { type: "text" as const, text: `${summary}\nKey frames (3 per row, the end of lines spread over the video): check the layout, fix the scenes and ${a.check ? "render" : "render again if needed"}.` },
+            { type: "image" as const, data: (await readFile(frames)).toString("base64"), mimeType: "image/png" },
+          ],
+        };
+      } catch (error) {
+        const output = error as { stdout?: string; stderr?: string };
+        const log = `${output.stderr ?? ""}\n${output.stdout ?? ""}`.replace(/\r/g, "\n").split("\n").filter((l) => l.trim());
+        return { content: [{ type: "text" as const, text: `Rendering failed. Scenes file: ${source}\n${log.slice(-40).join("\n")}` }], isError: true };
       }
     },
   );

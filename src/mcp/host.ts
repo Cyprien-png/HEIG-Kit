@@ -54,6 +54,10 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 - Before creating a document or an animation, call list_generated and reuse what exists (open_generated).
 - Documents (render_document) are Markdown with LaTeX math and Mermaid diagrams; animations (render_animation) are
   ManimGL 1.7 scenes (from manimlib import *; ShowCreation, Write, Tex(r"...")).
+- Videos come in two kinds: normal (render_animation, manim: curves, formulas, geometry) and High quality
+  (render_hq_video: React and SVG scenes rendered by Remotion, polished look, natural voice). When the user asks for a
+  video without saying which kind or whether they want sound, ask them both questions first: normal or High quality,
+  with or without audio.
 - The library (list_library) classifies every generated document and video by course and tags: a type among
   explication, révision, exercices, corrigé, te blanc, vidéo, and topics such as « calcul matriciel ». Items not tagged
   yet are guessed from their name: when the user asks to tag the library, set them with tag_library_item.
@@ -68,7 +72,7 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
   the student's profile (get_profile, add_profile_notes): read it before preparing revisions.`;
 
 const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
-- This server is remote: render_document and render_animation queue a job, followed with get_job, which gives download
+- This server is remote: render_document, render_animation and render_hq_video queue a job, followed with get_job, which gives download
   links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
 
 /** How the server exposes files and rendering: on this computer by default. */

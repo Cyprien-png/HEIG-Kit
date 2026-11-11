@@ -58,7 +58,7 @@ export const TYPE_TAGS = ["explication", "révision", "exercices", "corrigé", "
 
 const EXTENSIONS: Record<LibraryKind, Set<string>> = {
   documents: new Set([".md", ".pdf", ".docx", ".html"]),
-  videos: new Set([".mp4", ".mov", ".gif", ".py"]),
+  videos: new Set([".mp4", ".mov", ".gif", ".py", ".tsx"]),
 };
 const SAFE_NAME = /^[\p{L}\p{N}_-][\p{L}\p{N} ._-]{0,150}$/u;
 
@@ -108,9 +108,10 @@ export function listLibrary(keywords: string[] = []): LibraryItem[] {
   }
   // Scene sources belong to the videos they produce, which have the class name, not the file name: attach them by content.
   for (const item of [...items.values()]) {
-    if (item.kind !== "video" || item.files.some((f) => f.ext !== ".py")) continue;
+    if (item.kind !== "video" || item.files.some((f) => f.ext !== ".py" && f.ext !== ".tsx")) continue;
     const scene = item.files[0];
-    const owners = [...items.values()].filter((other) => other.kind === "video" && other !== item && titles.get(`video:${other.name}`)?.extra.includes(`scene: ${scene.name} `));
+    // The scenes of a high quality video (.tsx) have the name of their video: alone, they were not rendered yet.
+    const owners = scene.ext !== ".py" ? [] : [...items.values()].filter((other) => other.kind === "video" && other !== item && titles.get(`video:${other.name}`)?.extra.includes(`scene: ${scene.name} `));
     // A source that produced no video (a helper module, a scene not rendered yet) is not a library item.
     for (const owner of owners) owner.files.push(scene);
     items.delete(`video:${item.name}`);

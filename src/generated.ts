@@ -12,7 +12,7 @@ export interface GeneratedItem {
   title: string;
   modified: Date;
   extra: string;
-  /** Whole text searched besides the name and title: the Markdown of a document, the Python source of a video. */
+  /** Whole text searched besides the name and title: the Markdown of a document, the source of a video (and its narration). */
   content: string;
 }
 
@@ -48,6 +48,20 @@ function videos(): GeneratedItem[] {
     .filter((f) => /\.(mp4|mov|gif)$/i.test(f))
     .map((f) => {
       const scene = path.basename(f, path.extname(f));
+      // A high quality video has the name of its scenes file, next to it with its narration.
+      const hq = path.join(folder, `${scene}.tsx`);
+      if (existsSync(hq)) {
+        const code = readFileSync(hq, "utf-8");
+        const narration = path.join(folder, `${scene}.narration.json`);
+        return {
+          kind: "video" as const,
+          file: path.join(folder, f),
+          title: /\/\*\*\s*([^\n]*?)\s*(?:\*\/|\n)/.exec(code)?.[1] || scene,
+          modified: statSync(path.join(folder, f)).mtime,
+          extra: `scenes: ${scene}.tsx (High quality)`,
+          content: `${code}\n${existsSync(narration) ? readFileSync(narration, "utf-8") : ""}`,
+        };
+      }
       const source = scenes.find((s) => new RegExp(`class\\s+${scene}\\b`).test(s.source));
       // The docstring of the scene's class says what it shows; otherwise the file's first docstring or comment.
       const about =
