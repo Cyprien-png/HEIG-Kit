@@ -309,7 +309,19 @@ test("shared items over HTTP: the author's name, 403 for someone else's, 409 for
   const refusal = (await copy.json()) as { error: string; similar: { ref: string; author: string }[] };
   assert.deepEqual(refusal.similar.map((s) => [s.ref, s.author]), [[`deck ${first.id}`, "Lea Premiere"]]);
   assert.match(refusal.error, /new_because/);
-  assert.equal((await deck({ title: "La couche transport", course: "RXI", checked: [`deck ${first.id}`], new_because: "It has a single card and the user revises the whole chapter." })).status, 200);
+  const own = await deck({ title: "La couche transport", course: "RXI", checked: [`deck ${first.id}`], new_because: "It has a single card and the user revises the whole chapter." });
+  assert.equal(own.status, 200);
+  // Deleting is reserved to administrators, even for one's own deck or document.
+  const mine = (await own.json()) as { id: number; editable: boolean; deletable: boolean };
+  assert.deepEqual([mine.editable, mine.deletable], [true, false]);
+  const refused = await fetch(`${origin}/api/decks/${mine.id}`, { method: "DELETE", headers: asNoe });
+  assert.equal(refused.status, 403);
+  assert.match(((await refused.json()) as { error: string }).error, /only an administrator/);
+  assert.equal((await put(asNoe, "documents/RXI-notes-de-noe.md", "# Notes")).status, 200);
+  assert.equal((await fetch(`${origin}/api/library/files/documents/RXI-notes-de-noe.md`, { method: "DELETE", headers: asNoe })).status, 403);
+  assert.equal(readFileSync(path.join(base, "out", "documents", "RXI-notes-de-noe.md"), "utf-8"), "# Notes");
+  assert.equal((await fetch(`${origin}/api/library/files/documents/RXI-notes-de-noe.md`, { method: "DELETE", headers: asLea })).status, 204);
+  assert.equal((await fetch(`${origin}/api/decks/${mine.id}`, { method: "DELETE", headers: asLea })).status, 204);
   assert.equal((await fetch(`${origin}/api/decks/${first.id}`, { method: "DELETE", headers: asNoe })).status, 403);
   assert.equal((await fetch(`${origin}/api/decks/${first.id}/cards`, { method: "POST", headers: asNoe, body: JSON.stringify({ cards: [{ front: "UDP ?", back: "Sans connexion" }] }) })).status, 403);
 });

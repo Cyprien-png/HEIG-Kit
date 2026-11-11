@@ -161,7 +161,7 @@ export function registerQuizTools(server: McpServer, api: HeigApi): void {
     "delete_quiz",
     {
       title: "Delete a quiz",
-      description: "Deletes a quiz with its attempts.",
+      description: "Deletes a quiz with its attempts. On a shared server only an administrator may: anyone else is refused, and must not retry.",
       inputSchema: { quiz_id: z.number().int() },
       annotations: { destructiveHint: true },
     },

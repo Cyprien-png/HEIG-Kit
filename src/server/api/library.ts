@@ -1,5 +1,6 @@
 import path from "node:path";
 import { type LibraryTagPatch, annotatedLibrary, claimLibraryItems, deleteLibraryFile, itemKeyOfFile, libraryFile, libraryItemKey, listLibraryFiles, releaseLibraryItem, requireLibraryEditable, saveLibraryFile, setLibraryTags } from "../../app/library.js";
+import { requireAdminToDelete } from "../../app/sharing.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
 import { CONTENT_TYPES, HttpError, readBody, readJson, rethrowRefusal, sendFile } from "./util.js";
@@ -80,6 +81,7 @@ export function registerLibraryRoutes(router: Router, app: App): void {
   router.delete("/api/library/files/:kind/:name", async ({ params }) => {
     const id = `${params.kind}/${params.name}`;
     const key = itemKeyOfFile(id);
+    requireAdminToDelete("a document or a video of the library");
     if (!key || !libraryFile(id)) throw new HttpError(404, "no such file");
     await requireLibraryEditable(app.db, key);
     deleteLibraryFile(id);

@@ -289,7 +289,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     "delete_flashcards",
     {
       title: "Delete flashcards or a deck",
-      description: "Deletes cards by id, or a whole deck with its cards. Only your own decks: the others are refused.",
+      description: "Deletes cards by id, or a whole deck with its cards. On a shared server only an administrator may: anyone else is refused, and must not retry.",
       inputSchema: { card_ids: z.array(z.number().int()).optional(), deck_id: z.number().int().optional().describe("Deletes the whole deck") },
       annotations: { destructiveHint: true },
     },

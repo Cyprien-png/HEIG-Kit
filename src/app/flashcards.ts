@@ -2,7 +2,7 @@
  * Flashcards: decks of two-sided cards (Markdown with LaTeX) per course, studied with a small spaced repetition
  * scheme (four grades: again, hard, good, easy).
  */
-import { type Authorship, authorColumns, authorship, requireEditable } from "./sharing.js";
+import { type Authorship, authorColumns, authorship, requireAdminToDelete, requireEditable } from "./sharing.js";
 import type { Db } from "../rag/db.js";
 import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
 
@@ -127,6 +127,7 @@ export async function updateDeck(db: Db, id: number, patch: { title?: string; co
 }
 
 export async function deleteDeck(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a deck");
   if (!(await requireEditable(db, "decks", id))) return false;
   return (await db.query("DELETE FROM decks WHERE id = $1", [id])).rowCount === 1;
 }
@@ -170,6 +171,7 @@ export async function updateCard(db: Db, id: number, patch: Partial<CardInput>):
 }
 
 export async function deleteCard(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a card");
   if ((await editableDeckOf(db, id)) === undefined) return false;
   return (await db.query("DELETE FROM cards WHERE id = $1", [id])).rowCount === 1;
 }

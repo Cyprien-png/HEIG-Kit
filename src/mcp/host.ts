@@ -88,8 +88,9 @@ const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_gen
   refuses a similar item with the list of those that exist: read them, and only if none fits call again with
   \`checked\` (the references it listed) and \`new_because\` (one sentence: what the user needs that each of them lacks).
   Never fill these without having read the items, never rename something to get around the refusal.
-- An item is changed or deleted only by its author (or an administrator): a refusal there is final, do not retry or
-  work around it; create the user's own item for what is missing. \`mine: true\` on the list tools shows only theirs.
+- An item is changed only by its author (or an administrator), and DELETED ONLY BY AN ADMINISTRATOR, its author
+  included: a refusal there is final, do not retry or work around it; create the user's own item for what is missing,
+  and tell them to ask an administrator for a deletion. \`mine: true\` on the list tools shows only theirs.
 - A refusal saying the account is not ready, or that its edu-ID session ended, is fixed by the user in the web
   application of the server (its password, its edu-ID connection), never by you: tell them, and never ask for a password.`;
 

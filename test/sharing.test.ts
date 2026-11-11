@@ -82,7 +82,7 @@ test("decks and quizzes are shared: read by all, changed by their author, never 
     await addCards(db!, created.id, [{ front: "Antisymétrie ?", back: "aRb et bRa ⇒ a = b" }]);
     return created;
   });
-  assert.deepEqual([deck.mine, deck.editable, deck.author], [true, true, "Lea Premiere"]);
+  assert.deepEqual([deck.mine, deck.editable, deck.deletable, deck.author], [true, true, false, "Lea Premiere"]);
 
   await as(noe, async () => {
     // Everyone reads and studies it, with a progress of their own.
@@ -93,8 +93,11 @@ test("decks and quizzes are shared: read by all, changed by their author, never 
     assert.equal((await listDecks(db!)).find((d) => d.id === deck.id)!.fresh, 0);
 
     // Changing it is refused out loud, never a silent "nothing changed".
-    for (const attempt of [() => updateDeck(db!, deck.id, { title: "À moi" }), () => deleteDeck(db!, deck.id), () => addCards(db!, deck.id, [{ front: "x", back: "y" }]), () => deleteCard(db!, card.id)]) {
+    for (const attempt of [() => updateDeck(db!, deck.id, { title: "À moi" }), () => addCards(db!, deck.id, [{ front: "x", back: "y" }])]) {
       await assert.rejects(attempt(), (error: unknown) => error instanceof AccessDenied && /created by Lea Premiere/.test((error as Error).message));
+    }
+    for (const attempt of [() => deleteDeck(db!, deck.id), () => deleteCard(db!, card.id)]) {
+      await assert.rejects(attempt(), (error: unknown) => error instanceof AccessDenied && /only an administrator/.test((error as Error).message));
     }
     assert.equal((await db!.query("UPDATE decks SET title = 'x' WHERE id = $1", [deck.id])).rowCount, 0, "and the database leaves the row alone");
 
@@ -115,10 +118,21 @@ test("decks and quizzes are shared: read by all, changed by their author, never 
     await assert.rejects(createQuiz(db!, { title: "Relations chapitre 3", course: "MAD" }, questions), AlreadyExists);
     assert.ok(await createQuiz(db!, { title: "Chapitre 4 relations", course: "MAD" }, questions), "another chapter");
   });
-  // An administrator may tidy up what anyone created.
+  // Deleting is reserved to administrators: not even the author, in the code or straight in the database.
+  await as(lea, async () => {
+    const card = (await getDeck(db!, deck.id))!.cardList[0];
+    for (const attempt of [() => deleteDeck(db!, deck.id), () => deleteCard(db!, card.id), () => deleteQuiz(db!, quiz.id)]) {
+      await assert.rejects(attempt(), (error: unknown) => error instanceof AccessDenied && /only an administrator/.test((error as Error).message));
+    }
+    assert.equal((await db!.query("DELETE FROM decks WHERE id = $1", [deck.id])).rowCount, 0);
+    assert.equal((await db!.query("DELETE FROM cards WHERE id = $1", [card.id])).rowCount, 0);
+    assert.equal((await db!.query("DELETE FROM quizzes WHERE id = $1", [quiz.id])).rowCount, 0);
+    assert.ok(await updateDeck(db!, deck.id, { title: "Relations d'ordre (v2)" }), "the author still changes it");
+  });
+  assert.equal((await as(admin, () => listDecks(db!))).find((d) => d.id === deck.id)!.deletable, true);
   assert.equal(await as(admin, () => deleteQuiz(db!, quiz.id)), true);
-  assert.equal(await as(lea, () => deleteDeck(db!, deck.id)), true);
-  assert.equal(await as(lea, () => deleteDeck(db!, 999_999)), false);
+  assert.equal(await as(admin, () => deleteDeck(db!, deck.id)), true);
+  assert.equal(await as(admin, () => deleteDeck(db!, 999_999)), false);
 });
 
 test("the library is shared: a name belongs to its author, and what exists is not rendered again", async (t) => {
@@ -163,9 +177,12 @@ test("the library is shared: a name belongs to its author, and what exists is no
   await as(lea, async () => {
     // Rendering one's own document again is the normal way to improve it.
     assert.doesNotThrow(() => annotatedLibrary(db!).then((items) => requireNewLibraryItem(items, "document", { name: "MAD-relations-ordre-fiche" }, undefined)));
+    // Deleting is for administrators: the author cannot free the name, the database keeps the item.
     rmSync(path.join(base, "out", "documents", "MAD-relations-ordre-fiche.md"));
     await releaseLibraryItem(db!, "document:MAD-relations-ordre-fiche");
   });
-  // Once deleted by its author, the name is free again.
+  await assert.rejects(as(noe, () => claimLibraryItems(db!, ["document:MAD-relations-ordre-fiche"])), AccessDenied);
+  // Once deleted by an administrator, the name is free again.
+  await as(admin, () => releaseLibraryItem(db!, "document:MAD-relations-ordre-fiche"));
   await as(noe, () => claimLibraryItems(db!, ["document:MAD-relations-ordre-fiche"]));
 });

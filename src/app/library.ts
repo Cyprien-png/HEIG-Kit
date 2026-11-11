@@ -7,6 +7,7 @@ import path from "node:path";
 import { listGenerated } from "../generated.js";
 import type { Db } from "../rag/db.js";
 import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
+import { isAdmin } from "../identity.js";
 import { type Authorship, authorColumns, authorship, refusal } from "./sharing.js";
 import { resolveGenerated } from "../server/files.js";
 import { outputDir } from "../vendor.js";
@@ -210,12 +211,12 @@ export async function libraryAuthors(db: Db): Promise<Map<string, Authorship>> {
   return new Map(rows.map((r) => [r.item as string, authorship(r)]));
 }
 
-const UNOWNED: Authorship = { mine: false, editable: true };
+const unowned = (): Authorship => ({ mine: false, editable: true, deletable: isAdmin() });
 
 /** The library with its tags and authors, the usual entry point of the API, the MCP tools and the CLI. */
 export async function annotatedLibrary(db: Db, keywords: string[] = []): Promise<LibraryItem[]> {
   const authors = await libraryAuthors(db);
-  return annotateLibrary(listLibrary(keywords), await listLibraryTags(db), await knownCourses(db)).map((item) => ({ ...item, ...(authors.get(libraryItemKey(item)) ?? UNOWNED) }));
+  return annotateLibrary(listLibrary(keywords), await listLibraryTags(db), await knownCourses(db)).map((item) => ({ ...item, ...(authors.get(libraryItemKey(item)) ?? unowned()) }));
 }
 
 /** The item a library file belongs to: `documents/notes.pdf` gives `document:notes`. */

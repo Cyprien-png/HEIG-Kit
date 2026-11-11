@@ -1,9 +1,11 @@
 /**
  * What the accounts of a server share: decks, quizzes, generated documents and videos. Everyone reads and uses them;
- * only their author (or an administrator) changes or deletes them. The database enforces it (rag/migrations/016); the
+ * only their author (or an administrator) changes them, and only an administrator deletes them, because a deletion
+ * takes the item and the progress made on it away from the whole class. The database enforces it (rag/migrations/016
+ * and 019); the
  * functions here say it in words, because a refused change must be an error and never look like "nothing to change".
  */
-import { AccessDenied } from "../identity.js";
+import { AccessDenied, isAdmin } from "../identity.js";
 import type { Db } from "../rag/db.js";
 
 export interface Authorship {
@@ -13,15 +15,17 @@ export interface Authorship {
   author?: string;
   /** Created by the current account. */
   mine: boolean;
-  /** The current account may change or delete it (its author, or an administrator). */
+  /** The current account may change it (its author, or an administrator). */
   editable: boolean;
+  /** The current account may delete it: administrators only. */
+  deletable: boolean;
 }
 
 const AUTHOR_NAME = (column: string) => `(SELECT nullif(trim(m.first_name || ' ' || m.last_name), '') FROM members m WHERE m.id = ${column})`;
 
 /** Columns to add to a SELECT on a shared table whose alias is given. */
 export const authorColumns = (alias: string) =>
-  `${alias}.created_by, (${alias}.created_by IS NOT DISTINCT FROM heig_user()) AS mine, heig_may_edit(${alias}.created_by) AS editable, ${AUTHOR_NAME(`${alias}.created_by`)} AS author`;
+  `${alias}.created_by, (${alias}.created_by IS NOT DISTINCT FROM heig_user()) AS mine, heig_may_edit(${alias}.created_by) AS editable, heig_admin() AS deletable, ${AUTHOR_NAME(`${alias}.created_by`)} AS author`;
 
 export function authorship(row: Record<string, unknown>): Authorship {
   return {
@@ -29,13 +33,19 @@ export function authorship(row: Record<string, unknown>): Authorship {
     author: (row.author as string | null) ?? undefined,
     mine: row.mine === true,
     editable: row.editable === true,
+    deletable: row.deletable === true,
   };
 }
 
 const LABEL = { decks: "deck", quizzes: "quiz" } as const;
 
 export function refusal(what: string, author: string | undefined, advice: string): AccessDenied {
-  return new AccessDenied(`Refused: ${what} was created by ${author ?? "another account"}. On this shared server an item is changed or deleted only by its author or an administrator. ${advice}`);
+  return new AccessDenied(`Refused: ${what} was created by ${author ?? "another account"}. On this shared server an item is changed only by its author or an administrator. ${advice}`);
+}
+
+/** Refuses a deletion of something shared to anyone but an administrator, its author included. */
+export function requireAdminToDelete(what: string): void {
+  if (!isAdmin()) throw new AccessDenied(`Refused: only an administrator of this shared server deletes ${what}; its author may change it, nobody else. Do not retry or work around it: tell the user to ask an administrator.`);
 }
 
 /**

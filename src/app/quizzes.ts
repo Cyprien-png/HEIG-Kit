@@ -4,7 +4,7 @@
  * with a voice assistant through the MCP tools, the keyboard in the terminal) and gets a score and the list of
  * mistakes at the end. Each attempt keeps its answers, so a quiz can be redone.
  */
-import { type Authorship, authorColumns, authorship, requireEditable } from "./sharing.js";
+import { type Authorship, authorColumns, authorship, requireAdminToDelete, requireEditable } from "./sharing.js";
 import type { Db } from "../rag/db.js";
 import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
 
@@ -269,6 +269,7 @@ export async function latestQuizAnswers(db: Db, course?: string, since?: Date): 
 }
 
 export async function deleteQuiz(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a quiz");
   if (!(await requireEditable(db, "quizzes", id))) return false;
   const { rowCount } = await db.query("DELETE FROM quizzes WHERE id = $1", [id]);
   return (rowCount ?? 0) > 0;
