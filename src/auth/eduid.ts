@@ -21,6 +21,13 @@ export class MfaRequiredError extends Error {
   }
 }
 
+/** edu-ID showed the password form again: the address or the password is wrong. */
+export class BadCredentialsError extends Error {
+  constructor() {
+    super("edu-ID rejected the credentials, check HEIG_EMAIL / HEIG_PASSWORD in .env");
+  }
+}
+
 const IDP_HOST = /(^|\.)login\.eduid\.ch$/;
 const WAYF_HOST = "wayf.switch.ch";
 /** HES-SO identity provider, which delegates to SWITCH edu-ID. */
@@ -69,7 +76,7 @@ export async function loginWithEduId(session: Session, start: Page, creds: Crede
       });
     } else if ($("input[name=j_password]").length > 0) {
       if (passwordSubmitted) {
-        throw new Error("edu-ID rejected the credentials, check HEIG_EMAIL / HEIG_PASSWORD in .env");
+        throw new BadCredentialsError();
       }
       passwordSubmitted = true;
       page = await session.submit(parseForm(page, "form:has(input[name=j_password])")!, {

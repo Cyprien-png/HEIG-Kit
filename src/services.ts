@@ -3,9 +3,10 @@
  * the saved session and two-step login codes, timetables, GAPS and Cyberlearn information, knowledge base queries.
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type Credentials, MfaRequiredError } from "./auth/eduid.js";
-import { loadConfig } from "./config.js";
+import { campusAccess, campusFiles } from "./campus.js";
 import { CyberlearnClient, InvalidTokenError } from "./cyberlearn/client.js";
 import { TIME_ZONE, addDays, isoDate, startOfDay } from "./dates.js";
 import { findCourse, renderCourse, renderCourseList } from "./courses.js";
@@ -24,17 +25,7 @@ import { RemoteClient } from "./remote/client.js";
 import type { ColorMode } from "./render.js";
 import { renderWeekTable, scheduleCourses, startOfWeek } from "./table.js";
 
-export const CACHE_FILE = `${CACHE_DIR}/schedule.json`;
-
 export const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-
-export const SESSION_FILE = `${CACHE_DIR}/session.json`;
-
-/** edu-ID two-step login page of a login waiting for a code, resumed by `--mfa-code`. */
-export const PENDING_MFA_FILE = `${CACHE_DIR}/mfa-pending.json`;
-
-/** Cyberlearn mobile app token, valid until revoked: grants access to the account like a password. */
-export const CYBERLEARN_TOKEN_FILE = `${CACHE_DIR}/cyberlearn-token.json`;
 
 /** Overdue activities stay listed this long after their due date. */
 export const OVERDUE_WINDOW_DAYS = 30;
@@ -52,14 +43,15 @@ export async function loadSchedule(refresh: boolean, debug: boolean, mfaCode?: s
 
   const gaps = await loginGaps(debug, mfaCode);
   const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
-  await mkdir(CACHE_DIR, { recursive: true });
-  await writeFile(CACHE_FILE, JSON.stringify(cache, null, 2));
+  const file = campusFiles().schedule;
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
   return cache;
 }
 
 export function loginGaps(debug: boolean, mfaCode?: string): Promise<GapsClient> {
   return withLogin(debug, mfaCode, async (session, creds, resumeFrom) => {
-    const client = new GapsClient(session, loadConfig().gapsStudentId);
+    const client = new GapsClient(session, campusAccess().gapsStudentId);
     await client.login(creds, resumeFrom);
     return client;
   });
@@ -221,14 +213,15 @@ export async function withCyberlearn<T>(
   const client = await withLogin(debug, mfaCode, (session, creds, resumeFrom) =>
     CyberlearnClient.login(session, creds, resumeFrom),
   );
-  await mkdir(CACHE_DIR, { recursive: true });
-  await writeFile(CYBERLEARN_TOKEN_FILE, JSON.stringify({ token: client.apiToken }), { mode: 0o600 });
+  const file = campusFiles().cyberlearnToken;
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify({ token: client.apiToken }), { mode: 0o600 });
   return use(client);
 }
 
 export async function readCyberlearnToken(): Promise<string | undefined> {
   try {
-    return (JSON.parse(await readFile(CYBERLEARN_TOKEN_FILE, "utf-8")) as { token: string }).token;
+    return (JSON.parse(await readFile(campusFiles().cyberlearnToken, "utf-8")) as { token: string }).token;
   } catch {
     return undefined;
   }
@@ -243,11 +236,23 @@ export async function withLogin<T>(
   mfaCode: string | undefined,
   login: (session: Session, creds: Credentials, resumeFrom?: Page) => Promise<T>,
 ): Promise<T> {
-  const session = await Session.open({ cookieFile: SESSION_FILE, debugDir: debug ? `${CACHE_DIR}/debug` : undefined });
-  const creds = { ...loadConfig(), otp: async () => mfaCode ?? (await askMfaCode()) };
+  // The account is the one of the current request, for the whole login: files and credentials go together.
+  const access = campusAccess();
+  const files = campusFiles(access);
+  const session = await Session.open({ cookieFile: files.session, debugDir: debug ? files.debug : undefined });
+  // Read only if edu-ID asks for them: a session that is still valid needs no credentials.
+  const creds: Credentials = {
+    get email() {
+      return access.credentials().email;
+    },
+    get password() {
+      return access.credentials().password;
+    },
+    otp: async () => mfaCode ?? (await askMfaCode()),
+  };
 
   try {
-    const pending = mfaCode ? await readPendingMfa() : undefined;
+    const pending = mfaCode ? await readPendingMfa(files.pendingMfa) : undefined;
     let result: T;
     try {
       result = await login(session, creds, pending);
@@ -256,12 +261,12 @@ export async function withLogin<T>(
       // The interrupted edu-ID login expired or belonged to another service: start over, the code is still valid.
       result = await login(session, creds);
     }
-    await rm(PENDING_MFA_FILE, { force: true });
+    await rm(files.pendingMfa, { force: true });
     return result;
   } catch (error) {
     if (error instanceof MfaRequiredError) {
-      await mkdir(CACHE_DIR, { recursive: true });
-      await writeFile(PENDING_MFA_FILE, JSON.stringify(error.page), { mode: 0o600 });
+      await mkdir(path.dirname(files.pendingMfa), { recursive: true });
+      await writeFile(files.pendingMfa, JSON.stringify(error.page), { mode: 0o600 });
     }
     throw error;
   } finally {
@@ -280,9 +285,9 @@ export async function askMfaCode(): Promise<string | undefined> {
   }
 }
 
-export async function readPendingMfa(): Promise<Page | undefined> {
+export async function readPendingMfa(file = campusFiles().pendingMfa): Promise<Page | undefined> {
   try {
-    return JSON.parse(await readFile(PENDING_MFA_FILE, "utf-8")) as Page;
+    return JSON.parse(await readFile(file, "utf-8")) as Page;
   } catch {
     return undefined;
   }
@@ -290,7 +295,7 @@ export async function readPendingMfa(): Promise<Page | undefined> {
 
 export async function readCache(): Promise<ScheduleCache | undefined> {
   try {
-    return JSON.parse(await readFile(CACHE_FILE, "utf-8")) as ScheduleCache;
+    return JSON.parse(await readFile(campusFiles().schedule, "utf-8")) as ScheduleCache;
   } catch {
     return undefined;
   }

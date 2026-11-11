@@ -7,7 +7,7 @@ import type { JobQueue } from "../server/jobs.js";
 import { webDir } from "../server/api/static.js";
 import type { RequestLog } from "./requests.js";
 import { snapshotAges } from "./snapshots.js";
-import { type IngestCheck, type SyncRun, lastRuns, sessionState } from "./sync.js";
+import { type IngestCheck, type SyncRun, lastOkRuns, lastRuns, sessionState } from "./sync.js";
 
 export interface ServiceStatus {
   id: string;
@@ -121,11 +121,6 @@ export async function collectStatus(deps: StatusDeps): Promise<StatusReport> {
     requests: await summarize(deps.requests),
     syncing: deps.syncing,
   };
-}
-
-async function lastOkRuns(db: Db): Promise<Record<string, Date>> {
-  const { rows } = await db.system.query("SELECT kind, max(finished_at) AS at FROM sync_runs WHERE ok GROUP BY kind");
-  return Object.fromEntries(rows.map((r) => [r.kind, r.at]));
 }
 
 async function summarize(requests: RequestLog): Promise<StatusReport["requests"]> {

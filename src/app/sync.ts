@@ -1,10 +1,12 @@
 /**
- * Keeps the server's copy of GAPS and Cyberlearn up to date (snapshots and calendar), and records every run in
- * `sync_runs` for the status page. One sync at a time: GAPS and Cyberlearn share the saved edu-ID session.
+ * Keeps the server's copy of GAPS and Cyberlearn up to date (snapshots and calendar) for every account, and records
+ * every run in `sync_runs` for the status page. One sync at a time: GAPS and Cyberlearn share an account's saved edu-ID
+ * session, and the school's servers are not asked by several accounts at once.
  */
 import { existsSync, statSync } from "node:fs";
-import path from "node:path";
 import { MfaRequiredError } from "../auth/eduid.js";
+import { CampusLocked } from "../campus.js";
+import { type Identity, LOCAL_OWNER, currentIdentity, runAs } from "../identity.js";
 import { findCourse } from "../courses.js";
 import type { Course, Deadline } from "../cyberlearn/client.js";
 import { fetchContinuousGrades, fetchTranscript } from "../gaps/grades.js";
@@ -16,7 +18,8 @@ import { isDoclingAvailable, needsExtractor } from "../rag/extract.js";
 import { ingestSource } from "../rag/ingest.js";
 import { CyberlearnSource } from "../rag/sources/cyberlearn.js";
 import { GitHubSource, readCourseRepos } from "../rag/sources/github.js";
-import { CYBERLEARN_TOKEN_FILE, OVERDUE_WINDOW_DAYS, PENDING_MFA_FILE, SESSION_FILE, loginGaps, withCyberlearn } from "../services.js";
+import { campusFiles } from "../campus.js";
+import { OVERDUE_WINDOW_DAYS, loginGaps, withCyberlearn } from "../services.js";
 import { scheduleCourses } from "../table.js";
 import { type SyncResult, deadlinesToEvents, lessonsToEvents, syncSourceEvents } from "./calendar.js";
 import { type CourseContents, lessonNotes } from "./lessons.js";
@@ -28,9 +31,24 @@ export const RUN_KINDS: RunKind[] = ["gaps", "cyberlearn", "ingest-check", "gith
 /** The advisory lock every ingestion takes, here and in `npm run ingest`: one at a time on the same database. */
 const INGEST_LOCK = 7310;
 
+/** The kinds that fetch one account's own data; the others are about the shared course material. */
+const PERSONAL: RunKind[] = ["gaps", "cyberlearn"];
+
+export interface SyncAccounts {
+  /** The accounts to sync in the background: those whose edu-ID session is known to work. */
+  list(): Promise<Identity[]>;
+  /** The edu-ID session of an account works, or has ended and needs the person. */
+  report?(identity: Identity, state: "ok" | "expired"): Promise<void>;
+}
+
+/** A single-user installation: the local owner. */
+const LOCAL_ACCOUNTS: SyncAccounts = { list: async () => [LOCAL_OWNER] };
+
 export interface SyncRun {
   id: number;
   kind: RunKind;
+  /** The account whose data was fetched; undefined for the shared runs. */
+  userId?: number;
   startedAt: Date;
   finishedAt?: Date;
   ok?: boolean;
@@ -67,6 +85,7 @@ export class Syncer {
     private readonly db: Db,
     private readonly intervalMinutes = 60,
     private readonly log: (line: string) => void = (line) => console.error(line),
+    private readonly accounts: SyncAccounts = LOCAL_ACCOUNTS,
   ) {}
 
   /** Syncs now, then every `intervalMinutes`. */
@@ -86,14 +105,24 @@ export class Syncer {
     return this.running !== undefined;
   }
 
-  /** GAPS, then Cyberlearn, the ingestion check, then the GitHub repositories; a run already going on is awaited instead. */
-  runAll(mfaCode?: string): Promise<void> {
+  /**
+   * GAPS then Cyberlearn for every account, then the ingestion check and the GitHub repositories; a run already going
+   * on is awaited instead.
+   */
+  runAll(): Promise<void> {
     if (this.running) return this.running;
     this.running = (async () => {
       try {
-        await this.run("gaps", () => this.gaps(mfaCode));
-        await this.run("cyberlearn", () => this.cyberlearn(mfaCode));
-        await this.run("ingest-check", () => this.ingestCheck());
+        const accounts = await this.accounts.list();
+        for (const account of accounts) {
+          await runAs(account, async () => {
+            await this.run("gaps", () => this.gaps());
+            await this.run("cyberlearn", () => this.cyberlearn());
+          });
+        }
+        // The shared material is compared with what one account sees on Cyberlearn: the first administrator's.
+        const reader = accounts.find((a) => a.role === "admin") ?? accounts[0];
+        if (reader) await runAs(reader, () => this.run("ingest-check", () => this.ingestCheck()));
         await this.run("github", () => this.github());
       } finally {
         this.running = undefined;
@@ -102,9 +131,9 @@ export class Syncer {
     return this.running;
   }
 
-  /** One kind only, from the status page. */
+  /** One kind only, for the account of the current request (the status page, a refresh of the calendar). */
   async runOne(kind: RunKind, mfaCode?: string): Promise<SyncRun> {
-    if (this.running) await this.running;
+    while (this.running) await this.running;
     const works: Record<RunKind, () => Promise<Record<string, unknown>>> = {
       gaps: () => this.gaps(mfaCode),
       cyberlearn: () => this.cyberlearn(mfaCode),
@@ -125,7 +154,9 @@ export class Syncer {
   }
 
   private async run(kind: RunKind, work: () => Promise<Record<string, unknown>>): Promise<SyncRun> {
-    const { rows } = await this.db.system.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind) VALUES ($1) RETURNING id, started_at", [kind]);
+    const account = currentIdentity();
+    const userId = PERSONAL.includes(kind) ? account?.id : undefined;
+    const { rows } = await this.db.system.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind, user_id) VALUES ($1, $2) RETURNING id, started_at", [kind, userId ?? null]);
     const id = Number(rows[0].id);
     let ok = false;
     let message: string | undefined;
@@ -133,6 +164,7 @@ export class Syncer {
     try {
       stats = await work();
       ok = true;
+      if (kind === "gaps" && account) await this.accounts.report?.(account, "ok");
     } catch (error) {
       if (error instanceof MfaRequiredError) {
         message = new NeedsLoginCode(error.invalidCode).message;
@@ -140,10 +172,12 @@ export class Syncer {
       } else {
         message = error instanceof Error ? error.message : String(error);
       }
-      this.log(`Sync ${kind} failed: ${message}`);
+      // The session ended and nobody is there to log in again: the account is asked to come back.
+      if (account && PERSONAL.includes(kind) && (error instanceof MfaRequiredError || error instanceof CampusLocked)) await this.accounts.report?.(account, "expired");
+      this.log(`Sync ${kind}${userId ? ` (account ${userId})` : ""} failed: ${message}`);
     }
     await this.db.system.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
-    return { id, kind, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
+    return { id, kind, userId, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
   }
 
   private async gaps(mfaCode?: string): Promise<Record<string, unknown>> {
@@ -251,12 +285,19 @@ export class Syncer {
   }
 }
 
-/** Last run of each kind. */
+/** Last run of each kind: the shared ones, and those of the current account. */
 export async function lastRuns(db: Db): Promise<SyncRun[]> {
-  const { rows } = await db.system.query("SELECT DISTINCT ON (kind) * FROM sync_runs ORDER BY kind, started_at DESC");
+  const { rows } = await db.system.query("SELECT DISTINCT ON (kind) * FROM sync_runs WHERE user_id IS NULL OR user_id = $1 ORDER BY kind, started_at DESC", [currentIdentity()?.id ?? null]);
   return rows.map(toRun);
 }
 
+/** When each kind last succeeded, for the shared runs and those of the current account. */
+export async function lastOkRuns(db: Db): Promise<Record<string, Date>> {
+  const { rows } = await db.system.query("SELECT kind, max(finished_at) AS at FROM sync_runs WHERE ok AND (user_id IS NULL OR user_id = $1) GROUP BY kind", [currentIdentity()?.id ?? null]);
+  return Object.fromEntries(rows.map((r) => [r.kind, r.at]));
+}
+
+/** The most recent runs of every account (administrators). */
 export async function recentRuns(db: Db, limit = 30): Promise<SyncRun[]> {
   const { rows } = await db.system.query("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT $1", [limit]);
   return rows.map(toRun);
@@ -266,6 +307,7 @@ function toRun(r: Record<string, unknown>): SyncRun {
   return {
     id: Number(r.id),
     kind: r.kind as RunKind,
+    userId: r.user_id === null || r.user_id === undefined ? undefined : Number(r.user_id),
     startedAt: r.started_at as Date,
     finishedAt: (r.finished_at as Date | null) ?? undefined,
     ok: (r.ok as boolean | null) ?? undefined,
@@ -274,11 +316,11 @@ function toRun(r: Record<string, unknown>): SyncRun {
   };
 }
 
-/** State of the saved edu-ID login, read from the cache files. */
+/** State of the saved edu-ID login of the current account, read from its cache files. */
 export function sessionState(): { sessionSavedAt?: Date; cyberlearnToken: boolean; pendingCode: boolean } {
+  const files = campusFiles();
   const mtime = (file: string) => (existsSync(file) ? statSync(file).mtime : undefined);
-  return { sessionSavedAt: mtime(SESSION_FILE), cyberlearnToken: existsSync(CYBERLEARN_TOKEN_FILE), pendingCode: existsSync(PENDING_MFA_FILE) };
+  return { sessionSavedAt: mtime(files.session), cyberlearnToken: existsSync(files.cyberlearnToken), pendingCode: existsSync(files.pendingMfa) };
 }
 
 export type { Course, Deadline };
-export const CACHE_FILES = { session: path.basename(SESSION_FILE) };
