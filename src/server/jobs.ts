@@ -31,6 +31,8 @@ export interface JobRecord {
   frames: boolean;
   /** The account that asked for it: the only one, with the administrators, that reads its result. */
   userId?: number;
+  /** Base names the worker may give back: those reserved for this account when the job was queued. */
+  names?: string[];
 }
 
 export const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -114,7 +116,7 @@ export class JobQueue {
       for (const video of videos) copyFileSync(video, path.join(copies, path.basename(video)));
     }
     writeFileSync(path.join(temp, "request.json"), JSON.stringify({ ...request, source: `input/${kind}/${sourceName}` }));
-    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false, userId };
+    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false, userId, names: userId === undefined ? undefined : [request.name, ...(request.kind === "animation" ? [request.scene] : [])] };
     this.save(record);
     renameSync(temp, path.join(this.jobsDir, id));
     return record;
@@ -198,6 +200,8 @@ export class JobQueue {
     const files: string[] = [];
     for (const name of listed.slice(0, MAX_FILES)) {
       if (typeof name !== "string" || !SAFE_NAME.test(name) || !ALLOWED[record.kind].has(path.extname(name).toLowerCase())) continue;
+      // On a shared server the worker cannot write over a name this account did not reserve (someone else's video).
+      if (record.names && !record.names.includes(path.basename(name, path.extname(name)))) continue;
       const source = path.join(dir, "output", name);
       if (!regularFile(source, MAX_FILE_BYTES)) continue;
       const partial = path.join(destination, `.${name}.partial`);
