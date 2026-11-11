@@ -246,3 +246,39 @@ test("what is personal is closed: another account's token gets a plain refusal",
   const crossed = { Authorization: `Bearer ${await app.auth.issueCaptureToken(correction.id, noe.user.id)}` };
   assert.ok([403, 404].includes((await fetch(`${origin}/api/corrections/${correction.id}`, { headers: crossed })).status));
 });
+
+test("the status and the journal are for administrators; the journal says who asked what", { skip: NO_DB }, async () => {
+  const asLea = await bearer(lea);
+  const asNoe = await bearer(noe);
+  assert.equal(lea.user.role, "admin", "the first account of a server is its administrator");
+  for (const path of ["/api/status/requests", "/api/status/runs", "/api/status/jobs", "/api/admin/users", "/api/admin/activity", `/api/admin/activity?user=${lea.user.id}`]) {
+    const refused = await fetch(`${origin}${path}`, { headers: asNoe });
+    assert.equal(refused.status, 403, path);
+    assert.match(((await refused.json()) as { error: string }).error, /administrators/);
+    assert.equal((await fetch(`${origin}${path}`, { headers: asLea })).status, 200, path);
+  }
+  assert.equal((await fetch(`${origin}/api/status/sync`, { method: "POST", headers: asNoe, body: "{}" })).status, 403);
+
+  await fetch(`${origin}/api/corrections`, { method: "POST", headers: { ...asNoe, "Content-Type": "application/json" }, body: JSON.stringify({ title: "Journal" }) });
+  type Entry = { method: string; path: string; status: number; userId?: number; note?: string };
+  const journal = async (query: string) => ((await (await fetch(`${origin}/api/admin/activity${query}`, { headers: asLea })).json()) as { user?: { email: string }; entries: Entry[] });
+  const ofNoe = await journal(`?user=${noe.user.id}`);
+  assert.equal(ofNoe.user?.email, noe.email);
+  assert.ok(ofNoe.entries.length > 0 && ofNoe.entries.every((e) => e.userId === noe.user.id));
+  assert.ok(ofNoe.entries.some((e) => e.method === "POST" && e.path === "/api/corrections" && e.status === 200));
+  assert.ok(ofNoe.entries.some((e) => e.status === 403 && e.note === "admin only"), "what was refused is kept too");
+  const actions = await journal(`?user=${noe.user.id}&actions=1`);
+  assert.ok(actions.entries.every((e) => e.method !== "GET" || e.status >= 400));
+  assert.equal((await fetch(`${origin}/api/admin/activity?user=9999`, { headers: asLea })).status, 404);
+
+  const { users } = (await (await fetch(`${origin}/api/admin/users`, { headers: asLea })).json()) as { users: { email: string; role: string; requestsWeek: number; refusedWeek: number }[] };
+  const row = users.find((u) => u.email === noe.email)!;
+  assert.equal(row.role, "student");
+  assert.ok(row.requestsWeek > 0 && row.refusedWeek > 0);
+  assert.equal(JSON.stringify(users).includes("hash"), false);
+
+  // Each account refreshes its own data, without the status page.
+  const mine = await fetch(`${origin}/api/me/sync`, { headers: asNoe });
+  assert.equal(mine.status, 200);
+  assert.equal(((await mine.json()) as { campus: { state: string } }).campus.state, "ok");
+});
