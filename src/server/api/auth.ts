@@ -1,5 +1,6 @@
 import { ConnectError, type ConnectProblem } from "../../accounts/connect.js";
-import { authenticate, changePassword, getUser, revokeTokens } from "../../accounts/users.js";
+import { REPOSITORY_URL, TERMS_MARKDOWN, TERMS_VERSION } from "../../accounts/terms.js";
+import { acceptTerms, authenticate, changePassword, getUser, revokeTokens, setupStep } from "../../accounts/users.js";
 import type { App } from "../app.js";
 import { allowRenewal, clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
 import type { Principal, Router } from "./router.js";
@@ -40,6 +41,30 @@ export function registerAuthRoutes(router: Router, app: App): void {
     SETUP,
   );
 
+  /** The conditions of use (src/accounts/terms.ts), readable at any time. */
+  router.get("/api/auth/terms", async () => ({ version: TERMS_VERSION, repository: REPOSITORY_URL, markdown: TERMS_MARKDOWN }), SETUP);
+
+  /**
+   * The person ticked « J'ai lu et j'accepte » in the web application: only a browser session may say so, never the
+   * token of an agent or of the CLI.
+   */
+  router.post(
+    "/api/auth/terms",
+    async ({ req, principal }) => {
+      const user = accountOf(principal);
+      if (principal.kind !== "cookie") throw new HttpError(403, "The conditions of use are accepted by the person themselves, in the web application. Do not retry: tell the user to open it.");
+      const body = (await readJson(req, 1024)) as Record<string, unknown>;
+      if (body.accept !== true) throw new HttpError(400, "Cochez la case pour accepter les conditions.");
+      try {
+        return describeAccount(app, await acceptTerms(app.db, user.id, stringField(body, "version", { max: 40 })!));
+      } catch (error) {
+        rethrowRefusal(error);
+        throw new HttpError(409, error instanceof Error ? error.message : String(error));
+      }
+    },
+    SETUP,
+  );
+
   /**
    * Replaces the password. Right after the login that asked for it, the session is enough; otherwise the current
    * password is asked again (409 with `needs: "current"`). Every other session and token of the account stops working.
@@ -48,6 +73,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
     "/api/auth/password",
     async ({ req, res, principal, client }) => {
       const user = accountOf(principal);
+      if (setupStep(user) === "terms") throw new HttpError(403, "account setup required", {}, { setup: "terms" });
       const body = await readJson(req, 4 * 1024);
       const password = stringField(body, "password", { max: 200 })!;
       const current = stringField(body, "current", { optional: true, max: 1000 });
@@ -87,7 +113,8 @@ export function registerAuthRoutes(router: Router, app: App): void {
     "/api/auth/campus",
     async ({ req, principal }) => {
       const user = accountOf(principal);
-      if (user.mustChangePassword) throw new HttpError(403, "account setup required", {}, { setup: "password" });
+      const before = setupStep(user);
+      if (before && before !== "campus") throw new HttpError(403, "account setup required", {}, { setup: before });
       const body = await readJson(req, 4 * 1024);
       const email = stringField(body, "email", { optional: true, max: 200 })?.trim();
       const password = stringField(body, "password", { optional: true, max: 1000 });

@@ -8,6 +8,7 @@ import path from "node:path";
 import type { Identity, Role } from "../identity.js";
 import { CACHE_DIR, DATA_DIR } from "../paths.js";
 import type { Db } from "../rag/db.js";
+import { TERMS_VERSION } from "./terms.js";
 import { type Kdf, generatePassword, hashPassword, passwordProblem, seal, unseal, verifyPassword } from "./password.js";
 
 export const ROLES: Role[] = ["admin", "student"];
@@ -33,6 +34,9 @@ export interface User {
   disabledAt?: Date;
   createdAt: Date;
   lastLoginAt?: Date;
+  /** The version of the conditions of use the account accepted, and when (src/accounts/terms.ts). */
+  termsVersion?: string;
+  termsAcceptedAt?: Date;
 }
 
 export interface CampusCredentials {
@@ -40,7 +44,7 @@ export interface CampusCredentials {
   password: string;
 }
 
-const COLUMNS = "id, email, first_name, last_name, role, password_hash IS NOT NULL AS has_password, must_change_password, token_version, campus_state, campus_verified_at, campus_sealed IS NOT NULL AS has_campus, disabled_at, created_at, last_login_at";
+const COLUMNS = "id, email, first_name, last_name, role, password_hash IS NOT NULL AS has_password, must_change_password, token_version, campus_state, campus_verified_at, campus_sealed IS NOT NULL AS has_campus, disabled_at, created_at, last_login_at, terms_version, terms_accepted_at";
 
 function toUser(r: Record<string, unknown>): User {
   const firstName = r.first_name as string;
@@ -61,14 +65,18 @@ function toUser(r: Record<string, unknown>): User {
     disabledAt: (r.disabled_at as Date | null) ?? undefined,
     createdAt: r.created_at as Date,
     lastLoginAt: (r.last_login_at as Date | null) ?? undefined,
+    termsVersion: (r.terms_version as string | null) ?? undefined,
+    termsAcceptedAt: (r.terms_accepted_at as Date | null) ?? undefined,
   };
 }
 
 export const identityOf = (user: User): Identity => ({ id: user.id, role: user.role, email: user.email, name: user.name });
 
 /** What an account still has to do before it can use the server, in order. */
-export type SetupStep = "password" | "campus";
+export type SetupStep = "terms" | "password" | "campus";
 export function setupStep(user: User): SetupStep | undefined {
+  // The conditions of use first, and again whenever their text changed.
+  if (user.termsVersion !== TERMS_VERSION) return "terms";
   if (user.mustChangePassword) return "password";
   // Never validated on GAPS: the credentials are asked until a login succeeds.
   if (!user.campusVerifiedAt || user.campusState === "missing") return "campus";
@@ -196,6 +204,14 @@ export async function updateUser(db: Db, id: number, patch: UserPatch): Promise<
  * A new random password, to replace at the next login. Every token of the account stops working, and its sealed edu-ID
  * credentials are dropped: nobody can open them without the old password. The account enters them again.
  */
+/** The person read the conditions of use shown to them and accepted them: `version` is the one they were shown. */
+export async function acceptTerms(db: Db, id: number, version: string): Promise<User> {
+  if (version !== TERMS_VERSION) throw new Error("Les conditions ont changé entre-temps : relisez-les avant de les accepter.");
+  const { rows } = await db.system.query(`UPDATE users SET terms_version = $2, terms_accepted_at = now() WHERE id = $1 RETURNING ${COLUMNS}`, [id, version]);
+  if (!rows[0]) throw new Error(`No account ${id}`);
+  return toUser(rows[0]);
+}
+
 /** Ends every session of the account: its access tokens, cookies and refresh tokens stop working at once. */
 export async function revokeTokens(db: Db, id: number): Promise<void> {
   await db.system.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [id]);

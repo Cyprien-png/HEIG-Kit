@@ -1,7 +1,8 @@
 /** Sessions of the accounts on the remote server: from a token to its account, the browser's cookie, what an account is told about itself. */
 import type { IncomingMessage } from "node:http";
 import { ConnectError } from "../accounts/connect.js";
-import { type User, getUser, identityOf, readCampusCredentials, setupStep } from "../accounts/users.js";
+import { TERMS_VERSION } from "../accounts/terms.js";
+import { type SetupStep, type User, getUser, identityOf, readCampusCredentials, setupStep } from "../accounts/users.js";
 import { runAs } from "../identity.js";
 import { parseCookies } from "./api/util.js";
 import type { App } from "./app.js";
@@ -68,8 +69,10 @@ export interface AccountView {
   firstName: string;
   lastName: string;
   role: User["role"];
-  /** What the account must do before anything else: replace its first password, then connect edu-ID. */
-  setup: "password" | "campus" | null;
+  /** What the account must do before anything else: accept the conditions, replace its first password, connect edu-ID. */
+  setup: SetupStep | null;
+  /** The conditions of use in force, and whether this account accepted them. */
+  terms: { version: string; accepted: boolean; acceptedAt?: string };
   campus: {
     state: User["campusState"];
     verifiedAt?: string;
@@ -89,6 +92,7 @@ export function describeAccount(app: App, user: User): AccountView {
     lastName: user.lastName,
     role: user.role,
     setup: setupStep(user) ?? null,
+    terms: { version: TERMS_VERSION, accepted: user.termsVersion === TERMS_VERSION, acceptedAt: user.termsAcceptedAt?.toISOString() },
     campus: { state: user.campusState, verifiedAt: user.campusVerifiedAt?.toISOString(), stored: user.hasCampusCredentials, unlocked: app.vault.key(user.id) !== undefined },
   };
 }

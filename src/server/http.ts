@@ -6,7 +6,7 @@ import { createApi } from "./api/index.js";
 import { type Principal, type Router, runRoute } from "./api/router.js";
 import { serveWeb } from "./api/static.js";
 import { CONTENT_TYPES, HttpError, TooLarge, clientOf, json, readBody, readJson, sendFile } from "./api/util.js";
-import { type User, authenticate, identityOf, setupStep } from "../accounts/users.js";
+import { type SetupStep, type User, authenticate, identityOf, setupStep } from "../accounts/users.js";
 import { AccessDenied, type Identity, runAs } from "../identity.js";
 import type { App } from "./app.js";
 import { resolveGenerated } from "./files.js";
@@ -16,9 +16,14 @@ import { SESSION_COOKIE, accountOf, describeAccount, issueFor, renewCampus, sess
 const MAX_MCP_BYTES = 32 * 1024 ** 2;
 
 /** What an account that has not finished its setup is told, whatever it asks. */
-export const setupMessage = (publicUrl: URL, step: "password" | "campus") =>
-  `This account is not ready: ${step === "password" ? "its first password must be replaced" : "it must connect its edu-ID account"}. ` +
-  `Open ${publicUrl.origin} in a browser, log in and finish the setup; nothing else works until then.`;
+export const setupMessage = (publicUrl: URL, step: SetupStep) =>
+  `This account is not ready: ${
+    step === "terms"
+      ? "its owner must read and accept the conditions of use themselves (an agent must never accept them for them)"
+      : step === "password"
+        ? "its first password must be replaced"
+        : "it must connect its edu-ID account"
+  }. Open ${publicUrl.origin} in a browser, log in and finish the setup; nothing else works until then.`;
 
 /**
  * Login of the web application with the address and the password of an account: a session cookie, also for an account
