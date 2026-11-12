@@ -5,6 +5,8 @@
  *   npm run remote -- login            opens the server's login page (OAuth 2.1, PKCE) and keeps the tokens
  *                                      (.cache/remote-token.json); the password is typed on the server's page only
  *   npm run remote -- status           whether the server answers with the saved token
+ *   npm run remote -- ingest           asks the server to index your Cyberlearn courses into its shared knowledge base
+ *                                      (administrators; with your own edu-ID connection, in the background)
  *   npm run remote -- logout           forgets the token
  */
 import { spawn } from "node:child_process";
@@ -36,7 +38,12 @@ async function main(): Promise<void> {
     console.log("Token removed.");
     return;
   }
-  if (action !== "status") throw new Error("Usage: npm run remote -- login | status | logout");
+  if (action === "ingest") {
+    await (await RemoteClient.fromEnv())!.request("POST", "/api/status/ingest");
+    console.log(`Indexation started on ${url.origin}: follow it on the status page of the web application.`);
+    return;
+  }
+  if (action !== "status") throw new Error("Usage: npm run remote -- login | status | ingest | logout");
 
   const me = await (await RemoteClient.fromEnv())!.get<{ name: string; email: string; role: string }>("/api/auth/me");
   console.log(`${url.origin}: connected as ${me.name} (${me.email}, ${me.role})`);

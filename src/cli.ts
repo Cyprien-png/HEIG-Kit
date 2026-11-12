@@ -221,7 +221,12 @@ async function runIngest(
           process.exitCode = 1;
         }
       }
-      if (!only || only === "cyberlearn") {
+      // On the machine of a shared server nobody's edu-ID credentials are in .env: the server indexes Cyberlearn itself,
+      // as the administrator who asks for it on the status page (docs/accounts.md).
+      const noCampus = !process.env.HEIG_EMAIL?.trim() && Boolean(process.env.HEIG_JWT_SECRET?.trim());
+      if (noCampus && only === "cyberlearn") throw new Error("No edu-ID credentials in .env: on a shared server, Cyberlearn is indexed from the status page of the web application (or `npm run remote -- ingest`).");
+      if (noCampus && !only) console.log("Cyberlearn: left to the server, which indexes it from its status page (no edu-ID credentials in .env).");
+      if ((!only && !noCampus) || only === "cyberlearn") {
         // The timetable defines the curriculum: refreshed like for `schedule`, so new courses are picked up.
         const scheduleCodes = scheduleCourses((await loadSchedule(false, debug, mfaCode)).lessons);
         const selection = {

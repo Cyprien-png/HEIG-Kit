@@ -25,7 +25,8 @@ import { type SyncResult, deadlinesToEvents, lessonsToEvents, syncSourceEvents }
 import { type CourseContents, lessonNotes } from "./lessons.js";
 import { latestSnapshot, saveSnapshot } from "./snapshots.js";
 
-export type RunKind = "gaps" | "cyberlearn" | "ingest-check" | "github";
+export type RunKind = "gaps" | "cyberlearn" | "ingest-check" | "github" | "ingest";
+/** The kinds a sync request may name; `ingest` is long and has its own entry (`startIngest`). */
 export const RUN_KINDS: RunKind[] = ["gaps", "cyberlearn", "ingest-check", "github"];
 
 /** The advisory lock every ingestion takes, here and in `npm run ingest`: one at a time on the same database. */
@@ -79,6 +80,7 @@ function listSetting(name: string): string[] {
 
 export class Syncer {
   private running?: Promise<void>;
+  private ingesting?: Promise<SyncRun>;
   private timer?: NodeJS.Timeout;
 
   constructor(
@@ -122,7 +124,12 @@ export class Syncer {
         }
         // The shared material is compared with what one account sees on Cyberlearn: the first administrator's.
         const reader = accounts.find((a) => a.role === "admin") ?? accounts[0];
-        if (reader) await runAs(reader, () => this.run("ingest-check", () => this.ingestCheck()));
+        if (reader) {
+          const check = await runAs(reader, () => this.run("ingest-check", () => this.ingestCheck()));
+          // Cyberlearn changed: the shared index follows on its own, with the saved session of that administrator.
+          const pending = check.ok ? (check.stats as unknown as IngestCheck) : undefined;
+          if (pending && pending.added + pending.changed + pending.removed > 0) runAs(reader, () => void this.startIngest());
+        }
         await this.run("github", () => this.github());
       } finally {
         this.running = undefined;
@@ -139,6 +146,7 @@ export class Syncer {
       cyberlearn: () => this.cyberlearn(mfaCode),
       "ingest-check": () => this.ingestCheck(),
       github: () => this.github(),
+      ingest: () => this.ingest(() => undefined),
     };
     const work = works[kind];
     let result!: SyncRun;
@@ -153,7 +161,26 @@ export class Syncer {
     return result;
   }
 
-  private async run(kind: RunKind, work: () => Promise<Record<string, unknown>>): Promise<SyncRun> {
+  /** Whether an ingestion started here is going on. */
+  get ingestBusy(): boolean {
+    return this.ingesting !== undefined;
+  }
+
+  /**
+   * Indexes the Cyberlearn courses of the current account into the shared knowledge base, in the background (it may
+   * take hours the first time): the run appears in `sync_runs` with its progress as message. Returns false when one
+   * is already going on. It does not hold back the other syncs.
+   */
+  startIngest(): boolean {
+    if (this.ingesting) return false;
+    this.ingesting = this.run("ingest", (progress) => this.ingest(progress)).finally(() => {
+      this.ingesting = undefined;
+    });
+    void this.ingesting.catch((error: unknown) => this.log(`Ingestion: ${error instanceof Error ? error.message : error}`));
+    return true;
+  }
+
+  private async run(kind: RunKind, work: (progress: (line: string) => void) => Promise<Record<string, unknown>>): Promise<SyncRun> {
     const account = currentIdentity();
     const userId = PERSONAL.includes(kind) ? account?.id : undefined;
     const { rows } = await this.db.system.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind, user_id) VALUES ($1, $2) RETURNING id, started_at", [kind, userId ?? null]);
@@ -161,8 +188,15 @@ export class Syncer {
     let ok = false;
     let message: string | undefined;
     let stats: Record<string, unknown> | undefined;
+    // What a long run is doing, shown by the status page while it goes on.
+    let lastProgress = 0;
+    const progress = (line: string) => {
+      if (Date.now() - lastProgress < 3000) return;
+      lastProgress = Date.now();
+      void this.db.system.query("UPDATE sync_runs SET message = $2 WHERE id = $1 AND finished_at IS NULL", [id, line.trim().slice(0, 300)]).catch(() => undefined);
+    };
     try {
-      stats = await work();
+      stats = await work(progress);
       ok = true;
       if (kind === "gaps" && account) await this.accounts.report?.(account, "ok");
     } catch (error) {
@@ -248,6 +282,44 @@ export class Syncer {
     const removed = rows.filter((r) => !listed.has(r.external_id) && r.course_code && selected.includes(r.course_code)).length;
     const check: IngestCheck = { checkedAt: new Date(), added, changed, removed, indexed: rows.length, courses: selected, examples };
     return check as unknown as Record<string, unknown>;
+  }
+
+  /**
+   * Indexes the Cyberlearn courses the current account follows (its GAPS timetable, plus RAG_EXTRA_COURSES) into the
+   * knowledge base everyone shares. It reads Cyberlearn as that account, with its own edu-ID session. Documents that
+   * need the extraction service are left for a later run when it is off.
+   */
+  private async ingest(progress: (line: string) => void): Promise<Record<string, unknown>> {
+    const lock = await this.db.connect();
+    try {
+      if (!(await lock.query<{ ok: boolean }>(`SELECT pg_try_advisory_lock(${INGEST_LOCK}) AS ok`)).rows[0].ok) throw new Error("Another ingestion is already running");
+      try {
+        progress("reading the timetable and Cyberlearn");
+        let lessons = (await latestSnapshot<Lesson[]>(this.db, "schedule"))?.data;
+        if (!lessons?.length) {
+          lessons = await (await loginGaps(false)).fetchSchedule();
+          await saveSnapshot(this.db, "schedule", lessons);
+        }
+        const scheduleCodes = scheduleCourses(lessons);
+        const selection = { extra: listSetting("RAG_EXTRA_COURSES"), exclude: listSetting("RAG_EXCLUDE_COURSES") };
+        const { documents, selected } = await withCyberlearn(false, undefined, async (client) => {
+          const source = new CyberlearnSource(client, scheduleCodes, selection);
+          return { documents: await source.list(), selected: source.selectedCourses };
+        });
+        const extractor = await isDoclingAvailable();
+        if (documents.length > 0) await ensureEmbeddingModel();
+        const stats = await ingestSource(this.db, "cyberlearn", documents, {
+          removalScope: selected,
+          skip: extractor ? undefined : (doc) => (needsExtractor(doc.filename) ? "the extraction service is off" : undefined),
+          log: progress,
+        });
+        return { courses: selected, ...stats, extractor };
+      } finally {
+        await lock.query(`SELECT pg_advisory_unlock(${INGEST_LOCK})`);
+      }
+    } finally {
+      lock.release();
+    }
   }
 
   /**

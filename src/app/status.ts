@@ -35,12 +35,19 @@ export interface StatusReport {
     courses: number;
     lastIndexedAt?: string;
     pending?: IngestCheck & { checkedAt: Date | string };
+    /** An indexation started from the server is going on, and what it is doing. */
+    running: boolean;
+    progress?: string;
+    /** The last indexation started from the server, once finished. */
+    last?: SyncRun;
   };
   requests: { total: number; errors: number; unauthorized: number; lastUnauthorizedAt?: string; lastMcpAt?: string };
   syncing: boolean;
 }
 
 export interface StatusDeps {
+  /** An indexation started from the server is going on. */
+  ingesting?: boolean;
   db: Db;
   requests: RequestLog;
   queue?: JobQueue;
@@ -65,7 +72,7 @@ export async function collectStatus(deps: StatusDeps): Promise<StatusReport> {
   services.push({ id: "embedder", label: "Embeddings (Ollama, bge-m3)", state: !embedder.up ? "down" : embedder.model ? "up" : "warning", detail: embedder.up && !embedder.model ? "modèle bge-m3 absent" : undefined });
 
   const docling = await isDoclingAvailable();
-  services.push({ id: "docling", label: "Extraction (docling)", state: docling ? "up" : "off", detail: docling ? undefined : "démarré seulement pendant une ingestion" });
+  services.push({ id: "docling", label: "Extraction (docling)", state: docling ? "up" : "off", detail: docling ? undefined : "arrêté : les PDF et DOCX attendent son retour pour être indexés" });
 
   if (deps.queue && deps.jobsDir) {
     const stale = deps.queue.staleJobs();
@@ -117,6 +124,9 @@ export async function collectStatus(deps: StatusDeps): Promise<StatusReport> {
       courses: ingestRow.courses,
       lastIndexedAt: ingestRow.last_indexed ? new Date(ingestRow.last_indexed).toISOString() : undefined,
       pending: check,
+      running: deps.ingesting === true,
+      progress: deps.ingesting ? runs.find((r) => r.kind === "ingest" && !r.finishedAt)?.message : undefined,
+      last: runs.find((r) => r.kind === "ingest" && r.finishedAt),
     },
     requests: await summarize(deps.requests),
     syncing: deps.syncing,

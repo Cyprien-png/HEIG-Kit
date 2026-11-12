@@ -2,13 +2,22 @@ import { collectStatus } from "../../app/status.js";
 import { RUN_KINDS, type RunKind, recentRuns } from "../../app/sync.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, readJson, stringField } from "./util.js";
+import { HttpError, json, readJson, stringField } from "./util.js";
 
 const ADMIN = { admin: true };
 
 /** The state of the server, for its administrators only: the other accounts refresh their own data with /api/me/sync. */
 export function registerStatusRoutes(router: Router, app: App): void {
-  router.get("/api/status", async () => collectStatus({ db: app.db, requests: app.requests, queue: app.queue, jobsDir: app.config.jobsDir, syncing: app.syncer.busy }), ADMIN);
+  router.get("/api/status", async () => collectStatus({ db: app.db, requests: app.requests, queue: app.queue, jobsDir: app.config.jobsDir, syncing: app.syncer.busy, ingesting: app.syncer.ingestBusy }), ADMIN);
+
+  /**
+   * Indexes the Cyberlearn courses of the administrator who asks into the shared knowledge base, with their own
+   * edu-ID connection; answers at once, the run and its progress are read from the status.
+   */
+  router.post("/api/status/ingest", async ({ res }) => {
+    const started = app.syncer.startIngest();
+    json(res, started ? 202 : 409, started ? { started: true } : { error: "Une indexation est déjà en cours." });
+  }, ADMIN);
 
   router.get("/api/status/requests", async ({ url }) => {
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 100) || 100, 500);

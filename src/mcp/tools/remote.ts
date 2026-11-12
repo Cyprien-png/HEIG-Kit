@@ -20,7 +20,7 @@ const NOT_ISOLATED = "Rendering is disabled: this server has no isolated render 
  * is generated is shared by every account: a rendering is refused when it would replace someone else's work or copy
  * something that exists (src/app/reuse.ts), and its job is read by the account that asked for it.
  */
-export function registerRemoteOutputTools(server: McpServer, auth: Auth, publicUrl: URL, queue: JobQueue | undefined, linkMinutes: number, db: Db): void {
+export function registerRemoteOutputTools(server: McpServer, auth: Auth, publicUrl: URL, queue: JobQueue | undefined, linkMinutes: number, db: Db, startIngest?: () => boolean): void {
   /** Checks that `name` may be rendered by this account and reserves it (and the other names it writes). */
   const reserve = async (kind: "document" | "video", name: string, title: string | undefined, claim: ReuseClaim | undefined, also: string[] = []) => {
     requireNewLibraryItem(await annotatedLibrary(db), kind, { name, title }, claim);
@@ -169,6 +169,24 @@ export function registerRemoteOutputTools(server: McpServer, auth: Auth, publicU
       respond(async () => {
         if (!isAdmin()) throw new AccessDenied("Refused: the housekeeping of the server is reserved to its administrators.");
         return formatHousekeeping(await runHousekeeping(db, { dryRun: a.dry_run ?? false, pruneJobs: queue ? () => queue.prune() : undefined }));
+      }),
+  );
+
+  server.registerTool(
+    "run_ingestion",
+    {
+      title: "Index the Cyberlearn courses into the shared knowledge base (administrators)",
+      description:
+        "Starts the indexation of the Cyberlearn courses of the administrator who asks (their timetable) into the knowledge base the whole class searches, " +
+        "with their own edu-ID connection. It runs in the background and may take long; the status page of the web application shows its progress. " +
+        "The server does it by itself when Cyberlearn changed; only an administrator may ask for it.",
+      inputSchema: {},
+    },
+    async () =>
+      respond(async () => {
+        if (!isAdmin()) throw new AccessDenied("Refused: indexing the course material is reserved to the administrators of this server.");
+        if (!startIngest) throw new Error("This server cannot index by itself.");
+        return startIngest() ? "Indexation started: its progress is on the status page of the web application." : "An indexation is already going on.";
       }),
   );
 

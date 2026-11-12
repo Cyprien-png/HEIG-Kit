@@ -264,6 +264,19 @@ test("the status and the journal are for administrators; the journal says who as
   }
   assert.equal((await fetch(`${origin}/api/status/sync`, { method: "POST", headers: asNoe, body: "{}" })).status, 403);
 
+  // Indexing the courses into the shared knowledge base: an administrator starts it, it runs as them in the background.
+  assert.equal((await fetch(`${origin}/api/status/ingest`, { method: "POST", headers: asNoe })).status, 403);
+  assert.equal((await fetch(`${origin}/api/status/ingest`, { method: "POST", headers: asLea })).status, 202);
+  const ingestRun = async () => (await db!.system.query<{ ok: boolean | null; message: string | null; user_id: string | null }>("SELECT ok, message, user_id FROM sync_runs WHERE kind = 'ingest' ORDER BY started_at DESC LIMIT 1")).rows[0];
+  for (let i = 0; i < 300 && (await ingestRun())?.ok == null; i++) await new Promise((r) => setTimeout(r, 50));
+  // No edu-ID to reach from the tests: the run ends with its reason, recorded for the status page.
+  const ended = await ingestRun();
+  assert.equal(ended.ok, false);
+  assert.ok(ended.message);
+  assert.equal(app.syncer.ingestBusy, false);
+  const report = (await (await fetch(`${origin}/api/status`, { headers: asLea })).json()) as { ingestion: { running: boolean; last?: { kind: string; ok: boolean } } };
+  assert.deepEqual([report.ingestion.running, report.ingestion.last?.kind, report.ingestion.last?.ok], [false, "ingest", false]);
+
   await fetch(`${origin}/api/corrections`, { method: "POST", headers: { ...asNoe, "Content-Type": "application/json" }, body: JSON.stringify({ title: "Journal" }) });
   type Entry = { method: string; path: string; status: number; userId?: number; note?: string };
   const journal = async (query: string) => ((await (await fetch(`${origin}/api/admin/activity${query}`, { headers: asLea })).json()) as { user?: { email: string }; entries: Entry[] });

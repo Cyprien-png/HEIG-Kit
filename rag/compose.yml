@@ -3,7 +3,8 @@
 # the `$` that edu-ID passwords may contain.
 #   npm run rag:start     database, embedding model and MCP server
 #   npm run rag:stop      stops every service (data is kept in Docker volumes)
-# `npm run ingest` also starts the document extraction service (profile "ingest") while it runs.
+# `npm run ingest` also starts the document extraction service (profile "ingest") while it runs; the remote server
+# (profile "server") keeps it running, since it indexes the courses itself.
 
 name: heig-kit
 
@@ -34,10 +35,12 @@ services:
       - models:/root/.ollama
     restart: unless-stopped
 
-  # PDF/DOCX/PPTX to markdown. Heavy (~3 GB RAM): only started for ingestion.
+  # PDF/DOCX/PPTX to markdown. Heavy (~3 GB RAM): only started for ingestion on a personal installation, kept running
+  # beside the remote server, which indexes from its status page and on its own when Cyberlearn changes.
   docling:
     image: quay.io/docling-project/docling-serve-cpu:latest
-    profiles: ["ingest"]
+    profiles: ["ingest", "server"]
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5001:5001"
 
@@ -82,8 +85,7 @@ services:
       HEIG_JOBS_DIR: /jobs
       RAG_DATABASE_URL: postgres://heigkit:heigkit@db:5432/heigkit
       RAG_OLLAMA_URL: http://embedder:11434
-      # The extraction service, when `npm run ingest` on the machine has it running: the server then indexes the PDFs
-      # of the GitHub repositories too (otherwise they wait for the daily indexing).
+      # The extraction service: without it the server indexes text and code only, PDFs and DOCX wait for its return.
       RAG_DOCLING_URL: http://docling:5001
     volumes:
       - ../.env:/app/.env:ro

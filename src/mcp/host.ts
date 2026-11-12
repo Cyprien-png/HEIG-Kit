@@ -195,7 +195,7 @@ if (values.server) {
   if (config.syncMinutes > 0) app.syncer.start();
   repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;
-  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes, db);
+  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes, db, () => app.syncer.startIngest());
   createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
 } else if (values.http) {
   const tokenFile = path.join(DATA_DIR, "mcp-token");
