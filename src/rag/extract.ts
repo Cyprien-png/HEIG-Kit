@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DATA_DIR } from "../paths.js";
@@ -15,8 +16,10 @@ const MAX_FIGURE_LABELS_CHARS = 300;
  * Version of the extraction. Raising it makes the next ingestion convert and index every document again.
  * 2: formulas as their raw text (matrices row by row) and figures saved as images with their labels.
  * 3: pages without text (blank pages, scans, full-page images) are kept, so that page numbers match the document.
+ * 4: detached accents of LaTeX PDFs are joined to their letter (`S´erie` → `Série`). Only the text changes: the markdown
+ *    of version 3 is reused instead of converting the document again, and its figures are kept.
  */
-export const EXTRACTOR_VERSION = 3;
+export const EXTRACTOR_VERSION = 4;
 
 /** Placed between pages in the extracted markdown, so chunks can keep page numbers. */
 export const PAGE_BREAK = "<!-- page break -->";
@@ -26,8 +29,18 @@ export const EXTRACTABLE = /\.(pdf|docx|pptx|xlsx|html?|md|txt)$/i;
 /** Whether a file goes through docling (Markdown and text are taken as they are). */
 export const needsExtractor = (filename: string): boolean => EXTRACTABLE.test(filename) && !/\.(md|txt)$/i.test(filename);
 
+function cachePath(contentHash: string, version: number): string {
+  return path.join(EXTRACTED_DIR, `${contentHash}.v${version}.md`);
+}
+
+/**
+ * Extracted markdown of a document, for reading it: the current version, or version 3 while the next ingestion has
+ * not brought the document to version 4 yet (same text, accents not joined).
+ */
 export function extractedMarkdownPath(contentHash: string): string {
-  return path.join(EXTRACTED_DIR, `${contentHash}.v${EXTRACTOR_VERSION}.md`);
+  const current = cachePath(contentHash, EXTRACTOR_VERSION);
+  const previous = cachePath(contentHash, 3);
+  return existsSync(current) || !existsSync(previous) ? current : previous;
 }
 
 /** Figure `number` (1-based, in reading order) of a document, as referenced by `[figure <number> …]` in its text. */
@@ -40,16 +53,20 @@ export function figurePath(contentHash: string, number: number): string {
  * data/extracted by content hash: a document is only converted once, even across ingestion runs.
  */
 export async function extractMarkdown(bytes: Buffer, filename: string, contentHash: string, imagesScale = 2): Promise<string> {
-  const cached = extractedMarkdownPath(contentHash);
+  const cached = cachePath(contentHash, EXTRACTOR_VERSION);
   try {
     return await readFile(cached, "utf-8");
   } catch {
     // Not converted yet.
   }
 
+  // Converted by version 3, which only lacked the joined accents: kept as it is, with its figures, for going back.
+  const previous = cachePath(contentHash, 3);
   let markdown: string;
   if (/\.(md|txt)$/i.test(filename)) {
     markdown = bytes.toString("utf-8");
+  } else if (existsSync(previous)) {
+    markdown = joinAccents(await readFile(previous, "utf-8"));
   } else {
     const converted = enrichMarkdown(...(await convert(bytes, filename, imagesScale)));
     markdown = converted.markdown;
@@ -103,6 +120,8 @@ const PICTURE = /<!-- image -->|!\[[^\]]*\]\(data:image\/[^)]*\)/g;
  * placeholders are left as they are rather than risk attaching a formula to the wrong place.
  */
 export function enrichMarkdown(markdown: string, document: DoclingDocument | undefined): { markdown: string; figures: Buffer[] } {
+  // Before formulas and figure labels are inserted, which keep their raw text.
+  markdown = joinAccents(markdown);
   if (!document) return { markdown: markdown.replace(PICTURE, "<!-- image -->"), figures: [] };
   const formulas: DoclingNode[] = [];
   const pictures: DoclingNode[] = [];
@@ -158,6 +177,39 @@ export function enrichMarkdown(markdown: string, document: DoclingDocument | und
     result = result.replace(PICTURE, "<!-- image -->");
   }
   return { markdown: restorePages(result, pages, Object.keys(document.pages ?? {}).length), figures };
+}
+
+/** Spacing accents that LaTeX PDFs put before their letter, and their combining forms. */
+const SPACING_ACCENTS: Record<string, string> = { "´": "́", "`": "̀", "ˆ": "̂", "¨": "̈", "¸": "̧" };
+/** The only letters made: `´T`, a prime before a letter or a backtick before another letter stay as they are. */
+const FRENCH_LETTER = /^[àâäéèêëîïôöùûüÿçÀÂÄÉÈÊËÎÏÔÖÙÛÜŸÇ]$/;
+/**
+ * Code, left out of `joinAccents`: fenced blocks, and inline spans without spaces (`` `abc` ``). A span with spaces
+ * cannot be told from detached grave accents (`` ` a gauche, ` a droite ``), which are far more frequent in PDFs.
+ */
+const CODE = /(^```[^\n]*\n[\s\S]*?^```[^\n]*$|`[^`\s]+`)/m;
+/**
+ * An accent and its letter: the grave accent and the circumflex may be separated from it by a space, never the acute
+ * accent (`u´ et v´` are primes). The dotless i is the one LaTeX puts under an accent.
+ */
+const DETACHED_ACCENT = /(´|[`ˆ¨¸] ?)([A-Za-zı])/g;
+
+/**
+ * Joins the accents that LaTeX PDFs leave detached before their letter: `S´erie` → `Série`, `` ` a gauche `` → `à gauche`,
+ * `na¨ıve` → `naïve`. Only accented letters of French are made, and code is left as it is.
+ */
+export function joinAccents(markdown: string): string {
+  return markdown
+    .split(CODE)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part.replace(DETACHED_ACCENT, (match, accent: string, letter: string) => {
+            const joined = ((letter === "ı" ? "i" : letter) + SPACING_ACCENTS[accent.trim()]).normalize("NFC");
+            return FRENCH_LETTER.test(joined) ? joined : match;
+          }),
+    )
+    .join("");
 }
 
 /**
