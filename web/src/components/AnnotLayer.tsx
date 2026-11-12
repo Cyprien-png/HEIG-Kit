@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
-import { type Op, type ShapeKind, type Shape, type Stroke, type TextOp, HIGHLIGHT_WIDTH, drawOps, hitOp, moveOp, simplify, textLines } from "../lib/annotations";
+import { type Op, type ShapeKind, type Shape, type Stroke, type TextOp, HIGHLIGHT_WIDTH, TEXT_LINE, drawOps, hitOp, moveOp, simplify, textLines } from "../lib/annotations";
 
 export type Tool = "hand" | "pen" | "hl" | "erase" | "text" | "shape" | "move";
 
@@ -46,7 +46,13 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
   const moving = useRef<{ index: number; dx: number; dy: number } | undefined>(undefined);
   const pointer = useRef<{ id: number; x: number; y: number; moved: boolean } | undefined>(undefined);
   const frame = useRef(0);
-  const [editing, setEditing] = useState<{ index: number | null; op: TextOp }>();
+  // Each text being typed is a session of its own: its field is never reused for the next one, and it is finished
+  // once, whoever asks first (a key, a blur, a tap elsewhere that opens another text).
+  const [editing, setEditing] = useState<TextSession>();
+  const sessions = useRef(0);
+  const finished = useRef(new Set<number>());
+  /** What the open field holds right now, to finish it from outside. */
+  const live = useRef("");
   // What the next frame paints: read from here, not from the render that scheduled it (it may be older than a commit).
   const latest = useRef({ ops, editingIndex: editing?.index });
   latest.current = { ops, editingIndex: editing?.index };
@@ -165,23 +171,35 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
       else if (tool === "text" && !moved) {
         const index = topHit(p.x, p.y, 6);
         const existing = index >= 0 && ops[index].t === "text" ? (ops[index] as TextOp) : undefined;
-        if (existing) setEditing({ index, op: existing });
-        else setEditing({ index: null, op: { t: "text", c: style.color, s: style.textSize, x: round(p.x), y: round(p.y), v: "" } });
+        // On a touch screen the tap arrives before the open field loses the focus: finish that one first, where it is,
+        // with its own text. Otherwise its text would be saved at the place of the new one.
+        let current = ops;
+        if (editing) current = finishText(editing, live.current) ?? ops;
+        const reopened = existing && current.includes(existing);
+        const session = { id: ++sessions.current, index: reopened ? current.indexOf(existing) : null, op: reopened ? existing : ({ t: "text", c: style.color, s: style.textSize, x: round(p.x), y: round(p.y), v: "" } as TextOp) };
+        live.current = session.op.v;
+        setEditing(session);
       }
     }
     schedule();
   };
 
-  const finishText = (value: string) => {
-    if (!editing) return;
-    const { index, op } = editing;
-    setEditing(undefined);
+  /** Saves the text of a session and closes its field; the new operations when something changed. */
+  function finishText(session: TextSession, value: string): Op[] | undefined {
+    if (finished.current.has(session.id)) return undefined;
+    finished.current.add(session.id);
+    // Only its own field: another text may already be open.
+    setEditing((now) => (now?.id === session.id ? undefined : now));
+    const { index, op } = session;
     const text = value.replace(/\s+$/, "");
+    let next: Op[] | undefined;
     if (index === null) {
-      if (text) commit(page, [...ops, { ...op, v: text }]);
-    } else if (!text) commit(page, ops.filter((_, i) => i !== index));
-    else if (text !== op.v) commit(page, ops.map((o, i) => (i === index ? { ...op, v: text } : o)));
-  };
+      if (text) next = [...ops, { ...op, v: text }];
+    } else if (!text) next = ops.filter((_, i) => i !== index);
+    else if (text !== op.v) next = ops.map((o, i) => (i === index ? { ...op, v: text } : o));
+    if (next) commit(page, next);
+    return next;
+  }
 
   return (
     <>
@@ -196,46 +214,91 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
         className="absolute inset-0 h-full w-full"
         style={{ pointerEvents: interactive ? "auto" : "none", touchAction: "none", cursor: style.tool === "text" ? "text" : style.tool === "move" ? "move" : interactive ? "crosshair" : "default" }}
       />
-      {editing && <TextEditor key={`${editing.index}`} op={editing.op} cssW={cssW} onDone={finishText} />}
+      {editing && <TextEditor key={editing.id} op={editing.op} cssW={cssW} live={live} onDone={(value) => finishText(editing, value)} />}
     </>
   );
 });
 
 const round = (n: number) => Math.round(n * 10000) / 10000;
 
-function TextEditor({ op, cssW, onDone }: { op: TextOp; cssW: number; onDone: (value: string) => void }) {
+interface TextSession {
+  id: number;
+  /** The operation being changed, or null for a new text. */
+  index: number | null;
+  op: TextOp;
+}
+
+function TextEditor({ op, cssW, live, onDone }: { op: TextOp; cssW: number; live: { current: string }; onDone: (value: string) => void }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(op.v);
   const size = op.s * cssW;
   const born = useRef(performance.now());
+  // Reported once: removing the field makes the browser send a last blur, which must not finish the text again while
+  // React is taking the field out (« removeChild: not a child of this node »).
+  const done = useRef(false);
+  const finish = (text: string) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(text);
+  };
+  // Set before React takes the field out, so that the blur of the removal changes nothing.
+  useLayoutEffect(() => {
+    done.current = false;
+    return () => {
+      done.current = true;
+    };
+  }, []);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.focus();
+    // Without scrolling: the field is where the finger is, the page must not jump under it.
+    el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
   return (
-    <textarea
-      ref={ref}
-      value={value}
-      rows={Math.max(1, textLines({ ...op, v: value }).length)}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        // A tap is followed by simulated mouse events that steal the focus: during the first instants, take it back.
-        if (performance.now() - born.current < 400) ref.current?.focus();
-        else onDone(value);
-      }}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
-          e.preventDefault();
-          onDone(value);
-        }
-      }}
-      spellCheck={false}
-      placeholder="Texte…"
-      className="absolute resize-none overflow-hidden rounded-sm bg-white/70 outline-dashed outline-1 outline-accent p-0 m-0 border-0 whitespace-pre"
-      style={{ left: `${op.x * 100}%`, top: `${op.y * 100}%`, minWidth: size * 6, width: `${Math.max(value.split("\n").reduce((m, l) => Math.max(m, l.length), 0) + 2, 6)}ch`, fontSize: size, lineHeight: 1.25, color: op.c, fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }}
-    />
+    // A box of its own around the field: what a browser extension (spelling, translation, passwords) adds next to a
+    // text field stays inside it, and the whole box leaves at once.
+    <div
+      className="absolute"
+      translate="no"
+      // The canvas draws the text from the top of its line; the field centres it in a line 1.25 high: same place.
+      style={{ left: `${op.x * 100}%`, top: `${op.y * 100}%`, marginTop: -(size * (TEXT_LINE - 1)) / 2 }}
+    >
+      <textarea
+        ref={ref}
+        value={value}
+        rows={Math.max(1, textLines({ ...op, v: value }).length)}
+        onChange={(e) => {
+          live.current = e.target.value;
+          setValue(e.target.value);
+        }}
+        onBlur={() => {
+          if (done.current) return;
+          // A tap is followed by simulated mouse events that steal the focus: during the first instants, take it back.
+          if (performance.now() - born.current < 400) ref.current?.focus({ preventScroll: true });
+          else finish(value);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
+            e.preventDefault();
+            finish(value);
+          }
+        }}
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
+        data-lt-active="false"
+        data-1p-ignore
+        data-lpignore="true"
+        placeholder="Texte…"
+        className="block resize-none overflow-hidden rounded-sm bg-white/70 outline-dashed outline-1 outline-accent p-0 m-0 border-0 whitespace-pre"
+        style={{ minWidth: size * 6, width: `${Math.max(value.split("\n").reduce((m, l) => Math.max(m, l.length), 0) + 2, 6)}ch`, fontSize: size, lineHeight: TEXT_LINE, color: op.c, fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' }}
+      />
+    </div>
   );
 }

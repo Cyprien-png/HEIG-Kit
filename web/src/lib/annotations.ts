@@ -28,7 +28,7 @@ export const TEXT_SIZES = [
 ];
 export const HIGHLIGHT_WIDTH = 0.02;
 const HIGHLIGHT_ALPHA = 0.35;
-const TEXT_LINE = 1.25;
+export const TEXT_LINE = 1.25;
 
 const round = (n: number) => Math.round(n * 10000) / 10000;
 
