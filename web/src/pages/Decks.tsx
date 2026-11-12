@@ -1,7 +1,7 @@
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
+import { type FilterSpec, FilterBar, FilteredGroups, MINE, NothingOfMine, useFilterState, useFiltered } from "../components/ListFilters";
 import { ReviewButton } from "../components/ReviewButton";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Stat, Textarea } from "../components/ui";
 import { ApiError, api, useApi } from "../lib/api";
@@ -15,7 +15,7 @@ const SPEC: FilterSpec<Deck> = {
   text: (d) => [d.description],
   course: (d) => d.course,
   date: (d) => d.updatedAt,
-  categories: (d) => [d.mine && "créés par moi", d.due > 0 && "à réviser", d.fresh > 0 && "nouvelles cartes", d.cards > 0 && d.due === 0 && d.fresh === 0 && "à jour", d.cards === 0 && "vide"],
+  categories: (d) => [d.mine && MINE, d.due > 0 && "à réviser", d.fresh > 0 && "nouvelles cartes", d.cards > 0 && d.due === 0 && d.fresh === 0 && "à jour", d.cards === 0 && "vide"],
   kinds: ["créés par moi", "à réviser", "nouvelles cartes", "à jour", "vide"],
 };
 
@@ -26,7 +26,7 @@ export function Decks() {
   const [shuffle, setShuffle] = useShuffle();
   const stats = decks.data?.stats;
   const all = decks.data?.decks ?? [];
-  const [state, set] = useFilterState("decks");
+  const [state, set] = useFilterState("decks", "group", [MINE]);
   const filtered = useFiltered(all, SPEC, state);
 
   return (
@@ -52,6 +52,8 @@ export function Decks() {
       {all.length > 0 && <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} />}
       {decks.loading && !decks.data ? <Loading /> : all.length === 0 ? (
         <Empty title="Aucun paquet" hint="Demandez à l'agent « crée-moi des cartes sur le chapitre 2 de MAD », ou créez un paquet vide et ajoutez vos cartes." action={<Button onClick={() => setCreating(true)}>Créer un paquet</Button>} />
+      ) : filtered.list.length === 0 && state.tags.length === 1 && state.tags[0] === MINE && !state.q.trim() && !state.course && all.length > 0 ? (
+        <NothingOfMine show={() => set({ tags: [] })} />
       ) : filtered.list.length === 0 ? (
         <Empty title="Rien ne correspond" hint="Changez les filtres." />
       ) : (

@@ -1,7 +1,7 @@
 import { PlayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Link, useNavigate } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
-import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
+import { type FilterSpec, FilterBar, FilteredGroups, MINE, NothingOfMine, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, PageHeader, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { relative } from "../lib/format";
@@ -24,7 +24,7 @@ const SPEC: FilterSpec<QuizSummary> = {
   text: (q) => [q.description],
   course: (q) => q.course,
   date: (q) => q.last?.finishedAt ?? q.createdAt,
-  categories: (q) => [q.mine && "créés par moi", KIND_LABEL[q.kind], resultOf(q)],
+  categories: (q) => [q.mine && MINE, KIND_LABEL[q.kind], resultOf(q)],
   kinds: ["créés par moi", ...Object.values(KIND_LABEL), ...Object.values(RESULT_LABEL)],
 };
 
@@ -33,7 +33,7 @@ export function Quizzes() {
   const navigate = useNavigate();
   const [shuffle, setShuffle] = useShuffle();
   const list = quizzes.data?.quizzes ?? [];
-  const [state, set] = useFilterState("quizzes");
+  const [state, set] = useFilterState("quizzes", "group", [MINE]);
   const filtered = useFiltered(list, SPEC, state);
   const remove = async (q: QuizSummary) => {
     if (!confirm(`Supprimer le quiz « ${q.title} » et ses essais ?`)) return;
@@ -54,6 +54,8 @@ export function Quizzes() {
         <Loading />
       ) : list.length === 0 ? (
         <Empty title="Aucun quiz" hint="Demandez à l'agent « fais-moi un quiz vrai/faux sur le chapitre 4 de RXI » ou « un QCM sur les relations » : il l'écrit à partir de vos supports, et vous le jouez ici ou à l'oral." />
+      ) : filtered.list.length === 0 && state.tags.length === 1 && state.tags[0] === MINE && !state.q.trim() && !state.course && list.length > 0 ? (
+        <NothingOfMine show={() => set({ tags: [] })} />
       ) : filtered.list.length === 0 ? (
         <Empty title="Rien ne correspond" hint="Changez les filtres." />
       ) : (

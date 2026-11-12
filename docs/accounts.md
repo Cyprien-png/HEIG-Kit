@@ -24,6 +24,8 @@ server is not open: nobody creates an account over the network.
 - **The past written tests and the GitHub repositories of courses are the administrators' alone**: everyone reads
   the tests and searches the indexed repositories, only an administrator adds, changes or deletes a test file, and
   adds, removes or refreshes a repository (they are read with the server's own git token). Everyone else gets `403`.
+- In the web application the lists of cards, quizzes and library open on « créés par moi »; one click shows what
+  the others shared.
 - The lists (`list_library`, `list_decks`, `list_quizzes`, and the pages of the web app) have a "created by me" filter.
 
 ## How accounts are kept apart
