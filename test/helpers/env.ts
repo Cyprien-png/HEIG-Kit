@@ -20,3 +20,19 @@ process.env.HEIG_OUTPUT_DIR = path.join(root, "outputs");
 // Folders set one by one in .env would win over HEIG_OUTPUT_DIR.
 for (const name of ["HEIG_DOCUMENTS_DIR", "HEIG_VIDEOS_DIR", "HEIG_EXAMS_DIR"]) process.env[name] = "";
 for (const dir of [process.env.HEIG_CACHE_DIR, process.env.HEIG_DATA_DIR]) mkdirSync(dir, { recursive: true });
+
+// The tests never reach the school, edu-ID or any other machine: only this computer (the database, the servers the
+// tests start themselves). A test that would log in somewhere with made-up credentials fails here instead.
+const realFetch = globalThis.fetch;
+const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  const address = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+  let host = "";
+  try {
+    host = new URL(address).hostname;
+  } catch {
+    // A relative address cannot leave this computer.
+  }
+  if (host && !LOCAL.has(host)) return Promise.reject(new TypeError(`fetch failed: the tests are offline (${host})`));
+  return realFetch(input, init);
+}) as typeof fetch;
