@@ -59,8 +59,14 @@ c'est une confiance que vous accordez à cette personne en utilisant ce serveur.
 
 ## 4. Contenus partagés et injection de prompt
 
-Les supports de cours, cartes, quiz, documents et vidéos sont partagés entre tous les comptes. Chacun peut en créer
-avec sa propre IA. **Ces contenus ont pour vocation d'être utilisés via l'interface web.**
+**Ceci est un serveur de partage.** Les supports de cours, cartes, quiz, documents et vidéos sont communs à tous les
+comptes. En l'utilisant, vous comprenez et acceptez que **tous les documents et moyens de révision que vous générez**
+(fiches, corrigés, TE blancs, paquets de cartes, quiz, vidéos), vous-même ou par l'intermédiaire de votre IA, **sont
+partagés avec tous les autres comptes**, sous votre nom. N'y mettez rien que vous ne voulez pas montrer : une fiche
+bâtie sur vos points faibles ou sur vos notes devient visible par tous. Seul un administrateur peut ensuite supprimer
+un contenu partagé.
+
+Chacun peut créer ces contenus avec sa propre IA. **Ils ont pour vocation d'être utilisés via l'interface web.**
 
 Vous êtes libre de demander à vos agents de récupérer la matière de cours et les contenus du serveur. Si vous le
 faites, vous le faites en pleine conscience que quelqu'un a pu glisser, dans un contenu généré par un utilisateur, des
