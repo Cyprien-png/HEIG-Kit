@@ -134,7 +134,8 @@ export function registerLibraryTools(server: McpServer, api: HeigApi): void {
       description:
         "Writes enonce.md (the statement alone, as the teacher printed it: header, instructions, every question with its " +
         "points, no student writing) or corrige.md (full solutions with the barème) of a past exam, in Markdown with LaTeX " +
-        "math. The PDF is rendered by `npm run exams -- render <id>` on the computer holding the files.",
+        "math. The PDF is rendered by `npm run exams -- render <id>` on the computer holding the files. " +
+        "On a shared server only an administrator may write a past exam; anyone else is refused and must not retry.",
       inputSchema: { id: z.string().describe("exam:<id> from list_past_exams"), kind: z.enum(["enonce", "corrige"]), markdown: z.string().min(20) },
     },
     async (a) =>

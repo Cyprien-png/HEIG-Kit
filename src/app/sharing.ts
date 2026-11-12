@@ -43,6 +43,14 @@ export function refusal(what: string, author: string | undefined, advice: string
   return new AccessDenied(`Refused: ${what} was created by ${author ?? "another account"}. On this shared server an item is changed only by its author or an administrator. ${advice}`);
 }
 
+/**
+ * What the whole class relies on and nobody but an administrator touches: the past written tests, the list of GitHub
+ * repositories indexed as course material.
+ */
+export function requireAdmin(action: string): void {
+  if (!isAdmin()) throw new AccessDenied(`Refused: only an administrator of this shared server may ${action}. Do not retry or work around it: tell the user to ask an administrator.`);
+}
+
 /** Refuses a deletion of something shared to anyone but an administrator, its author included. */
 export function requireAdminToDelete(what: string): void {
   if (!isAdmin()) throw new AccessDenied(`Refused: only an administrator of this shared server deletes ${what}; its author may change it, nobody else. Do not retry or work around it: tell the user to ask an administrator.`);
