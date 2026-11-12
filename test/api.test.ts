@@ -93,8 +93,13 @@ test("the web session: cookie login, CSRF header, logout, and the app page", { s
   assert.equal((await upload({ "X-Requested-With": "heig-kit" })).status, 200);
   assert.equal(readFileSync(path.join(base, "out", "documents", "notes.md"), "utf-8"), "# Notes");
 
+  const other = await bearer(lea);
   const out = await fetch(`${origin}/api/auth/logout`, { method: "POST", headers: { Cookie: session, "X-Requested-With": "heig-kit" } });
   assert.match(out.headers.get("set-cookie") ?? "", /Max-Age=0/);
+  // Logging out ends every session of the account, not only this browser's: the cookie and the other tokens are dead.
+  assert.equal((await fetch(`${origin}/api/auth/me`, { headers: { Cookie: session } })).status, 401);
+  assert.equal((await fetch(`${origin}/api/auth/me`, { headers: other })).status, 401);
+  assert.equal((await fetch(`${origin}/api/auth/me`, { headers: await bearer(lea) })).status, 200, "a new login works");
 
   // Any other path is the web application, with its security headers.
   const page = await fetch(`${origin}/calendar`);
@@ -342,4 +347,21 @@ test("shared items over HTTP: the author's name, 403 for someone else's, 409 for
   assert.equal((await fetch(`${origin}/api/decks/${mine.id}`, { method: "DELETE", headers: asLea })).status, 204);
   assert.equal((await fetch(`${origin}/api/decks/${first.id}`, { method: "DELETE", headers: asNoe })).status, 403);
   assert.equal((await fetch(`${origin}/api/decks/${first.id}/cards`, { method: "POST", headers: asNoe, body: JSON.stringify({ cards: [{ front: "UDP ?", back: "Sans connexion" }] }) })).status, 403);
+
+  // The past written tests and the course repositories are the administrators' alone.
+  const exam = "MAD/2021-2022/TE1/enonce.md";
+  const putExam = (headers: Record<string, string>, body: string) => fetch(`${origin}/api/past-exams/files/${exam}`, { method: "PUT", headers, body });
+  assert.equal((await putExam(asNoe, "# Faux")).status, 403);
+  assert.equal((await putExam(asLea, "# TE1 2022")).status, 200);
+  assert.equal((await putExam(asNoe, "# Écrasé")).status, 403);
+  assert.equal((await fetch(`${origin}/api/past-exams/files/${exam}`, { method: "DELETE", headers: asNoe })).status, 403);
+  assert.equal(await (await fetch(`${origin}/api/past-exams/files/${exam}?download=1`, { headers: asNoe })).text(), "# TE1 2022", "everyone reads it");
+  assert.equal((await fetch(`${origin}/api/past-exams/files/${exam}`, { method: "DELETE", headers: asLea })).status, 204);
+  const repo = { url: "https://github.com/heig-vd/cours-exemple", course: "MAD" };
+  assert.equal((await fetch(`${origin}/api/kb/repos`, { method: "POST", headers: asNoe, body: JSON.stringify(repo) })).status, 403);
+  assert.equal((await fetch(`${origin}/api/kb/repos?url=${encodeURIComponent(repo.url)}`, { method: "DELETE", headers: asNoe })).status, 403);
+  assert.equal((await fetch(`${origin}/api/kb/repos/update`, { method: "POST", headers: asNoe })).status, 403);
+  assert.equal((await fetch(`${origin}/api/kb/repos`, { headers: asNoe })).status, 200);
+  assert.equal((await fetch(`${origin}/api/kb/repos`, { method: "POST", headers: asLea, body: JSON.stringify(repo) })).status, 200);
+  assert.equal((await fetch(`${origin}/api/kb/repos?url=${encodeURIComponent(repo.url)}`, { method: "DELETE", headers: asLea })).status, 200);
 });
