@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfOverlay } from "../components/PdfOverlay";
 import { Markdown } from "../components/Markdown";
-import { type FilterSpec, FilterBar, FilteredGroups, useFilterState, useFiltered } from "../components/ListFilters";
+import { type FilterSpec, FilterBar, FilteredGroups, MINE, NothingOfMine, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { bytes, dateTime } from "../lib/format";
@@ -24,15 +24,15 @@ const SPEC: FilterSpec<LibraryItem> = {
   serverSearch: true,
   course: (i) => i.course,
   date: (i) => i.modifiedAt,
-  categories: (i) => i.tags,
-  kinds: TYPE_TAGS,
+  categories: (i) => [i.mine && MINE, ...i.tags],
+  kinds: ["créés par moi", ...TYPE_TAGS],
 };
 
 export function Library() {
   const { kind, name } = useParams();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<"all" | "document" | "video">("all");
-  const [state, set] = useFilterState("library");
+  const [state, set] = useFilterState("library", "group", [MINE]);
   const q = state.q;
   const items = useApi<{ items: LibraryItem[] }>(`/api/library${q.trim() ? `?q=${encodeURIComponent(q)}` : ""}`, [q]);
   const all = items.data?.items ?? [];
@@ -45,7 +45,9 @@ export function Library() {
       <PageHeader title="Bibliothèque" />
       <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer par mots-clés…" extra={<Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: "all", label: "Tout" }, { value: "document", label: "Documents" }, { value: "video", label: "Vidéos" }]} />} />
       {items.error && <ErrorBox error={items.error} retry={items.reload} />}
-      {items.loading && !items.data ? <Loading /> : filtered.list.length === 0 ? (
+      {items.loading && !items.data ? <Loading /> : filtered.list.length === 0 && state.tags.length === 1 && state.tags[0] === MINE && !state.q.trim() && !state.course && all.length > 0 ? (
+        <NothingOfMine show={() => set({ tags: [] })} />
+      ) : filtered.list.length === 0 ? (
         <Empty title={all.length === 0 && !q.trim() ? "Bibliothèque vide" : "Rien ne correspond"} hint={all.length === 0 && !q.trim() ? "Les PDF et vidéos créés par l'agent apparaîtront ici." : "Changez les filtres."} />
       ) : (
         <FilteredGroups spec={SPEC} filtered={filtered} grid="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -75,6 +77,7 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
           <div className="min-w-0">
             <h2 className="font-medium leading-snug line-clamp-2">{item.title}</h2>
             <p className="text-xs text-ink-3 mt-1 font-mono truncate">{item.name}</p>
+            {!item.mine && item.author && <p className="text-xs text-ink-3 mt-0.5">par {item.author}</p>}
             {item.tags.length > 0 && (
               <div className={cx("flex flex-wrap gap-1 mt-2", !item.tagged && "opacity-60")} title={item.tagged ? undefined : "Classement automatique, pas encore tagué"}>
                 {[...item.tags].sort(tagOrder).map((t) => (
@@ -92,9 +95,12 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
             <Badge>{f.ext.slice(1)}</Badge>
           </button>
         ))}
-        <IconButton label="Supprimer" onClick={remove} className="h-7 w-7">
-          <TrashIcon className="h-4 w-4" />
-        </IconButton>
+        {/* A shared item is deleted by an administrator only. */}
+        {item.deletable !== false && (
+          <IconButton label="Supprimer" onClick={remove} className="h-7 w-7">
+            <TrashIcon className="h-4 w-4" />
+          </IconButton>
+        )}
       </div>
     </Card>
   );

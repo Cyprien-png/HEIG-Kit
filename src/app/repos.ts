@@ -5,6 +5,7 @@
  */
 import { type CourseRepo, addCourseRepo, formatCourseRepos, readCourseRepos, removeCourseRepo } from "../rag/sources/github.js";
 import type { RemoteClient } from "../remote/client.js";
+import { requireAdmin } from "./sharing.js";
 import type { SyncRun } from "./sync.js";
 
 export interface CourseRepos {
@@ -25,13 +26,18 @@ export class LocalRepos implements CourseRepos {
   list() {
     return readCourseRepos(this.file);
   }
-  add(url: string, course: string, branch?: string, exclude: string[] = []) {
+  // The repositories feed the knowledge base of everyone and are read with the server's own git token: on a shared
+  // server only its administrators manage them (the owner of a personal installation is one).
+  async add(url: string, course: string, branch?: string, exclude: string[] = []) {
+    requireAdmin("add a course repository");
     return addCourseRepo(url, course, branch, exclude, this.file);
   }
-  remove(url: string) {
+  async remove(url: string) {
+    requireAdmin("remove a course repository");
     return removeCourseRepo(url, this.file);
   }
-  update() {
+  async update() {
+    requireAdmin("fetch and index the course repositories");
     return this.runUpdate();
   }
 }

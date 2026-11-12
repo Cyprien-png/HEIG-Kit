@@ -1,3 +1,5 @@
+import { AlreadyExists } from "../../app/reuse.js";
+import { AccessDenied } from "../../identity.js";
 import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -7,6 +9,8 @@ export class HttpError extends Error {
     readonly status: number,
     message: string,
     readonly headers: Record<string, string> = {},
+    /** Other fields of the JSON answer, next to `error`. */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -165,4 +169,12 @@ export function dateField(body: Record<string, unknown>, name: string, optional 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new HttpError(400, `${name} must be an ISO date`);
   return date;
+}
+
+/**
+ * For the routes that turn a domain error into a 400 or a 404: a refusal (someone else's item, a copy of an existing
+ * one) is not one of those, and goes up to the router, which answers 403 or 409 with its explanation.
+ */
+export function rethrowRefusal(error: unknown): void {
+  if (error instanceof AccessDenied || error instanceof AlreadyExists) throw error;
 }

@@ -1,7 +1,7 @@
 import { NOTE_KINDS, type NoteInput, type NoteKind, addNotes, deleteNote, fileNotes, listChapters, listNotes, profileSince, profileSummary, resolveNote, searchNotes, setChapters, updateNote } from "../../app/profile.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, intParam, readJson, stringField } from "./util.js";
+import { HttpError, intParam, readJson, rethrowRefusal, stringField } from "./util.js";
 
 export function noteFrom(value: unknown, index: number): NoteInput {
   if (!value || typeof value !== "object") throw new HttpError(400, `note ${index + 1} must be an object`);
@@ -29,6 +29,7 @@ export function registerProfileRoutes(router: Router, app: App): void {
     try {
       since = profileSince(url.searchParams.get("since") ?? undefined);
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
     return profileSummary(app.db, url.searchParams.get("course") ?? undefined, since);

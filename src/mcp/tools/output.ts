@@ -8,7 +8,9 @@ import { z } from "zod";
 import { formatGenerated, listGenerated, openGenerated } from "../../generated.js";
 import { ROOT } from "../../paths.js";
 import { outputDir } from "../../vendor.js";
-import { respond } from "../common.js";
+import type { HeigApi } from "../../app/api.js";
+import { requireNewLibraryItem } from "../../app/library.js";
+import { REUSE_RULE, respond, reuseInput, reuseOf } from "../common.js";
 import { ASK_VIDEO_KIND, HQ_VIDEO_API, hqVideoInput } from "./hqvideo.js";
 
 const run = promisify(execFile);
@@ -19,8 +21,16 @@ function fileName(name: string): string {
   return name.replace(/\.[a-z0-9]+$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 100) || "document";
 }
 
-/** Tools that create files on the user's computer: documents (PDF, DOCX, HTML), animations, and what exists already. */
-export function registerOutputTools(server: McpServer): void {
+/**
+ * Tools that create files on the user's computer: documents (PDF, DOCX, HTML), animations, and what exists already.
+ * Before anything new is rendered, the library (this computer's, or the shared server's when one is used) is checked
+ * for the same thing (src/app/reuse.ts).
+ */
+export function registerOutputTools(server: McpServer, api: HeigApi): void {
+  const check = async (kind: "document" | "video", name: string, title: string | undefined, a: { checked?: string[]; new_because?: string }) =>
+    requireNewLibraryItem(await api.library(), kind, { name, title }, reuseOf(a));
+  const refused = (error: unknown) => ({ content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }], isError: true });
+
   server.registerTool(
     "list_generated",
     {
@@ -61,8 +71,9 @@ export function registerOutputTools(server: McpServer): void {
         "Writes Markdown to the user's documents folder and renders it to PDF (default), DOCX and/or HTML, then opens it. " +
         "Markdown supports LaTeX math ($…$, $$…$$, KaTeX), ```mermaid diagrams, tables, code, and videos as " +
         "![caption](../videos/Scene.mp4). New page: <div style=\"page-break-after: always\"></div>. Requires the " +
-        "documents module.",
+        `documents module. ${REUSE_RULE} Rendering again under the name of a document of yours replaces it.`,
       inputSchema: {
+        ...reuseInput,
         name: z.string().describe("Short file name without spaces, e.g. MAD-relations-ordre-exercices"),
         markdown: z.string().describe("The whole document, starting with a # title"),
         formats: z.array(z.enum(["pdf", "docx", "html"])).optional().describe("Default: pdf"),
@@ -75,6 +86,7 @@ export function registerOutputTools(server: McpServer): void {
         if (!existsSync(path.join(ROOT, "modules", "documents", "node_modules"))) {
           throw new Error("The documents module is not installed: the user should run `npm run setup -- documents`");
         }
+        await check("document", fileName(a.name), /^#\s+(.+)$/m.exec(a.markdown)?.[1], a);
         const folder = outputDir("documents");
         await mkdir(folder, { recursive: true });
         const source = path.join(folder, `${fileName(a.name)}.md`);
@@ -99,9 +111,10 @@ export function registerOutputTools(server: McpServer): void {
         "other, lines through texts, off screen) and an image of its key frames: fix them and call again. Ready-made pieces: `from heigkit_manim import *` (title_card, Panel, colored, live_value, approach, " +
         "hole, vertical_asymptote, sign_line, value_table, UnitCircle, recap, source_line). Never create Text or Tex inside " +
         "always_redraw or an updater. On failure, returns manim's error so you can fix the code and call again. Give each " +
-        "Scene class a one-line docstring saying what it shows. Requires the visuals module. " +
+        `Scene class a one-line docstring saying what it shows. Requires the visuals module. ${REUSE_RULE} Rendering again under the name of a video of yours replaces it. ` +
         ASK_VIDEO_KIND,
       inputSchema: {
+        ...reuseInput,
         name: z.string().describe("File name without spaces, e.g. divisibilite_antisymetrie"),
         code: z.string().describe("Python source of the scene(s)"),
         scene: z.string().describe("Name of the Scene class to render"),
@@ -114,6 +127,11 @@ export function registerOutputTools(server: McpServer): void {
       },
     },
     async (a) => {
+      try {
+        await check("video", a.scene, fileName(a.name), a);
+      } catch (error) {
+        return refused(error);
+      }
       const folder = outputDir("videos");
       await mkdir(folder, { recursive: true });
       const source = path.join(folder, `${fileName(a.name)}.py`);
@@ -155,12 +173,17 @@ export function registerOutputTools(server: McpServer): void {
       description:
         "Writes a High quality video (scenes and narration) to the user's videos folder, renders it to MP4 and opens it, then returns an " +
         "image of its key frames (the end of each line): check the layout, fix the scenes and call again. On failure, returns the error " +
-        `to fix. Requires the hqvideo module. ${ASK_VIDEO_KIND} ${HQ_VIDEO_API}`,
-      inputSchema: { ...hqVideoInput, open: z.boolean().optional().describe("Open the video (default: true)") },
+        `to fix. Requires the hqvideo module. ${REUSE_RULE} Rendering again under the name of a video of yours replaces it. ${ASK_VIDEO_KIND} ${HQ_VIDEO_API}`,
+      inputSchema: { ...hqVideoInput, ...reuseInput, open: z.boolean().optional().describe("Open the video (default: true)") },
     },
     async (a) => {
       if (!existsSync(path.join(ROOT, "modules", "hqvideo", "node_modules", "remotion"))) {
         return { content: [{ type: "text" as const, text: "The hqvideo module is not installed: the user should run `npm run setup -- hqvideo`" }], isError: true };
+      }
+      try {
+        await check("video", fileName(a.name), undefined, a);
+      } catch (error) {
+        return refused(error);
       }
       const folder = outputDir("videos");
       await mkdir(folder, { recursive: true });

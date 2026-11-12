@@ -20,7 +20,7 @@ Install only what you need. Each module installs its own dependencies automatica
 | [`visuals`](docs/visuals.md) | Mathematical animations with [3b1b/manim](https://github.com/3b1b/manim), embeddable in documents | manim, Python, FFmpeg, LaTeX |
 | [`voice`](docs/voice.md) | A spoken explanation synchronized with the animations, with a local French voice; videos stay silent without it | Kokoro, a French voice |
 | [`hqvideo`](docs/hqvideo.md) | **High quality videos**: explanations drawn in HTML and SVG with [Remotion](https://www.remotion.dev) in 1080p, with a natural local French voice or silent with subtitles | Remotion, a headless browser, OmniVoice and its model |
-| [`web`](docs/app.md) | The **web app** of your [remote server](docs/server.md): calendar with your own changes, grades, courses, library, flashcards, corrections of photographed work, learning profile, status page; phone to wide screen | Vite, React |
+| [`web`](docs/app.md) | The **web app** of your [remote server](docs/server.md), for you or a whole class ([accounts](docs/accounts.md): shared courses, library, decks and quizzes; everything personal closed): calendar with your own changes, grades, courses, library, flashcards, corrections of photographed work, learning profile; phone to wide screen | Vite, React |
 | [`remote`](docs/app.md) | Use your remote server from this computer: its knowledge base, calendar, cards, corrections and library, no local indexing | — |
 | [`shortcuts`](docs/shortcuts.md) | `heig:planning`, `heig:deadlines`… from any terminal | — |
 | `claude` | The `heig:*` skills in Claude Code, and the knowledge base server | — |

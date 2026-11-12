@@ -8,7 +8,7 @@ import type { HeigApi } from "../../app/api.js";
 import { formatMockExams } from "../../app/exams.js";
 import { formatProfile, profileSince } from "../../app/profile.js";
 import { TIME_ZONE } from "../../dates.js";
-import { respond } from "../common.js";
+import { respond, REUSE_RULE, reuseInput, reuseOf } from "../common.js";
 
 const EVENT_KINDS = ["lesson", "deadline", "exam", "event"] as const;
 const NOTE_KINDS = ["weakness", "strength", "mistake", "note"] as const;
@@ -240,8 +240,10 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     "list_decks",
     {
       title: "Flashcard decks",
-      description: "The student's flashcard decks with their number of cards, cards due and new cards; with deck_id, the deck's cards.",
-      inputSchema: { course: z.string().optional(), deck_id: z.number().int().optional() },
+      description:
+        "The flashcard decks of the server, shared by every account (each says who made it; the cards due and new are the student's own), " +
+        "with their number of cards; with deck_id, the deck's cards. Call it before creating a deck.",
+      inputSchema: { course: z.string().optional(), deck_id: z.number().int().optional(), mine: z.boolean().optional().describe("Only the decks this account created") },
       annotations: { readOnlyHint: true },
     },
     async (a) =>
@@ -251,8 +253,8 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
           if (!deck) return `No deck ${a.deck_id}`;
           return [`# ${deck.title} (${deck.course ?? "no course"}, deck ${deck.id})`, deck.description ?? "", ...deck.cardList.map((c) => `- [${c.id}] ${c.front} → ${c.back}${c.tags?.length ? ` (${c.tags.join(", ")})` : ""}`)].join("\n");
         }
-        const decks = await api.decks(a.course);
-        return decks.length === 0 ? "No decks yet." : decks.map((d) => `[${d.id}] ${d.course ? `${d.course} · ` : ""}${d.title}: ${d.cards} cards, ${d.due} due, ${d.fresh} new`).join("\n");
+        const decks = (await api.decks(a.course)).filter((d) => !a.mine || d.mine);
+        return decks.length === 0 ? "No decks yet." : decks.map((d) => `[${d.id}] ${d.course ? `${d.course} · ` : ""}${d.title}: ${d.cards} cards, ${d.due} due, ${d.fresh} new${d.mine ? "" : d.author ? ` (by ${d.author})` : ""}`).join("\n");
       }),
   );
 
@@ -263,12 +265,12 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
       description:
         "Creates a deck of flashcards for a course, with its cards. Make cards from the course material (search it first): " +
         "one notion per card, a precise question on the front, a short exact answer on the back, in French, LaTeX for " +
-        "formulas, the source of each card. The student studies them on the web app.",
-      inputSchema: { title: z.string(), course: z.string().optional(), description: z.string().optional(), cards: z.array(cardSchema).min(1).max(200) },
+        `formulas, the source of each card. The student studies them on the web app. Decks are shared: call list_decks first. ${REUSE_RULE}`,
+      inputSchema: { title: z.string(), course: z.string().optional(), description: z.string().optional(), cards: z.array(cardSchema).min(1).max(200), ...reuseInput },
     },
     async (a) =>
       respond(async () => {
-        const deck = await api.createDeck({ title: a.title, course: a.course, description: a.description }, a.cards);
+        const deck = await api.createDeck({ title: a.title, course: a.course, description: a.description, reuse: reuseOf(a) }, a.cards);
         return `Deck ${deck.id} "${deck.title}" created with ${deck.cards} cards.`;
       }),
   );
@@ -277,7 +279,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     "add_flashcards",
     {
       title: "Add flashcards to a deck",
-      description: "Appends cards to an existing deck (see list_decks).",
+      description: "Appends cards to an existing deck of yours (see list_decks; the decks of others are read and studied, not changed).",
       inputSchema: { deck_id: z.number().int(), cards: z.array(cardSchema).min(1).max(200) },
     },
     async (a) => respond(async () => `${(await api.addCards(a.deck_id, a.cards)).length} cards added to deck ${a.deck_id}.`),
@@ -287,7 +289,7 @@ export function registerStudyTools(server: McpServer, api: HeigApi): void {
     "delete_flashcards",
     {
       title: "Delete flashcards or a deck",
-      description: "Deletes cards by id, or a whole deck with its cards.",
+      description: "Deletes cards by id, or a whole deck with its cards. On a shared server only an administrator may: anyone else is refused, and must not retry.",
       inputSchema: { card_ids: z.array(z.number().int()).optional(), deck_id: z.number().int().optional().describe("Deletes the whole deck") },
       annotations: { destructiveHint: true },
     },

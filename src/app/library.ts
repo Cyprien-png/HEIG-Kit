@@ -6,6 +6,9 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, stat
 import path from "node:path";
 import { listGenerated } from "../generated.js";
 import type { Db } from "../rag/db.js";
+import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
+import { isAdmin } from "../identity.js";
+import { type Authorship, authorColumns, authorship, refusal } from "./sharing.js";
 import { resolveGenerated } from "../server/files.js";
 import { outputDir } from "../vendor.js";
 import { latestSnapshot } from "./snapshots.js";
@@ -22,7 +25,7 @@ export interface LibraryFile {
   modifiedAt: string;
 }
 
-export interface LibraryItem {
+export interface LibraryItem extends Partial<Authorship> {
   kind: "document" | "video";
   /** Base name without extension, shared by the source and its renderings. */
   name: string;
@@ -202,9 +205,77 @@ export async function knownCourses(db: Db): Promise<string[]> {
   return [...codes].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
-/** The library with its tags, the usual entry point of the API, the MCP tools and the CLI. */
+/** Who created each item (`document:name`). Items nobody is known to have created are missing: anyone may change them. */
+export async function libraryAuthors(db: Db): Promise<Map<string, Authorship>> {
+  const { rows } = await db.query(`SELECT i.item, ${authorColumns("i")} FROM library_items i`);
+  return new Map(rows.map((r) => [r.item as string, authorship(r)]));
+}
+
+const unowned = (): Authorship => ({ mine: false, editable: true, deletable: isAdmin() });
+
+/** The library with its tags and authors, the usual entry point of the API, the MCP tools and the CLI. */
 export async function annotatedLibrary(db: Db, keywords: string[] = []): Promise<LibraryItem[]> {
-  return annotateLibrary(listLibrary(keywords), await listLibraryTags(db), await knownCourses(db));
+  const authors = await libraryAuthors(db);
+  return annotateLibrary(listLibrary(keywords), await listLibraryTags(db), await knownCourses(db)).map((item) => ({ ...item, ...(authors.get(libraryItemKey(item)) ?? unowned()) }));
+}
+
+/** The item a library file belongs to: `documents/notes.pdf` gives `document:notes`. */
+export function itemKeyOfFile(id: string): string | undefined {
+  const parsed = parseLibraryId(id);
+  return parsed ? `${parsed.kind === "documents" ? "document" : "video"}:${path.basename(parsed.name, parsed.ext)}` : undefined;
+}
+
+/**
+ * Before writing the files of an item: the name becomes the current account's when nobody has it, and an error says
+ * whose it is otherwise. A name is therefore never overwritten by someone else's work.
+ */
+export async function claimLibraryItems(db: Db, keys: string[]): Promise<void> {
+  for (const key of new Set(keys)) {
+    await requireLibraryEditable(db, key);
+    await db.query("INSERT INTO library_items (item) VALUES ($1) ON CONFLICT (item) DO NOTHING", [key]);
+  }
+}
+
+/** An error when the item belongs to someone else (changing its files, deleting it). */
+export async function requireLibraryEditable(db: Db, key: string): Promise<void> {
+  const who = (await libraryAuthors(db)).get(key);
+  if (who && !who.editable) throw refusal(`"${key}"`, who.author, "Give it to the user as it is, or create yours under another name.");
+}
+
+/** Once the last file of an item is gone, its name is free again. */
+export async function releaseLibraryItem(db: Db, key: string): Promise<void> {
+  const [kind, name] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  const left = listLibraryFiles().some((f) => itemKeyOfFile(f.id) === `${kind}:${name}`);
+  if (left) return;
+  await db.query("DELETE FROM library_tags WHERE item = $1", [key]);
+  await db.query("DELETE FROM library_items WHERE item = $1", [key]);
+}
+
+/**
+ * Files that were in the library before the accounts existed, or were put there by hand, get the given owner (the
+ * first administrator, who took over the installation). Run when the server starts.
+ */
+export async function adoptLibrary(db: Db, owner: number): Promise<number> {
+  const keys = [...new Set(listLibraryFiles().map((f) => itemKeyOfFile(f.id)!))];
+  if (keys.length === 0) return 0;
+  const { rowCount } = await db.system.query("INSERT INTO library_items (item, created_by) SELECT k, $2 FROM unnest($1::text[]) AS k ON CONFLICT (item) DO NOTHING", [keys, owner]);
+  return rowCount ?? 0;
+}
+
+/** The library as the duplicate check sees it (src/app/reuse.ts). */
+export const libraryExisting = (items: LibraryItem[], kind: LibraryItem["kind"]): Existing[] =>
+  items.filter((i) => i.kind === kind).map((i) => ({ ref: libraryItemKey(i), title: i.title === i.name ? i.name : `${i.title} (${i.name})`, course: i.course, author: i.author, mine: i.mine ?? false }));
+
+/**
+ * Before rendering a document or a video under `name`: fine when it is an item of the current account (a new version
+ * of its own work), refused when the name is someone else's, and checked against similar items when it is new.
+ */
+export function requireNewLibraryItem(items: LibraryItem[], kind: LibraryItem["kind"], wanted: { name: string; title?: string }, claim: ReuseClaim | undefined): void {
+  const same = items.find((i) => i.kind === kind && i.name === wanted.name);
+  if (same?.editable === false) throw refusal(`the ${kind} "${wanted.name}"`, same.author, "Give it to the user as it is (list_library, get_download_link), or create yours under another name.");
+  if (same) return;
+  const title = wanted.title && wanted.title !== wanted.name ? `${wanted.title} ${wanted.name}` : wanted.name;
+  requireNew(kind, { title }, libraryExisting(items, kind), claim, "Look at them first (list_library, list_generated with keywords, then the file itself).");
 }
 
 /**

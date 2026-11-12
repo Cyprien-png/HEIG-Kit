@@ -3,12 +3,15 @@
  * connectors and the Claude phone app. It implements what the MCP authorization specification asks for: protected
  * resource and authorization server metadata (RFC 9728, RFC 8414), dynamic client registration (RFC 7591), the
  * authorization code flow with PKCE (S256 only) on a login page served here, and refresh tokens with rotation.
- * The access tokens are the same JWTs as those of POST /auth/login, so /mcp and /api do not change.
+ * The person logs in with their own account: the code, the refresh token and the access tokens all carry that account,
+ * and the access tokens are the same JWTs as the web application's, so /mcp and /api do not change.
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { HttpError, json, readBody } from "./api/util.js";
+import { type User, authenticate, getUser, setupStep } from "../accounts/users.js";
+import { json, readBody } from "./api/util.js";
 import type { App } from "./app.js";
+import { issueFor, openSession, renewCampus, sessionOf } from "./session.js";
 
 const CODE_MINUTES = 10;
 /** Access tokens of connectors are short: the refresh token (as long as HEIG_JWT_DAYS) renews them. */
@@ -71,6 +74,9 @@ export function protectedResourceMetadata(publicUrl: URL) {
 /** The header /mcp answers with when the token is missing or wrong, pointing clients to the metadata. */
 export const challengeHeader = (publicUrl: URL) => `Bearer resource_metadata="${publicUrl.origin}/.well-known/oauth-protected-resource"`;
 
+/** The parameters of an authorization request, carried through the login page and back. */
+const AUTHORIZE_PARAMS = ["client_id", "redirect_uri", "response_type", "code_challenge", "code_challenge_method", "state", "scope", "resource"];
+
 interface AuthorizeRequest {
   client: OAuthClient;
   redirectUri: string;
@@ -93,7 +99,7 @@ export class OAuth {
   constructor(private readonly app: App) {}
 
   /** Serves the OAuth paths; false when the path is not one of them. */
-  async handle(req: IncomingMessage, res: ServerResponse, url: URL, client: string): Promise<{ handled: boolean; note?: string }> {
+  async handle(req: IncomingMessage, res: ServerResponse, url: URL, client: string): Promise<{ handled: boolean; note?: string; userId?: number }> {
     const path = url.pathname;
     const method = req.method ?? "GET";
     try {
@@ -105,12 +111,12 @@ export class OAuth {
         if (method !== "POST") return this.methodNotAllowed(res, "POST");
         await this.register(req, res);
       } else if (path === "/oauth/authorize") {
-        if (method === "GET") await this.authorizePage(res, url.searchParams);
-        else if (method === "POST") return { handled: true, note: await this.authorizeSubmit(req, res, client) };
+        if (method === "GET") await this.authorizePage(res, url.searchParams, url.searchParams.has("switch") ? undefined : await sessionOf(req, this.app));
+        else if (method === "POST") return { handled: true, ...(await this.authorizeSubmit(req, res, client)) };
         else return this.methodNotAllowed(res, "GET, POST");
       } else if (path === "/oauth/token") {
         if (method !== "POST") return this.methodNotAllowed(res, "POST");
-        return { handled: true, note: await this.token(req, res) };
+        return { handled: true, ...(await this.token(req, res)) };
       } else {
         return { handled: false };
       }
@@ -132,7 +138,7 @@ export class OAuth {
   // Clients
 
   async client(id: string): Promise<OAuthClient | undefined> {
-    const { rows } = await this.app.db.query<{ id: string; name: string; redirect_uris: string[]; secret_hash: string | null }>("SELECT id, name, redirect_uris, secret_hash FROM oauth_clients WHERE id = $1", [id]);
+    const { rows } = await this.app.db.system.query<{ id: string; name: string; redirect_uris: string[]; secret_hash: string | null }>("SELECT id, name, redirect_uris, secret_hash FROM oauth_clients WHERE id = $1", [id]);
     return rows[0] ? { id: rows[0].id, name: rows[0].name, redirectUris: rows[0].redirect_uris, secretHash: rows[0].secret_hash ?? undefined } : undefined;
   }
 
@@ -155,12 +161,12 @@ export class OAuth {
     if (!["none", "client_secret_post", "client_secret_basic"].includes(authMethod as string)) throw new OAuthError("invalid_client_metadata", "unsupported token_endpoint_auth_method");
     const grants = Array.isArray(body.grant_types) ? body.grant_types : ["authorization_code"];
     if (!grants.every((g) => g === "authorization_code" || g === "refresh_token")) throw new OAuthError("invalid_client_metadata", "only authorization_code and refresh_token are supported");
-    const { rows } = await this.app.db.query<{ n: string }>("SELECT count(*) AS n FROM oauth_clients");
+    const { rows } = await this.app.db.system.query<{ n: string }>("SELECT count(*) AS n FROM oauth_clients");
     if (Number(rows[0].n) >= MAX_CLIENTS) throw new OAuthError("too_many_clients", "too many registered clients", 429);
 
     const id = secret();
     const clientSecret = authMethod === "none" ? undefined : secret();
-    await this.app.db.query("INSERT INTO oauth_clients (id, name, redirect_uris, secret_hash) VALUES ($1, $2, $3, $4)", [id, name, JSON.stringify(uris), clientSecret ? sha256(clientSecret) : null]);
+    await this.app.db.system.query("INSERT INTO oauth_clients (id, name, redirect_uris, secret_hash) VALUES ($1, $2, $3, $4)", [id, name, JSON.stringify(uris), clientSecret ? sha256(clientSecret) : null]);
     console.error(`OAuth client registered: ${name} (${(uris as string[]).join(", ")})`);
     json(
       res,
@@ -197,7 +203,11 @@ export class OAuth {
     return { client, redirectUri, state, challenge, scope };
   }
 
-  private async authorizePage(res: ServerResponse, params: URLSearchParams, error?: string, status = 200): Promise<void> {
+  /**
+   * The page of an authorization request. A browser already logged in to the web application, with an account that is
+   * ready, only confirms; anyone else logs in with their account.
+   */
+  private async authorizePage(res: ServerResponse, params: URLSearchParams, session?: { user: User; token: string }, error?: string, status = 200): Promise<void> {
     let request: AuthorizeRequest;
     try {
       request = await this.parseAuthorize(params);
@@ -205,67 +215,111 @@ export class OAuth {
       if (!(e instanceof OAuthError)) throw e;
       return page(res, 400, "Demande invalide", `<p class="error">${escape(e.message)}</p><p class="muted">Code : <code>${escape(e.code)}</code>. Le client doit s'enregistrer sur ce serveur et utiliser une adresse de retour enregistrée.</p>`);
     }
-    const hidden = ["client_id", "redirect_uri", "response_type", "code_challenge", "code_challenge_method", "state", "scope", "resource"]
-      .filter((name) => params.has(name))
+    const hidden = AUTHORIZE_PARAMS.filter((name) => params.has(name))
       .map((name) => `<input type="hidden" name="${name}" value="${escape(params.get(name)!)}">`)
       .join("");
     const host = escape(new URL(request.redirectUri).host);
+    const asks = `<p><strong>${escape(request.client.name)}</strong> <span class="muted">(${host})</span> demande l'accès à votre HEIG-Kit : calendrier, cours, cartes, corrections, profil.</p>`;
+    if (session && !setupStep(session.user)) {
+      const query = new URLSearchParams(AUTHORIZE_PARAMS.filter((name) => params.has(name)).map((name) => [name, params.get(name)!]));
+      query.set("switch", "1");
+      return page(
+        res,
+        status,
+        "Autoriser l'accès",
+        `${asks}
+        <form method="post" action="/oauth/authorize">${hidden}
+          <input type="hidden" name="consent" value="${escape(this.app.auth.formToken(session.token, `oauth:${request.client.id}`))}">
+          <p>Vous êtes connecté·e en tant que <strong>${escape(session.user.name)}</strong> <span class="muted">(${escape(session.user.email)})</span>.</p>
+          ${error ? `<p class="error">${escape(error)}</p>` : ""}
+          <button type="submit">Autoriser</button>
+        </form>
+        <p class="muted"><a href="/oauth/authorize?${escape(query.toString())}">Utiliser un autre compte</a></p>`,
+      );
+    }
     page(
       res,
       status,
       "Autoriser l'accès",
-      `<p><strong>${escape(request.client.name)}</strong> <span class="muted">(${host})</span> demande l'accès à votre HEIG-Kit : calendrier, cours, cartes, corrections, profil.</p>
+      `${asks}
       <form method="post" action="/oauth/authorize">${hidden}
-        <label>Nom d'utilisateur<input name="username" autocomplete="username" required autofocus></label>
+        <label>Adresse e-mail<input name="email" type="email" autocomplete="username" required autofocus></label>
         <label>Mot de passe<input name="password" type="password" autocomplete="current-password" required></label>
         ${error ? `<p class="error">${escape(error)}</p>` : ""}
         <button type="submit">Autoriser</button>
       </form>
-      <p class="muted">Le compte est celui du fichier <code>.env</code> du serveur. L'accès peut être révoqué en changeant <code>HEIG_JWT_VERSION</code>.</p>`,
+      <p class="muted">Connectez-vous avec votre compte HEIG-Kit. Il est créé par l'administrateur du serveur ; l'accès donné ici ne concerne que ce compte.</p>`,
     );
   }
 
-  private async authorizeSubmit(req: IncomingMessage, res: ServerResponse, client: string): Promise<string | undefined> {
+  private async authorizeSubmit(req: IncomingMessage, res: ServerResponse, client: string): Promise<{ note?: string; userId?: number }> {
     const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf-8"));
-    if (!this.app.limiter.allowed(client)) {
-      console.error(`OAuth login refused (too many failures) from ${client}`);
-      await this.authorizePage(res, form, "Trop de tentatives : réessayez dans un quart d'heure.", 429);
-      return "too many attempts";
-    }
-    if (!this.app.auth.checkCredentials(form.get("username"), form.get("password"))) {
-      this.app.limiter.fail(client);
-      console.error(`OAuth login failed from ${client}`);
-      await this.authorizePage(res, form, "Identifiants refusés.", 401);
-      return "invalid credentials";
+    let user: User;
+    if (form.has("consent")) {
+      // Confirmed from a browser already logged in: the form must come from the page shown to that very session.
+      const session = await sessionOf(req, this.app);
+      const clientId = form.get("client_id") ?? "";
+      if (!session || !this.app.auth.checkFormToken(form.get("consent"), session.token, `oauth:${clientId}`)) {
+        form.delete("consent");
+        await this.authorizePage(res, form, undefined, "Votre session a expiré : connectez-vous.", 401);
+        return { note: "invalid consent" };
+      }
+      user = session.user;
+    } else {
+      if (!this.app.limiter.allowed(client)) {
+        console.error(`OAuth login refused (too many failures) from ${client}`);
+        await this.authorizePage(res, form, undefined, "Trop de tentatives : réessayez dans un quart d'heure.", 429);
+        return { note: "too many attempts" };
+      }
+      const login = await authenticate(this.app.db, form.get("email") ?? form.get("username"), form.get("password"));
+      if (!login) {
+        this.app.limiter.fail(client);
+        console.error(`OAuth login failed from ${client}`);
+        await this.authorizePage(res, form, undefined, "Identifiants refusés.", 401);
+        return { note: "invalid credentials" };
+      }
+      this.app.limiter.succeed(client);
+      this.app.vault.unlock(login.user.id, login.vaultKey);
+      renewCampus(this.app, login.user);
+      user = login.user;
     }
     let request: AuthorizeRequest;
     try {
       request = await this.parseAuthorize(form);
     } catch (e) {
       if (!(e instanceof OAuthError)) throw e;
-      return void page(res, 400, "Demande invalide", `<p class="error">${escape(e.message)}</p>`);
+      page(res, 400, "Demande invalide", `<p class="error">${escape(e.message)}</p>`);
+      return { note: e.code, userId: user.id };
     }
-    this.app.limiter.succeed(client);
+    const step = setupStep(user);
+    if (step) {
+      // First password to replace, edu-ID to connect: done in the web application, which then comes back here.
+      const back = new URLSearchParams(AUTHORIZE_PARAMS.filter((name) => form.has(name)).map((name) => [name, form.get(name)!]));
+      const session = await openSession(this.app, user);
+      res.writeHead(302, { Location: `/?next=${encodeURIComponent(`/oauth/authorize?${back.toString()}`)}`, "Set-Cookie": session.cookie, ...NO_STORE }).end();
+      return { note: `setup: ${step}`, userId: user.id };
+    }
     const code = secret();
-    await this.app.db.query("INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6)", [
+    await this.app.db.system.query("INSERT INTO oauth_codes (code_hash, client_id, redirect_uri, code_challenge, scope, expires_at, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)", [
       sha256(code),
       request.client.id,
       request.redirectUri,
       request.challenge,
       request.scope ?? null,
       new Date(Date.now() + CODE_MINUTES * 60_000),
+      user.id,
     ]);
     const target = new URL(request.redirectUri);
     target.searchParams.set("code", code);
     if (request.state) target.searchParams.set("state", request.state);
-    console.error(`OAuth access authorized for ${request.client.name} from ${client}`);
+    console.error(`OAuth access authorized for ${request.client.name} by account ${user.id} from ${client}`);
     res.writeHead(302, { Location: target.href, ...NO_STORE }).end();
-    return undefined;
+    return { userId: user.id };
   }
 
   // Tokens
 
-  private async token(req: IncomingMessage, res: ServerResponse): Promise<string | undefined> {
+  private async token(req: IncomingMessage, res: ServerResponse): Promise<{ note?: string; userId?: number }> {
     const raw = (await readBody(req, MAX_FORM_BYTES)).toString("utf-8");
     const form = /json/i.test(req.headers["content-type"] ?? "") ? jsonForm(raw) : new URLSearchParams(raw);
     const basic = /^Basic (\S+)$/.exec(req.headers.authorization ?? "")?.[1];
@@ -280,10 +334,11 @@ export class OAuth {
 
     const grant = form.get("grant_type");
     let scope: string | undefined;
+    let userId: number | null;
     if (grant === "authorization_code") {
       const code = form.get("code") ?? "";
-      const { rows } = await this.app.db.query<{ client_id: string; redirect_uri: string; code_challenge: string; scope: string | null; expires_at: Date; used_at: Date | null }>(
-        "UPDATE oauth_codes SET used_at = now() WHERE code_hash = $1 AND used_at IS NULL RETURNING client_id, redirect_uri, code_challenge, scope, expires_at, used_at",
+      const { rows } = await this.app.db.system.query<{ client_id: string; redirect_uri: string; code_challenge: string; scope: string | null; expires_at: Date; used_at: Date | null; user_id: string | null }>(
+        "UPDATE oauth_codes SET used_at = now() WHERE code_hash = $1 AND used_at IS NULL RETURNING client_id, redirect_uri, code_challenge, scope, expires_at, used_at, user_id",
         [sha256(code)],
       );
       const row = rows[0];
@@ -291,31 +346,41 @@ export class OAuth {
       if ((form.get("redirect_uri") ?? row.redirect_uri) !== row.redirect_uri) throw new OAuthError("invalid_grant", "redirect_uri does not match");
       if (!pkceMatches(form.get("code_verifier"), row.code_challenge)) throw new OAuthError("invalid_grant", "code_verifier does not match the challenge");
       scope = row.scope ?? undefined;
+      userId = row.user_id === null ? null : Number(row.user_id);
     } else if (grant === "refresh_token") {
       const presented = form.get("refresh_token") ?? "";
-      const { rows } = await this.app.db.query<{ client_id: string; scope: string | null; expires_at: Date; revoked_at: Date | null }>("SELECT client_id, scope, expires_at, revoked_at FROM oauth_refresh_tokens WHERE token_hash = $1", [sha256(presented)]);
+      const { rows } = await this.app.db.system.query<{ client_id: string; scope: string | null; expires_at: Date; revoked_at: Date | null; user_id: string | null }>("SELECT client_id, scope, expires_at, revoked_at, user_id FROM oauth_refresh_tokens WHERE token_hash = $1", [sha256(presented)]);
       const row = rows[0];
       if (!row || row.client_id !== client.id) throw new OAuthError("invalid_grant", "unknown refresh token");
       if (row.revoked_at) {
-        // A rotated token presented again means it leaked: everything of this client is revoked.
-        await this.app.db.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND revoked_at IS NULL", [client.id]);
+        // A rotated token presented again means it leaked: everything this client holds for that account is revoked.
+        await this.app.db.system.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND user_id IS NOT DISTINCT FROM $2 AND revoked_at IS NULL", [client.id, row.user_id]);
         console.error(`OAuth refresh token reused by client ${client.name}: its tokens are revoked`);
         throw new OAuthError("invalid_grant", "refresh token already used");
       }
       if (row.expires_at < new Date()) throw new OAuthError("invalid_grant", "refresh token expired");
-      await this.app.db.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE token_hash = $1", [sha256(presented)]);
+      await this.app.db.system.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE token_hash = $1", [sha256(presented)]);
       scope = row.scope ?? undefined;
+      userId = row.user_id === null ? null : Number(row.user_id);
+      // The refresh token carries the key of the account's sealed credentials (wrapped, after the dot): it goes on to
+      // the next tokens. The database only ever holds the hash of the whole token.
+      const carried = userId === null ? undefined : this.app.auth.unwrapVaultKey(userId, presented.split(".")[1]);
+      if (userId !== null && carried) this.app.vault.unlock(userId, carried);
     } else {
       throw new OAuthError("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
     }
 
-    const { token, expiresAt } = await this.app.auth.issueToken(ACCESS_DAYS);
-    const refresh = secret();
-    await this.app.db.query("INSERT INTO oauth_refresh_tokens (token_hash, client_id, scope, expires_at) VALUES ($1, $2, $3, $4)", [sha256(refresh), client.id, scope ?? null, new Date(Date.now() + this.app.config.tokenDays * 86_400_000)]);
-    await this.app.db.query("UPDATE oauth_clients SET last_used_at = now() WHERE id = $1", [client.id]);
-    await this.app.db.query("DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'");
+    // The tokens are those of the account that logged in, as long as it may use the server.
+    const user = userId === null ? undefined : await getUser(this.app.db, userId);
+    if (!user || !user.hasPassword || user.disabledAt || setupStep(user)) throw new OAuthError("invalid_grant", "the account of this grant cannot be used: log in again");
+    const { token, expiresAt } = await issueFor(this.app, user, ACCESS_DAYS);
+    const vaultKey = this.app.vault.key(user.id);
+    const refresh = vaultKey ? `${secret()}.${this.app.auth.wrapVaultKey(user.id, vaultKey)}` : secret();
+    await this.app.db.system.query("INSERT INTO oauth_refresh_tokens (token_hash, client_id, scope, expires_at, user_id) VALUES ($1, $2, $3, $4, $5)", [sha256(refresh), client.id, scope ?? null, new Date(Date.now() + this.app.config.tokenDays * 86_400_000), user.id]);
+    await this.app.db.system.query("UPDATE oauth_clients SET last_used_at = now() WHERE id = $1", [client.id]);
+    await this.app.db.system.query("DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'");
     json(res, 200, { access_token: token, token_type: "Bearer", expires_in: Math.floor((expiresAt.getTime() - Date.now()) / 1000), refresh_token: refresh, ...(scope ? { scope } : {}) }, NO_STORE);
-    return undefined;
+    return { userId: user.id };
   }
 }
 
@@ -353,7 +418,7 @@ main{width:100%;max-width:400px;background:var(--surface);border:1px solid var(-
 h1{font-size:18px;margin:0 0 12px}p{margin:0 0 12px}label{display:block;font-size:13px;font-weight:500;color:var(--ink-2);margin:12px 0 4px}
 input{display:block;width:100%;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
 button{margin-top:16px;width:100%;height:42px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
-.error{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--ink-3);font-size:13px}code{font:13px ui-monospace,Menlo,monospace}
+.error{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--ink-3);font-size:13px}a{color:var(--accent)}code{font:13px ui-monospace,Menlo,monospace}
 </style></head><body><main><div class="brand"><img class="mark" src="/favicon.svg" alt="">HEIG-Kit</div><h1>${escape(title)}</h1>${body}</main></body></html>`;
   res.writeHead(status, PAGE_HEADERS).end(html);
 }

@@ -12,7 +12,7 @@ import { respond } from "../common.js";
 function formatItem(item: LibraryItem): string {
   const files = item.files.map((f) => f.ext.slice(1)).join(", ");
   const tags = [item.course ?? "(no course)", ...item.tags].join(" · ");
-  return `${item.kind.padEnd(8)} ${item.modifiedAt.slice(0, 10)}  ${tags}${item.tagged ? "" : "  (guessed)"}\n  ${item.title}\n  id: ${item.kind}:${item.name} (${files})`;
+  return `${item.kind.padEnd(8)} ${item.modifiedAt.slice(0, 10)}  ${tags}${item.tagged ? "" : "  (guessed)"}\n  ${item.title}${item.mine ? " — yours" : item.author ? ` — by ${item.author}` : ""}\n  id: ${item.kind}:${item.name} (${files})`;
 }
 
 export function registerLibraryTools(server: McpServer, api: HeigApi): void {
@@ -22,11 +22,12 @@ export function registerLibraryTools(server: McpServer, api: HeigApi): void {
       title: "The library, by course and tags",
       description:
         "Lists the generated documents and videos with their course and tags, grouped by course. Tags not set yet are " +
-        `guessed from the name (marked “guessed”). Types: ${TYPE_TAGS.join(", ")}; topics are free (« calcul matriciel »).`,
+        `guessed from the name (marked “guessed”). The library is shared by every account of the server: each item says who made it, and only its author changes it. Types: ${TYPE_TAGS.join(", ")}; topics are free (« calcul matriciel »).`,
       inputSchema: {
         course: z.string().optional().describe("Only this course code"),
         tag: z.string().optional().describe("Only items with this tag"),
         keywords: z.string().optional().describe("Topic words searched in names, titles and texts"),
+        mine: z.boolean().optional().describe("Only what this account created"),
       },
       annotations: { readOnlyHint: true },
     },
@@ -35,7 +36,7 @@ export function registerLibraryTools(server: McpServer, api: HeigApi): void {
         const words = (a.keywords ?? "").split(/\s+/).filter(Boolean);
         const tag = a.tag?.trim().toLowerCase();
         const course = a.course?.trim().toUpperCase();
-        const items = (await api.library(words)).filter((i) => (!course || i.course === course) && (!tag || i.tags.includes(tag)));
+        const items = (await api.library(words)).filter((i) => (!course || i.course === course) && (!tag || i.tags.includes(tag)) && (!a.mine || i.mine));
         if (items.length === 0) return "Nothing in the library matches.";
         const byCourse = new Map<string, LibraryItem[]>();
         for (const item of items) byCourse.set(item.course ?? "", [...(byCourse.get(item.course ?? "") ?? []), item]);
@@ -133,7 +134,8 @@ export function registerLibraryTools(server: McpServer, api: HeigApi): void {
       description:
         "Writes enonce.md (the statement alone, as the teacher printed it: header, instructions, every question with its " +
         "points, no student writing) or corrige.md (full solutions with the barème) of a past exam, in Markdown with LaTeX " +
-        "math. The PDF is rendered by `npm run exams -- render <id>` on the computer holding the files.",
+        "math. The PDF is rendered by `npm run exams -- render <id>` on the computer holding the files. " +
+        "On a shared server only an administrator may write a past exam; anyone else is refused and must not retry.",
       inputSchema: { id: z.string().describe("exam:<id> from list_past_exams"), kind: z.enum(["enonce", "corrige"]), markdown: z.string().min(20) },
     },
     async (a) =>

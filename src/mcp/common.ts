@@ -1,10 +1,23 @@
+import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 import { type IncomingMessage, createServer } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { MfaRequiredError } from "../auth/eduid.js";
+import { type Identity, runAs } from "../identity.js";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+
+/**
+ * Makes every tool registered on `server` from now on run as `identity`: on the shared server, a server is built for
+ * each request with the account of its token, and its tools can act as no other.
+ */
+export function bindTools(server: McpServer, identity: Identity): McpServer {
+  const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
+  (server as { registerTool: unknown }).registerTool = (name: unknown, config: unknown, handler: (...args: unknown[]) => unknown) =>
+    register(name, config, (...args: unknown[]) => runAs(identity, () => handler(...args)));
+  return server;
+}
 
 /** Runs a tool, turning its result into text content and its errors into readable error results for the model. */
 export async function respond(run: () => Promise<string>): Promise<ToolResult> {
@@ -67,3 +80,16 @@ export function serveHttp(buildServer: () => Promise<McpServer>, port: number, t
     }
   }).listen(port, host, () => console.error(`HEIG-Kit MCP server on http://${host ?? "0.0.0.0"}:${port}/mcp`));
 }
+
+/** The two inputs every creating tool has: what the caller says when similar items already exist (src/app/reuse.ts). */
+export const reuseInput = {
+  checked: z.array(z.string()).optional().describe("Only after a refusal for similar existing items: the references of those you looked at, as listed in the refusal"),
+  new_because: z.string().optional().describe("Only after such a refusal and only if none of them fits: one sentence saying what the user needs that each of them lacks"),
+};
+
+export const reuseOf = (a: { checked?: string[]; new_because?: string }) => (a.checked || a.new_because ? { checked: a.checked, newBecause: a.new_because } : undefined);
+
+/** Said in the description of every creating tool. */
+export const REUSE_RULE =
+  "What exists is shared and must be reused: the call is refused when a similar item exists, and lists them. Read them and give the user the one that fits; " +
+  "create another only when none does, by calling again with `checked` and `new_because`.";

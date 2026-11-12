@@ -1,7 +1,8 @@
 import { type CardInput, type Grade, addCards, answerStudySession, createDeck, currentStudySession, deleteCard, deleteDeck, deleteStudySession, getDeck, getStudySession, listDecks, openStudySession, review, studyQueue, studyStats, updateCard, updateDeck, updateStudySession } from "../../app/flashcards.js";
+import { reuseClaim } from "../../app/reuse.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, intParam, readJson, stringField } from "./util.js";
+import { HttpError, intParam, readJson, rethrowRefusal, stringField } from "./util.js";
 
 const MAX_CARDS_PER_CALL = 200;
 
@@ -25,7 +26,7 @@ export function registerFlashcardRoutes(router: Router, app: App): void {
 
   router.post("/api/decks", async ({ req }) => {
     const body = await readJson(req);
-    const deck = await createDeck(app.db, { title: stringField(body, "title", { max: 200 })!, course: stringField(body, "course", { optional: true, max: 40 }), description: stringField(body, "description", { optional: true, max: 2000 }) });
+    const deck = await createDeck(app.db, { title: stringField(body, "title", { max: 200 })!, course: stringField(body, "course", { optional: true, max: 40 }), description: stringField(body, "description", { optional: true, max: 2000 }), reuse: reuseClaim(body.checked, body.new_because) });
     const cards = Array.isArray(body.cards) ? body.cards : [];
     if (cards.length > MAX_CARDS_PER_CALL) throw new HttpError(400, `at most ${MAX_CARDS_PER_CALL} cards per call`);
     const added = await addCards(app.db, deck.id, cards.map(cardFrom));
@@ -144,6 +145,7 @@ async function domain<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
+    rethrowRefusal(error);
     if (error instanceof Error && /^(No |This )/.test(error.message)) throw new HttpError(400, error.message);
     throw error;
   }

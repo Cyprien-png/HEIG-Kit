@@ -171,7 +171,51 @@ export interface LibraryFile {
   modifiedAt: string;
 }
 
-export interface LibraryItem {
+/** Who made a shared item (a deck, a quiz, a document, a video), as the server says it for the current account. */
+export interface Authorship {
+  createdBy?: number;
+  /** The author's name. */
+  author?: string;
+  /** Created by the current account. */
+  mine?: boolean;
+  /** The current account may change it (its author, or an administrator). */
+  editable?: boolean;
+  /** The current account may delete it (administrators only). */
+  deletable?: boolean;
+}
+
+/** The account of the session (GET /api/auth/me). */
+export interface Account {
+  id: number;
+  email: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  role: "admin" | "student";
+  /** What must be done before anything else: accept the conditions, replace the first password, then connect edu-ID. */
+  setup: "terms" | "password" | "campus" | null;
+  terms: { version: string; accepted: boolean; acceptedAt?: string };
+  campus: { state: "missing" | "ok" | "expired"; verifiedAt?: string; stored: boolean; unlocked: boolean };
+}
+
+/** An account as the administrators see it (GET /api/admin/users). */
+export interface AdminUser {
+  id: number;
+  email: string;
+  name: string;
+  role: "admin" | "student";
+  disabled: boolean;
+  setup: "terms" | "password" | "campus" | null;
+  campus: "missing" | "ok" | "expired";
+  createdAt: string;
+  lastLoginAt?: string;
+  lastActivityAt?: string;
+  requestsDay: number;
+  requestsWeek: number;
+  refusedWeek: number;
+}
+
+export interface LibraryItem extends Authorship {
   kind: "document" | "video";
   name: string;
   title: string;
@@ -183,7 +227,7 @@ export interface LibraryItem {
   tagged: boolean;
 }
 
-export interface Deck {
+export interface Deck extends Authorship {
   id: number;
   course?: string;
   title: string;
@@ -433,7 +477,7 @@ export interface StatusReport {
   login: { sessionSavedAt?: string; cyberlearnToken: boolean; needsCode: boolean; lastGapsOk?: string; lastCyberlearnOk?: string };
   syncs: SyncRun[];
   snapshots: Record<string, { fetchedAt: string; checkedAt: string }>;
-  ingestion: { documents: number; chunks: number; courses: number; lastIndexedAt?: string; pending?: { checkedAt: string; added: number; changed: number; removed: number; indexed: number; courses: string[]; examples: string[] } };
+  ingestion: { documents: number; chunks: number; courses: number; lastIndexedAt?: string; pending?: { checkedAt: string; added: number; changed: number; removed: number; indexed: number; courses: string[]; examples: string[] }; running: boolean; progress?: string; last?: SyncRun };
   requests: { total: number; errors: number; unauthorized: number; lastUnauthorizedAt?: string; lastMcpAt?: string };
   syncing: boolean;
 }
@@ -447,11 +491,13 @@ export interface RequestEntry {
   ms: number;
   tool?: string;
   note?: string;
+  /** The account of the request, when its token named one. */
+  userId?: number;
 }
 
 // Quizzes (mirrors src/app/quizzes.ts)
 
-export interface QuizSummary {
+export interface QuizSummary extends Authorship {
   id: number;
   /** Only true/false statements, only multiple-choice questions (QCM), or both. */
   kind: "truefalse" | "mcq" | "mixed";

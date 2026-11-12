@@ -5,40 +5,52 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createApi } from "./api/index.js";
 import { type Principal, type Router, runRoute } from "./api/router.js";
 import { serveWeb } from "./api/static.js";
-import { CONTENT_TYPES, HttpError, TooLarge, clientOf, json, parseCookies, readBody, readJson, sendFile } from "./api/util.js";
+import { CONTENT_TYPES, HttpError, TooLarge, clientOf, json, readBody, readJson, sendFile } from "./api/util.js";
+import { type SetupStep, type User, authenticate, identityOf, setupStep } from "../accounts/users.js";
+import { AccessDenied, type Identity, runAs } from "../identity.js";
 import type { App } from "./app.js";
 import { resolveGenerated } from "./files.js";
 import { OAuth, challengeHeader } from "./oauth.js";
+import { SESSION_COOKIE, accountOf, describeAccount, issueFor, renewCampus, sessionCookie, sessionOf } from "./session.js";
 
 const MAX_MCP_BYTES = 32 * 1024 ** 2;
-export const SESSION_COOKIE = "heig_session";
 
-async function login(req: IncomingMessage, res: ServerResponse, app: App, client: string, cookie: boolean): Promise<void> {
-  if (req.method !== "POST") return json(res, 405, { error: "method not allowed" }, { Allow: "POST" });
+/** What an account that has not finished its setup is told, whatever it asks. */
+export const setupMessage = (publicUrl: URL, step: SetupStep) =>
+  `This account is not ready: ${
+    step === "terms"
+      ? "its owner must read and accept the conditions of use themselves (an agent must never accept them for them)"
+      : step === "password"
+        ? "its first password must be replaced"
+        : "it must connect its edu-ID account"
+  }. Open ${publicUrl.origin} in a browser, log in and finish the setup; nothing else works until then.`;
+
+/**
+ * Login of the web application with the address and the password of an account: a session cookie, also for an account
+ * that still has to finish its setup (the setup routes need it). Everything else (agents, the CLI) gets its tokens
+ * through OAuth (src/server/oauth.ts) and never sees a password.
+ */
+async function login(req: IncomingMessage, res: ServerResponse, app: App, client: string): Promise<number | undefined> {
+  if (req.method !== "POST") return void json(res, 405, { error: "method not allowed" }, { Allow: "POST" });
+  if (req.headers["x-requested-with"] !== "heig-kit") return void json(res, 403, { error: "missing X-Requested-With header" });
   if (!app.limiter.allowed(client)) {
     console.error(`Login refused (too many failures) from ${client}`);
-    return json(res, 429, { error: "too many attempts, try again later" }, { "Retry-After": "900" });
+    return void json(res, 429, { error: "too many attempts, try again later" }, { "Retry-After": "900" });
   }
   const credentials = await readJson(req, 4 * 1024);
-  if (!app.auth.checkCredentials(credentials.username, credentials.password)) {
+  const found = await authenticate(app.db, credentials.email, credentials.password);
+  if (!found) {
     app.limiter.fail(client);
     console.error(`Login failed from ${client}`);
-    return json(res, 401, { error: "invalid credentials" });
+    return void json(res, 401, { error: "invalid credentials" });
   }
   app.limiter.succeed(client);
-  const { token, expiresAt } = await app.auth.issueToken();
-  if (!cookie) return json(res, 200, { access_token: token, token_type: "Bearer", expires_at: expiresAt.toISOString() });
-  json(res, 200, { username: app.config.username, expires_at: expiresAt.toISOString() }, { "Set-Cookie": sessionCookie(app, token, expiresAt) });
-}
-
-function sessionCookie(app: App, token: string, expiresAt: Date): string {
-  const secure = app.config.publicUrl.protocol === "https:" ? "; Secure" : "";
-  const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
-}
-
-export function clearedSessionCookie(app: App): string {
-  return sessionCookie(app, "", new Date(0));
+  const { user, vaultKey } = found;
+  app.vault.unlock(user.id, vaultKey);
+  renewCampus(app, user);
+  const { token, expiresAt } = await issueFor(app, user);
+  json(res, 200, { ...describeAccount(app, user), expires_at: expiresAt.toISOString() }, { "Set-Cookie": sessionCookie(app, token, expiresAt) });
+  return user.id;
 }
 
 async function download(req: IncomingMessage, res: ServerResponse, url: URL, app: App): Promise<void> {
@@ -87,19 +99,22 @@ async function mcp(req: IncomingMessage, res: ServerResponse, buildServer: () =>
 }
 
 /** Who makes an API request, from its cookie or bearer token; `undefined` when nobody valid. */
-async function authenticate(req: IncomingMessage, app: App): Promise<Principal | undefined> {
+async function principalOf(req: IncomingMessage, app: App): Promise<Principal | undefined> {
   const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? "")?.[1];
   if (bearer) {
-    if (await app.auth.verifyAccessToken(bearer)) return { kind: "bearer" };
-    const correctionId = await app.auth.verifyCaptureToken(bearer);
-    return correctionId ? { kind: "capture", correctionId } : undefined;
+    const user = await accountOf(app, await app.auth.verifyAccessToken(bearer));
+    if (user) return { kind: "bearer", user, token: bearer };
+    const capture = await app.auth.verifyCaptureToken(bearer);
+    return capture ? { kind: "capture", ...capture } : undefined;
   }
-  const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
-  if (cookie && (await app.auth.verifyAccessToken(cookie))) return { kind: "cookie" };
-  return undefined;
+  const session = await sessionOf(req, app);
+  return session ? { kind: "cookie", ...session } : undefined;
 }
 
-async function api(req: IncomingMessage, res: ServerResponse, url: URL, app: App, router: Router, client: string): Promise<{ note?: string }> {
+/** The account a request works as: the one of its token. A capture link works as the owner of its correction, and nothing more. */
+const identityFor = (principal: Principal): Identity => (principal.kind === "capture" ? { id: principal.userId, role: "student" } : identityOf(principal.user));
+
+async function api(req: IncomingMessage, res: ServerResponse, url: URL, app: App, router: Router, client: string): Promise<{ note?: string; userId?: number }> {
   const method = req.method ?? "GET";
   const matched = router.match(method, url.pathname);
   if (!matched) {
@@ -111,35 +126,44 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL, app: App
     return {};
   }
   const { route, params } = matched;
-  let principal: Principal = { kind: "cookie" };
-  if (!route.options.public) {
-    const found = await authenticate(req, app);
-    if (!found) {
-      json(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
-      return { note: req.headers.authorization || req.headers.cookie?.includes(SESSION_COOKIE) ? "invalid token" : "no token" };
+  const principal = await principalOf(req, app);
+  if (!principal) {
+    json(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
+    return { note: req.headers.authorization || req.headers.cookie?.includes(SESSION_COOKIE) ? "invalid token" : "no token" };
+  }
+  const userId = principal.kind === "capture" ? principal.userId : principal.user.id;
+  const allow = route.options.allow ?? ["cookie", "bearer"];
+  if (!allow.includes(principal.kind)) {
+    json(res, 403, { error: "forbidden" });
+    return { note: "forbidden", userId };
+  }
+  // A page of another site can make the browser send the cookie, but cannot add this header.
+  if (principal.kind === "cookie" && method !== "GET" && method !== "HEAD" && req.headers["x-requested-with"] !== "heig-kit") {
+    json(res, 403, { error: "missing X-Requested-With header" });
+    return { note: "csrf", userId };
+  }
+  if (principal.kind !== "capture") {
+    if (route.options.admin && principal.user.role !== "admin") {
+      json(res, 403, { error: "Reserved to the administrators of this server." });
+      return { note: "admin only", userId };
     }
-    principal = found;
-    const allow = route.options.allow ?? ["cookie", "bearer"];
-    if (!allow.includes(principal.kind)) {
-      json(res, 403, { error: "forbidden" });
-      return { note: "forbidden" };
-    }
-    // A page of another site can make the browser send the cookie, but cannot add this header.
-    if (principal.kind === "cookie" && method !== "GET" && method !== "HEAD" && req.headers["x-requested-with"] !== "heig-kit") {
-      json(res, 403, { error: "missing X-Requested-With header" });
-      return { note: "csrf" };
+    const step = setupStep(principal.user);
+    if (step && !route.options.setup) {
+      json(res, 403, { error: setupMessage(app.config.publicUrl, step), setup: step });
+      return { note: `setup: ${step}`, userId };
     }
   }
-  await runRoute(route, { req, res, url, params, principal, client });
-  return {};
+  await runAs(identityFor(principal), () => runRoute(route, { req, res, url, params, principal, client }));
+  return { userId };
 }
 
 /**
- * The public face of the remote server: /health, POST /auth/login, /mcp (access token), GET /files (signed link),
- * /api/* (cookie session or access token) and the web application for every other path.
+ * The public face of the remote server: /health, the OAuth endpoints, /mcp (access token), GET /files (signed link),
+ * /api/* (cookie session or access token) and the web application for every other path. Every authenticated request
+ * runs as the account its token names (`runAs`), which is what the database and the campus logins go by.
  * Requests for another host name are refused, which blocks DNS rebinding from a browser.
  */
-export function createRemoteServer(app: App, buildServer: () => Promise<McpServer>): Server {
+export function createRemoteServer(app: App, buildServer: (user: User) => Promise<McpServer>): Server {
   const router = createApi(app);
   const oauth = new OAuth(app);
   return createServer(async (req, res) => {
@@ -147,37 +171,46 @@ export function createRemoteServer(app: App, buildServer: () => Promise<McpServe
     const client = clientOf(req, app.config.trustProxy);
     let tool: string | undefined;
     let note: string | undefined;
+    let userId: number | undefined;
     res.on("finish", () => {
       const pathname = new URL(req.url ?? "/", app.config.publicUrl).pathname;
       // Static files of the web application would drown the log.
       if (pathname === "/health" || pathname.startsWith("/assets/") || /\.(svg|webmanifest|ico|png|woff2?)$/.test(pathname)) return;
-      app.requests.record({ at: new Date(), client, method: req.method ?? "", path: pathname, status: res.statusCode, ms: performance.now() - started, tool, note });
+      app.requests.record({ at: new Date(), client, method: req.method ?? "", path: pathname, status: res.statusCode, ms: performance.now() - started, tool, note, userId });
     });
     try {
       const url = new URL(req.url ?? "/", app.config.publicUrl);
       if (url.pathname === "/health") return void res.writeHead(200).end("ok");
       if (req.headers.host !== app.config.publicUrl.host) return json(res, 421, { error: "unknown host" });
-      if (url.pathname === "/auth/login") return await login(req, res, app, client, false);
-      if (url.pathname === "/api/auth/login") return await login(req, res, app, client, true);
+      if (url.pathname === "/api/auth/login") return void (userId = await login(req, res, app, client));
       if (url.pathname === "/files") return await download(req, res, url, app);
       if (url.pathname.startsWith("/oauth/") || url.pathname.startsWith("/.well-known/oauth-")) {
         const result = await oauth.handle(req, res, url, client);
         if (result.handled) {
           note = result.note;
+          userId = result.userId;
           return;
         }
       }
       if (url.pathname === "/mcp") {
-        if (!(await app.auth.verifyHeader(req.headers.authorization))) {
+        const user = await accountOf(app, await app.auth.verifyHeader(req.headers.authorization));
+        if (!user) {
           note = req.headers.authorization ? "invalid token" : "no token";
           // Clients that speak OAuth find the authorization server from here (src/server/oauth.ts).
           return json(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": challengeHeader(app.config.publicUrl) });
         }
-        tool = await mcp(req, res, buildServer);
+        userId = user.id;
+        const step = setupStep(user);
+        if (step) {
+          note = `setup: ${step}`;
+          return json(res, 403, { error: setupMessage(app.config.publicUrl, step), setup: step });
+        }
+        // The tools of this request are built for this account and run as it: no argument of a tool names an account.
+        tool = await runAs(identityOf(user), () => mcp(req, res, () => buildServer(user)));
         return;
       }
       if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-        note = (await api(req, res, url, app, router, client)).note;
+        ({ note, userId } = await api(req, res, url, app, router, client));
         return;
       }
       if (!serveWeb(req, res, url.pathname)) json(res, 404, { error: "not found" });
@@ -187,7 +220,11 @@ export function createRemoteServer(app: App, buildServer: () => Promise<McpServe
         return;
       }
       if (error instanceof HttpError) {
-        if (!res.headersSent) json(res, error.status, { error: error.message }, error.headers);
+        if (!res.headersSent) json(res, error.status, { error: error.message, ...error.details }, error.headers);
+        return;
+      }
+      if (error instanceof AccessDenied) {
+        if (!res.headersSent) json(res, 403, { error: error.message });
         return;
       }
       // The details stay in the server's log.

@@ -4,7 +4,7 @@
  *
  *   npm run -s mcp                 stdio (Claude Desktop, Claude Code, mcpo for Open WebUI…)
  *   npm run -s mcp -- --http       Streamable HTTP on http://127.0.0.1:8766/mcp, with the token of data/mcp-token
- *   npm run -s server              remote server: account and tokens from .env, isolated rendering, downloads (docs/server.md)
+ *   npm run -s server              shared remote server: accounts (npm run users), isolated rendering, downloads (docs/server.md)
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -14,7 +14,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { DATA_DIR } from "../paths.js";
+import { type User, identityOf, listUsers } from "../accounts/users.js";
 import { type HeigApi, LocalApi, RemoteApi } from "../app/api.js";
+import { scheduleHousekeeping } from "../app/housekeeping.js";
+import { adoptLibrary } from "../app/library.js";
+import { LOCAL_OWNER, requireIdentity } from "../identity.js";
 import { captureUrl } from "../app/corrections.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "../app/knowledge.js";
 import { type CourseRepos, RemoteRepos } from "../app/repos.js";
@@ -24,7 +28,7 @@ import { createApp } from "../server/app.js";
 import { loadServerConfig } from "../server/config.js";
 import { createRemoteServer } from "../server/http.js";
 import { JobQueue } from "../server/jobs.js";
-import { serveHttp } from "./common.js";
+import { bindTools, serveHttp } from "./common.js";
 import { registerCampusTools } from "./tools/campus.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerLibraryTools } from "./tools/library.js";
@@ -73,16 +77,35 @@ const INSTRUCTIONS = `HEIG-Kit gives access to a HEIG-VD student's school inform
 
 const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_generated)", "reuse what exists (get_download_link)")}
 - This server is remote: render_document, render_animation and render_hq_video queue a job, followed with get_job, which gives download
-  links valid a few minutes. Give these links to the user; nothing opens on their computer.`;
+  links valid a few minutes. Give these links to the user; nothing opens on their computer.
+- This server is SHARED BY A WHOLE CLASS, and every call runs as the account of its access token, which nothing in a
+  call can change. Personal and closed to the others: timetable, calendars, grades, absences, profile, corrections,
+  work copies, study progress and quiz attempts. Shared with everyone, each item with its author: the course material,
+  the library (documents, videos), the flashcard decks and the quizzes.
+- BEFORE CREATING ANYTHING SHARED YOU MUST LOOK FOR IT: list_library (and list_generated) before render_document,
+  render_animation or render_hq_video; list_decks before create_deck; list_quizzes before create_quiz. If an item of
+  anyone in the class covers the request, give that one to the user and name its author; do not make a copy. The server
+  refuses a similar item with the list of those that exist: read them, and only if none fits call again with
+  \`checked\` (the references it listed) and \`new_because\` (one sentence: what the user needs that each of them lacks).
+  Never fill these without having read the items, never rename something to get around the refusal.
+- An item is changed only by its author (or an administrator), and DELETED ONLY BY AN ADMINISTRATOR, its author
+  included: a refusal there is final, do not retry or work around it; create the user's own item for what is missing,
+  and tell them to ask an administrator for a deletion. \`mine: true\` on the list tools shows only theirs.
+- The past written tests (save_past_exam_text) and the GitHub repositories of courses (add_course_repo,
+  remove_course_repo, update_course_repos) are managed by the administrators only; everyone reads them.
+- A refusal saying the account is not ready, or that its edu-ID session ended, is fixed by the user in the web
+  application of the server (its password, its edu-ID connection), never by you: tell them, and never ask for a password.`;
 
 /** How the server exposes files and rendering: on this computer by default. */
-let registerOutputs: (server: McpServer) => void = registerOutputTools;
+let registerOutputs: (server: McpServer) => void = (server) => registerOutputTools(server, study);
 let instructions = INSTRUCTIONS;
 /** Where the GitHub repositories of courses are listed and indexed: here, on the remote server, or the server itself. */
 let repos: { store: CourseRepos; where: "this computer" | "the server" } = { store: localRepos(), where: "this computer" };
 
-async function buildServer(): Promise<McpServer> {
+/** The server of one MCP session; on the shared server, of one request and of the account of its token. */
+async function buildServer(user?: User): Promise<McpServer> {
   const server = new McpServer({ name: "heig-kit", version: "0.4.0" }, { instructions });
+  if (user) bindTools(server, identityOf(user));
   registerCampusTools(server);
   await registerKnowledgeTools(server, knowledge);
   registerOutputs(server);
@@ -163,11 +186,18 @@ if (values.server) {
   if (applied.length > 0) console.error(`Database migrations applied: ${applied.join(", ")}`);
   const app = createApp(config, db, queue);
   knowledge = new LocalKnowledge(db);
-  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id)) });
+  // One API for every account: each call works on the rows of the account its request runs as (src/rag/db.ts).
+  study = new LocalApi(db, { captureUrl: async (id) => captureUrl(config.publicUrl, id, await app.auth.issueCaptureToken(id, requireIdentity().id)) });
+  if (process.env.HEIG_AUTH_USERNAME || process.env.HEIG_AUTH_PASSWORD) console.error("HEIG_AUTH_USERNAME and HEIG_AUTH_PASSWORD are no longer used: remove them from .env. Accounts are created with `npm run users -- add <email>`.");
+  if ((await listUsers(db)).length === 0) console.error("No account yet: nobody can log in. Create the first one (an administrator) with `npm run users -- add prenom.nom@heig-vd.ch`.");
+  // What was generated before the accounts existed belongs to the account that took the installation over.
+  const adopted = await adoptLibrary(db, LOCAL_OWNER.id);
+  if (adopted > 0) console.error(`${adopted} library items without a known author now belong to the first account.`);
+  scheduleHousekeeping(db, { pruneJobs: queue ? () => queue.prune() : undefined });
   if (config.syncMinutes > 0) app.syncer.start();
   repos = { store: app.repos, where: "the server" };
   instructions = REMOTE_INSTRUCTIONS;
-  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes);
+  registerOutputs = (server) => registerRemoteOutputTools(server, app.auth, config.publicUrl, queue, config.linkMinutes, db, () => app.syncer.startIngest());
   createRemoteServer(app, buildServer).listen(config.port, config.host, () => console.error(`HEIG-Kit server on ${config.host}:${config.port}, public address ${config.publicUrl.origin}`));
 } else if (values.http) {
   const tokenFile = path.join(DATA_DIR, "mcp-token");

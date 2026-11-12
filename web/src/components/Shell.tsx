@@ -8,6 +8,8 @@ import {
   ChartBarIcon,
   CheckBadgeIcon,
   ClipboardDocumentCheckIcon,
+  ClipboardDocumentListIcon,
+  ExclamationTriangleIcon,
   Cog6ToothIcon,
   FolderIcon,
   HomeIcon,
@@ -62,11 +64,14 @@ const IMMERSIVE = /^\/(study|quiz\/play|copies\/[^/]+)(\/|$)/;
 const isUnder = (pathname: string, item: NavItem) => (item.to === "/" ? pathname === "/" : [item.to, ...(item.under ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`)));
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { username, logout } = useSession();
+  const { me, logout } = useSession();
+  const username = me?.name;
+  const admin = me?.role === "admin";
   const [theme, setTheme] = useTheme();
   const [settings, setSettings] = useState(false);
   const location = useLocation();
   const immersive = IMMERSIVE.test(location.pathname);
+  const reconnect = me?.campus.state === "expired" && location.pathname !== "/account";
 
   const sideLink = (item: NavItem) => (
     <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm font-medium transition-colors", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
@@ -111,7 +116,20 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
         {/* The only scrolling area of the app; it never chains its scroll to the document. */}
         <main className={cx("flex-1 min-h-0 w-full min-w-0 overscroll-y-contain", immersive ? "overflow-hidden" : "overflow-y-auto overflow-x-clip px-4 md:px-6 xl:px-8 pt-5 pb-12 md:pt-7 md:pb-16")}>
-          {immersive ? children : <div className="h-full max-w-[1500px] mx-auto">{children}</div>}
+          {immersive ? (
+            children
+          ) : (
+            <div className="h-full max-w-[1500px] mx-auto">
+              {reconnect && (
+                <NavLink to="/account" className="mb-4 rounded-xl border border-warn/40 bg-warn-soft text-warn px-4 py-3 text-sm flex items-center gap-2">
+                  <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
+                  <span className="flex-1">Votre session edu-ID a pris fin : horaires, notes et échéances ne se mettent plus à jour.</span>
+                  <span className="font-medium underline">Reconnecter</span>
+                </NavLink>
+              )}
+              {children}
+            </div>
+          )}
         </main>
         {!immersive && (
           <nav className="md:hidden shrink-0 bg-surface border-t border-line pb-safe">
@@ -136,11 +154,21 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="text-xs font-medium text-ink-2 mb-1.5">Thème</div>
             <Segmented value={theme} onChange={setTheme} options={[{ value: "system", label: "Système" }, { value: "light", label: "Clair" }, { value: "dark", label: "Sombre" }]} />
           </div>
-          <NavLink to="/status" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
-            <SignalIcon className="h-5 w-5" /> Statut du serveur
+          <NavLink to="/account" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
+            <UserCircleIcon className="h-5 w-5" /> Mon compte
           </NavLink>
+          {admin && (
+            <>
+              <NavLink to="/status" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
+                <SignalIcon className="h-5 w-5" /> Statut du serveur
+              </NavLink>
+              <NavLink to="/journal" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
+                <ClipboardDocumentListIcon className="h-5 w-5" /> Journal des comptes
+              </NavLink>
+            </>
+          )}
           <div className="border-t border-line pt-4">
-            <div className="text-xs text-ink-3 mb-2">Connecté en tant que <span className="font-medium text-ink">{username}</span></div>
+            <div className="text-xs text-ink-3 mb-2">Connecté en tant que <span className="font-medium text-ink">{username}</span> ({me?.email})</div>
             <button onClick={() => void logout()} className="flex items-center gap-2.5 rounded-lg border border-line px-3 h-10 text-sm font-medium text-ink-2 hover:bg-surface-2 w-full">
               <ArrowRightStartOnRectangleIcon className="h-5 w-5" /> Se déconnecter
             </button>

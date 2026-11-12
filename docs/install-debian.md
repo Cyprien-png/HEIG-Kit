@@ -5,7 +5,7 @@ Step by step, on a fresh Debian 12 or 13 machine (amd64 or arm64), for the remot
 
 You need:
 
-- a machine with about 8 GB of RAM and 15 GB of free disk (estimate), reachable on ports 80 and 443;
+- a machine with about 12 GB of RAM and 15 GB of free disk (estimate), reachable on ports 80 and 443;
 - a domain name whose DNS record points to it, e.g. `heig.example.org`;
 - an SSH access with `sudo`.
 
@@ -40,7 +40,7 @@ sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io doc
 
 ## 3. Node.js 22
 
-Used on the machine for the first login, indexing (`npm run ingest`) and updates:
+Used on the machine to manage the accounts (`npm run users`) and for updates:
 
 ```sh
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
@@ -71,11 +71,10 @@ openssl rand -hex 32    # for HEIG_JWT_SECRET
 nano .env
 ```
 
-In `.env`, fill your edu-ID credentials (`HEIG_EMAIL`, `HEIG_PASSWORD`) and uncomment the "Remote server" section:
+In `.env`, remove the edu-ID lines (`HEIG_EMAIL`, `HEIG_PASSWORD`: nobody's credentials live in a file on a shared
+server) and uncomment the "Remote server" section:
 
 ```sh
-HEIG_AUTH_USERNAME=me
-HEIG_AUTH_PASSWORD=a-long-password-of-yours     # 12 characters at least, not your edu-ID password
 HEIG_JWT_SECRET=<output of openssl rand -hex 32>
 HEIG_PUBLIC_URL=https://heig.example.org
 HEIG_TRUST_PROXY=1
@@ -85,28 +84,35 @@ For courses published on GitHub (`npm run repos`, the `add_course_repo` tool), a
 fine-grained token of the GitHub account that can read these repositories, with read-only access to their contents.
 The server's container fetches them with it; `git pull` of this folder keeps using the machine's own git account.
 
-## 6. Check that GAPS and edu-ID accept the machine
+## 6. GAPS and edu-ID must accept the machine
 
-Before anything else: some hosting providers' addresses are refused, and then nothing else works.
-
-```sh
-npm run schedule
-```
-
-The first login usually asks for the two-step code of your authenticator app:
-`npm run schedule -- --mfa-code 123456`. The session is then saved in `.cache/` for a few weeks.
+Some hosting providers' addresses are refused by GAPS or edu-ID, and then nothing works. You will know at your first
+login on the web application (section 7), when it connects your edu-ID account: if GAPS refuses the machine, the
+connection fails there with the reason.
 
 ## 7. Start
 
 ```sh
 npm run rag:start       # database and embedding model
-npm run ingest          # indexes your courses: shows progress and the time left; the first run is long
-npm run server:start    # downloads the server and render images, then starts them
+npm run server:start    # downloads the server, render and extraction images, then starts them
 curl -s http://127.0.0.1:8766/health    # ok
 ```
 
 The `server` image also holds the web application ([app.md](app.md)); once HTTPS is set up (next step), open
-`https://heig.example.org` and log in with `HEIG_AUTH_USERNAME` / `HEIG_AUTH_PASSWORD`.
+`https://heig.example.org`.
+
+Create the accounts, yours first (it is an administrator); each command prints a first password once
+([accounts.md](accounts.md)):
+
+```sh
+npm run users -- add prenom.nom@heig-vd.ch
+```
+
+At the first login the web application makes each person choose a password, then connect their edu-ID account.
+
+Then index the courses: as an administrator, open **Statut du serveur** (the cog) and press **Indexer mes cours**. The
+server reads Cyberlearn with your own edu-ID connection and fills the knowledge base shared by everyone; the first run
+is long and its progress is shown on that page. Later the server indexes by itself what changes on Cyberlearn.
 
 ## 8. HTTPS
 
@@ -202,7 +208,7 @@ HEIG_IMAGE_TAG=sha-1a2b3c4 npm run server:update
 | `ENOENT … mkdir` when pushing the library | `HEIG_DOCUMENTS_DIR` / `HEIG_VIDEOS_DIR` of `.env` point outside the container: set `HEIG_LIBRARY_DIR` in `rag/.env` (section 8) or remove them |
 | 421 `unknown host` | `HEIG_PUBLIC_URL` does not match the address used by the client |
 | GitHub row of the status page: `could not fetch` | `HEIG_GITHUB_TOKEN` is missing, expired or not allowed to read that repository (private ones need it) |
-| GitHub row: `en attente de l'extraction` | PDFs of the repositories wait for docling, started by `npm run ingest` on the machine (or `docker compose -f rag/compose.yml --profile ingest up -d docling`) |
+| GitHub row: `en attente de l'extraction` | PDFs wait for the extraction service, which runs beside the server: `docker compose -f rag/compose.yml --profile server up -d docling` |
 
 ## Backups
 

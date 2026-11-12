@@ -1,9 +1,7 @@
 import { folderFromEnv } from "../paths.js";
 
-/** Settings of the remote server (`npm run server`), all from .env. */
+/** Settings of the remote server (`npm run server`), all from .env. Its accounts are in the database (`npm run users`). */
 export interface ServerConfig {
-  username: string;
-  password: string;
   jwtSecret: string;
   /** Change it to revoke every token and download link at once. */
   tokenVersion: string;
@@ -34,19 +32,15 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     if (!value) throw new Error(`Missing ${name} in .env (see .env.example)`);
     return value;
   };
-  const password = required("HEIG_AUTH_PASSWORD");
-  if (password.length < 12) throw new Error("HEIG_AUTH_PASSWORD must have at least 12 characters");
   const jwtSecret = required("HEIG_JWT_SECRET");
   if (jwtSecret.length < 32) throw new Error("HEIG_JWT_SECRET must have at least 32 characters (openssl rand -hex 32)");
-  if (jwtSecret === password) throw new Error("HEIG_JWT_SECRET must differ from HEIG_AUTH_PASSWORD");
+  if (new Set(jwtSecret).size < 8) throw new Error("HEIG_JWT_SECRET is too simple (openssl rand -hex 32)");
 
   const publicUrl = new URL(required("HEIG_PUBLIC_URL"));
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(publicUrl.hostname);
   if (publicUrl.protocol !== "https:" && !local) throw new Error("HEIG_PUBLIC_URL must use https: tokens and data would otherwise travel in clear");
 
   return {
-    username: required("HEIG_AUTH_USERNAME"),
-    password,
     jwtSecret,
     tokenVersion: env.HEIG_JWT_VERSION?.trim() || "1",
     tokenDays: positive("HEIG_JWT_DAYS", env.HEIG_JWT_DAYS, 90),

@@ -1,10 +1,12 @@
 /**
- * Keeps the server's copy of GAPS and Cyberlearn up to date (snapshots and calendar), and records every run in
- * `sync_runs` for the status page. One sync at a time: GAPS and Cyberlearn share the saved edu-ID session.
+ * Keeps the server's copy of GAPS and Cyberlearn up to date (snapshots and calendar) for every account, and records
+ * every run in `sync_runs` for the status page. One sync at a time: GAPS and Cyberlearn share an account's saved edu-ID
+ * session, and the school's servers are not asked by several accounts at once.
  */
 import { existsSync, statSync } from "node:fs";
-import path from "node:path";
 import { MfaRequiredError } from "../auth/eduid.js";
+import { CampusLocked } from "../campus.js";
+import { type Identity, LOCAL_OWNER, currentIdentity, runAs } from "../identity.js";
 import { findCourse } from "../courses.js";
 import type { Course, Deadline } from "../cyberlearn/client.js";
 import { fetchContinuousGrades, fetchTranscript } from "../gaps/grades.js";
@@ -16,21 +18,38 @@ import { isDoclingAvailable, needsExtractor } from "../rag/extract.js";
 import { ingestSource } from "../rag/ingest.js";
 import { CyberlearnSource } from "../rag/sources/cyberlearn.js";
 import { GitHubSource, readCourseRepos } from "../rag/sources/github.js";
-import { CYBERLEARN_TOKEN_FILE, OVERDUE_WINDOW_DAYS, PENDING_MFA_FILE, SESSION_FILE, loginGaps, withCyberlearn } from "../services.js";
+import { campusFiles } from "../campus.js";
+import { OVERDUE_WINDOW_DAYS, loginGaps, withCyberlearn } from "../services.js";
 import { scheduleCourses } from "../table.js";
 import { type SyncResult, deadlinesToEvents, lessonsToEvents, syncSourceEvents } from "./calendar.js";
 import { type CourseContents, lessonNotes } from "./lessons.js";
 import { latestSnapshot, saveSnapshot } from "./snapshots.js";
 
-export type RunKind = "gaps" | "cyberlearn" | "ingest-check" | "github";
+export type RunKind = "gaps" | "cyberlearn" | "ingest-check" | "github" | "ingest";
+/** The kinds a sync request may name; `ingest` is long and has its own entry (`startIngest`). */
 export const RUN_KINDS: RunKind[] = ["gaps", "cyberlearn", "ingest-check", "github"];
 
 /** The advisory lock every ingestion takes, here and in `npm run ingest`: one at a time on the same database. */
 const INGEST_LOCK = 7310;
 
+/** The kinds that fetch one account's own data; the others are about the shared course material. */
+const PERSONAL: RunKind[] = ["gaps", "cyberlearn"];
+
+export interface SyncAccounts {
+  /** The accounts to sync in the background: those whose edu-ID session is known to work. */
+  list(): Promise<Identity[]>;
+  /** The edu-ID session of an account works, or has ended and needs the person. */
+  report?(identity: Identity, state: "ok" | "expired"): Promise<void>;
+}
+
+/** A single-user installation: the local owner. */
+const LOCAL_ACCOUNTS: SyncAccounts = { list: async () => [LOCAL_OWNER] };
+
 export interface SyncRun {
   id: number;
   kind: RunKind;
+  /** The account whose data was fetched; undefined for the shared runs. */
+  userId?: number;
   startedAt: Date;
   finishedAt?: Date;
   ok?: boolean;
@@ -61,12 +80,14 @@ function listSetting(name: string): string[] {
 
 export class Syncer {
   private running?: Promise<void>;
+  private ingesting?: Promise<SyncRun>;
   private timer?: NodeJS.Timeout;
 
   constructor(
     private readonly db: Db,
     private readonly intervalMinutes = 60,
     private readonly log: (line: string) => void = (line) => console.error(line),
+    private readonly accounts: SyncAccounts = LOCAL_ACCOUNTS,
   ) {}
 
   /** Syncs now, then every `intervalMinutes`. */
@@ -86,14 +107,29 @@ export class Syncer {
     return this.running !== undefined;
   }
 
-  /** GAPS, then Cyberlearn, the ingestion check, then the GitHub repositories; a run already going on is awaited instead. */
-  runAll(mfaCode?: string): Promise<void> {
+  /**
+   * GAPS then Cyberlearn for every account, then the ingestion check and the GitHub repositories; a run already going
+   * on is awaited instead.
+   */
+  runAll(): Promise<void> {
     if (this.running) return this.running;
     this.running = (async () => {
       try {
-        await this.run("gaps", () => this.gaps(mfaCode));
-        await this.run("cyberlearn", () => this.cyberlearn(mfaCode));
-        await this.run("ingest-check", () => this.ingestCheck());
+        const accounts = await this.accounts.list();
+        for (const account of accounts) {
+          await runAs(account, async () => {
+            await this.run("gaps", () => this.gaps());
+            await this.run("cyberlearn", () => this.cyberlearn());
+          });
+        }
+        // The shared material is compared with what one account sees on Cyberlearn: the first administrator's.
+        const reader = accounts.find((a) => a.role === "admin") ?? accounts[0];
+        if (reader) {
+          const check = await runAs(reader, () => this.run("ingest-check", () => this.ingestCheck()));
+          // Cyberlearn changed: the shared index follows on its own, with the saved session of that administrator.
+          const pending = check.ok ? (check.stats as unknown as IngestCheck) : undefined;
+          if (pending && pending.added + pending.changed + pending.removed > 0) runAs(reader, () => void this.startIngest());
+        }
         await this.run("github", () => this.github());
       } finally {
         this.running = undefined;
@@ -102,14 +138,15 @@ export class Syncer {
     return this.running;
   }
 
-  /** One kind only, from the status page. */
+  /** One kind only, for the account of the current request (the status page, a refresh of the calendar). */
   async runOne(kind: RunKind, mfaCode?: string): Promise<SyncRun> {
-    if (this.running) await this.running;
+    while (this.running) await this.running;
     const works: Record<RunKind, () => Promise<Record<string, unknown>>> = {
       gaps: () => this.gaps(mfaCode),
       cyberlearn: () => this.cyberlearn(mfaCode),
       "ingest-check": () => this.ingestCheck(),
       github: () => this.github(),
+      ingest: () => this.ingest(() => undefined),
     };
     const work = works[kind];
     let result!: SyncRun;
@@ -124,15 +161,44 @@ export class Syncer {
     return result;
   }
 
-  private async run(kind: RunKind, work: () => Promise<Record<string, unknown>>): Promise<SyncRun> {
-    const { rows } = await this.db.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind) VALUES ($1) RETURNING id, started_at", [kind]);
+  /** Whether an ingestion started here is going on. */
+  get ingestBusy(): boolean {
+    return this.ingesting !== undefined;
+  }
+
+  /**
+   * Indexes the Cyberlearn courses of the current account into the shared knowledge base, in the background (it may
+   * take hours the first time): the run appears in `sync_runs` with its progress as message. Returns false when one
+   * is already going on. It does not hold back the other syncs.
+   */
+  startIngest(): boolean {
+    if (this.ingesting) return false;
+    this.ingesting = this.run("ingest", (progress) => this.ingest(progress)).finally(() => {
+      this.ingesting = undefined;
+    });
+    void this.ingesting.catch((error: unknown) => this.log(`Ingestion: ${error instanceof Error ? error.message : error}`));
+    return true;
+  }
+
+  private async run(kind: RunKind, work: (progress: (line: string) => void) => Promise<Record<string, unknown>>): Promise<SyncRun> {
+    const account = currentIdentity();
+    const userId = PERSONAL.includes(kind) ? account?.id : undefined;
+    const { rows } = await this.db.system.query<{ id: string; started_at: Date }>("INSERT INTO sync_runs (kind, user_id) VALUES ($1, $2) RETURNING id, started_at", [kind, userId ?? null]);
     const id = Number(rows[0].id);
     let ok = false;
     let message: string | undefined;
     let stats: Record<string, unknown> | undefined;
+    // What a long run is doing, shown by the status page while it goes on.
+    let lastProgress = 0;
+    const progress = (line: string) => {
+      if (Date.now() - lastProgress < 3000) return;
+      lastProgress = Date.now();
+      void this.db.system.query("UPDATE sync_runs SET message = $2 WHERE id = $1 AND finished_at IS NULL", [id, line.trim().slice(0, 300)]).catch(() => undefined);
+    };
     try {
-      stats = await work();
+      stats = await work(progress);
       ok = true;
+      if (kind === "gaps" && account) await this.accounts.report?.(account, "ok");
     } catch (error) {
       if (error instanceof MfaRequiredError) {
         message = new NeedsLoginCode(error.invalidCode).message;
@@ -140,10 +206,12 @@ export class Syncer {
       } else {
         message = error instanceof Error ? error.message : String(error);
       }
-      this.log(`Sync ${kind} failed: ${message}`);
+      // The session ended and nobody is there to log in again: the account is asked to come back.
+      if (account && PERSONAL.includes(kind) && (error instanceof MfaRequiredError || error instanceof CampusLocked)) await this.accounts.report?.(account, "expired");
+      this.log(`Sync ${kind}${userId ? ` (account ${userId})` : ""} failed: ${message}`);
     }
-    await this.db.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
-    return { id, kind, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
+    await this.db.system.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
+    return { id, kind, userId, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
   }
 
   private async gaps(mfaCode?: string): Promise<Record<string, unknown>> {
@@ -217,6 +285,44 @@ export class Syncer {
   }
 
   /**
+   * Indexes the Cyberlearn courses the current account follows (its GAPS timetable, plus RAG_EXTRA_COURSES) into the
+   * knowledge base everyone shares. It reads Cyberlearn as that account, with its own edu-ID session. Documents that
+   * need the extraction service are left for a later run when it is off.
+   */
+  private async ingest(progress: (line: string) => void): Promise<Record<string, unknown>> {
+    const lock = await this.db.connect();
+    try {
+      if (!(await lock.query<{ ok: boolean }>(`SELECT pg_try_advisory_lock(${INGEST_LOCK}) AS ok`)).rows[0].ok) throw new Error("Another ingestion is already running");
+      try {
+        progress("reading the timetable and Cyberlearn");
+        let lessons = (await latestSnapshot<Lesson[]>(this.db, "schedule"))?.data;
+        if (!lessons?.length) {
+          lessons = await (await loginGaps(false)).fetchSchedule();
+          await saveSnapshot(this.db, "schedule", lessons);
+        }
+        const scheduleCodes = scheduleCourses(lessons);
+        const selection = { extra: listSetting("RAG_EXTRA_COURSES"), exclude: listSetting("RAG_EXCLUDE_COURSES") };
+        const { documents, selected } = await withCyberlearn(false, undefined, async (client) => {
+          const source = new CyberlearnSource(client, scheduleCodes, selection);
+          return { documents: await source.list(), selected: source.selectedCourses };
+        });
+        const extractor = await isDoclingAvailable();
+        if (documents.length > 0) await ensureEmbeddingModel();
+        const stats = await ingestSource(this.db, "cyberlearn", documents, {
+          removalScope: selected,
+          skip: extractor ? undefined : (doc) => (needsExtractor(doc.filename) ? "the extraction service is off" : undefined),
+          log: progress,
+        });
+        return { courses: selected, ...stats, extractor };
+      } finally {
+        await lock.query(`SELECT pg_advisory_unlock(${INGEST_LOCK})`);
+      }
+    } finally {
+      lock.release();
+    }
+  }
+
+  /**
    * Fetches the course repositories of data/github-repos.json and indexes what changed, here on the server: git reads
    * them with HEIG_GITHUB_TOKEN. Documents that need the extraction service wait for it when it is off (the daily
    * `npm run ingest` on the machine starts it); code, Markdown and text are indexed right away.
@@ -251,14 +357,21 @@ export class Syncer {
   }
 }
 
-/** Last run of each kind. */
+/** Last run of each kind: the shared ones, and those of the current account. */
 export async function lastRuns(db: Db): Promise<SyncRun[]> {
-  const { rows } = await db.query("SELECT DISTINCT ON (kind) * FROM sync_runs ORDER BY kind, started_at DESC");
+  const { rows } = await db.system.query("SELECT DISTINCT ON (kind) * FROM sync_runs WHERE user_id IS NULL OR user_id = $1 ORDER BY kind, started_at DESC", [currentIdentity()?.id ?? null]);
   return rows.map(toRun);
 }
 
+/** When each kind last succeeded, for the shared runs and those of the current account. */
+export async function lastOkRuns(db: Db): Promise<Record<string, Date>> {
+  const { rows } = await db.system.query("SELECT kind, max(finished_at) AS at FROM sync_runs WHERE ok AND (user_id IS NULL OR user_id = $1) GROUP BY kind", [currentIdentity()?.id ?? null]);
+  return Object.fromEntries(rows.map((r) => [r.kind, r.at]));
+}
+
+/** The most recent runs of every account (administrators). */
 export async function recentRuns(db: Db, limit = 30): Promise<SyncRun[]> {
-  const { rows } = await db.query("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT $1", [limit]);
+  const { rows } = await db.system.query("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT $1", [limit]);
   return rows.map(toRun);
 }
 
@@ -266,6 +379,7 @@ function toRun(r: Record<string, unknown>): SyncRun {
   return {
     id: Number(r.id),
     kind: r.kind as RunKind,
+    userId: r.user_id === null || r.user_id === undefined ? undefined : Number(r.user_id),
     startedAt: r.started_at as Date,
     finishedAt: (r.finished_at as Date | null) ?? undefined,
     ok: (r.ok as boolean | null) ?? undefined,
@@ -274,11 +388,11 @@ function toRun(r: Record<string, unknown>): SyncRun {
   };
 }
 
-/** State of the saved edu-ID login, read from the cache files. */
+/** State of the saved edu-ID login of the current account, read from its cache files. */
 export function sessionState(): { sessionSavedAt?: Date; cyberlearnToken: boolean; pendingCode: boolean } {
+  const files = campusFiles();
   const mtime = (file: string) => (existsSync(file) ? statSync(file).mtime : undefined);
-  return { sessionSavedAt: mtime(SESSION_FILE), cyberlearnToken: existsSync(CYBERLEARN_TOKEN_FILE), pendingCode: existsSync(PENDING_MFA_FILE) };
+  return { sessionSavedAt: mtime(files.session), cyberlearnToken: existsSync(files.cyberlearnToken), pendingCode: existsSync(files.pendingMfa) };
 }
 
 export type { Course, Deadline };
-export const CACHE_FILES = { session: path.basename(SESSION_FILE) };

@@ -1,7 +1,8 @@
 import { type CorrectionState, addPhoto, captureUrl, createCorrection, deleteCorrection, deletePhoto, getCorrection, listCorrections, markSent, photoFile, reorderPhotos, replacePhoto, submitResult, updateCorrection } from "../../app/corrections.js";
+import { requireIdentity } from "../../identity.js";
 import type { App } from "../app.js";
 import type { Principal, Router } from "./router.js";
-import { HttpError, intParam, readBody, readJson, sendFile, stringField } from "./util.js";
+import { HttpError, intParam, readBody, readJson, rethrowRefusal, sendFile, stringField } from "./util.js";
 
 const MAX_PHOTO_BYTES = 20 * 1024 ** 2;
 const STATES = new Set<CorrectionState>(["capture", "received", "corrected"]);
@@ -42,9 +43,10 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
       affectsProfile: flag(body, "affectsProfile"),
     });
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
-    const token = await app.auth.issueCaptureToken(correction.id);
+    const token = await app.auth.issueCaptureToken(correction.id, requireIdentity().id);
     return { ...correction, captureUrl: captureUrl(app.config.publicUrl, correction.id, token) };
   });
 
@@ -61,7 +63,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     const correction = await getCorrection(app.db, params.id);
     if (!correction) throw new HttpError(404, "no such correction");
     if (correction.state === "corrected") throw new HttpError(409, "this correction is done");
-    return { captureUrl: captureUrl(app.config.publicUrl, correction.id, await app.auth.issueCaptureToken(correction.id)) };
+    return { captureUrl: captureUrl(app.config.publicUrl, correction.id, await app.auth.issueCaptureToken(correction.id, requireIdentity().id)) };
   });
 
   router.patch("/api/corrections/:id", async ({ req, params }) => {
@@ -71,6 +73,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     try {
       correction = await updateCorrection(app.db, params.id, { title: stringField(body, "title", { optional: true, max: 200 }), course: nullable("course", 40), topic: nullable("topic", 200), notes: nullable("notes", 4000), exam: nullable("exam", 220), affectsProfile: flag(body, "affectsProfile") });
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
     if (!correction) throw new HttpError(404, "no such correction");
@@ -87,6 +90,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
     try {
       return await addPhoto(app.db, params.id, await readBody(req, MAX_PHOTO_BYTES));
     } catch (error) {
+      rethrowRefusal(error);
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
   }, ANY);
@@ -105,6 +109,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
       if (!photo) throw new HttpError(404, "no such photo");
       return photo;
     } catch (error) {
+      rethrowRefusal(error);
       if (error instanceof HttpError) throw error;
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
@@ -132,6 +137,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
       if (!correction) throw new HttpError(404, "no such correction");
       return { state: correction.state, sentAt: correction.sentAt };
     } catch (error) {
+      rethrowRefusal(error);
       if (error instanceof HttpError) throw error;
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
@@ -145,6 +151,7 @@ export function registerCorrectionRoutes(router: Router, app: App): void {
       if (!correction) throw new HttpError(404, "no such correction");
       return correction;
     } catch (error) {
+      rethrowRefusal(error);
       if (error instanceof HttpError) throw error;
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }

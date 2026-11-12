@@ -1,4 +1,5 @@
 import type { App } from "../app.js";
+import { registerAdminRoutes } from "./admin.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerCalendarRoutes } from "./calendar.js";
 import { registerCampusRoutes } from "./campus.js";
@@ -7,6 +8,7 @@ import { registerExamRoutes } from "./exams.js";
 import { registerFlashcardRoutes } from "./flashcards.js";
 import { registerKnowledgeRoutes } from "./knowledge.js";
 import { registerLibraryRoutes } from "./library.js";
+import { registerMeRoutes } from "./me.js";
 import { registerPastExamRoutes } from "./pastexams.js";
 import { registerProfileRoutes } from "./profile.js";
 import { registerQuizRoutes } from "./quizzes.js";
@@ -18,6 +20,8 @@ import { registerWorkcopyRoutes } from "./workcopies.js";
 export function createApi(app: App): Router {
   const router = new Router();
   registerAuthRoutes(router, app);
+  registerMeRoutes(router, app);
+  registerAdminRoutes(router, app);
   registerCampusRoutes(router, app);
   registerCalendarRoutes(router, app);
   registerKnowledgeRoutes(router, app);

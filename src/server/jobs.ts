@@ -29,13 +29,19 @@ export interface JobRecord {
   log: string;
   /** The worker's key frames were kept. */
   frames: boolean;
+  /** The account that asked for it: the only one, with the administrators, that reads its result. */
+  userId?: number;
+  /** Base names the worker may give back: those reserved for this account when the job was queued. */
+  names?: string[];
 }
 
 export const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** File names accepted back from the worker. */
 const SAFE_NAME = /^[\p{L}\p{N}_-][\p{L}\p{N}._-]*$/u;
 const ALLOWED = { document: new Set([".pdf", ".docx", ".html"]), animation: new Set([".mp4", ".mov", ".gif"]), hqvideo: new Set([".mp4"]) };
-const MAX_ACTIVE = 3;
+/** Renderings waiting or running. They run one at a time (src/server/worker.ts): this is the length of the line. */
+export const MAX_ACTIVE = 40;
+export const MAX_ACTIVE_PER_ACCOUNT = 2;
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4 * 1024 ** 3;
 const MAX_STATUS_BYTES = 256 * 1024;
@@ -86,9 +92,12 @@ export class JobQueue {
    * The source is saved in the output folder, so that list_generated finds it; the job appears atomically to the worker.
    * `extra`: other files of the source, saved next to it (the narration of a high quality video).
    */
-  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = [], extra: { name: string; content: string }[] = []): JobRecord {
-    if (this.all().filter((r) => r.state === "queued" || r.state === "running").length >= MAX_ACTIVE) {
-      throw new Error("Too many renderings are already waiting: try again when one has finished (get_job)");
+  submit(request: JobRequest, sourceName: string, content: string, videos: string[] = [], extra: { name: string; content: string }[] = [], userId?: number): JobRecord {
+    const active = this.all().filter((r) => r.state === "queued" || r.state === "running");
+    if (active.length >= MAX_ACTIVE) throw new Error("Too many renderings are already waiting: try again when one has finished (get_job)");
+    // On a shared server nobody fills the queue alone.
+    if (userId !== undefined && active.filter((r) => r.userId === userId).length >= MAX_ACTIVE_PER_ACCOUNT) {
+      throw new Error("You already have renderings waiting: follow them with get_job before asking for another one");
     }
     const id = randomUUID();
     const kind = request.kind === "document" ? "documents" : "videos";
@@ -108,7 +117,7 @@ export class JobQueue {
       for (const video of videos) copyFileSync(video, path.join(copies, path.basename(video)));
     }
     writeFileSync(path.join(temp, "request.json"), JSON.stringify({ ...request, source: `input/${kind}/${sourceName}` }));
-    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false };
+    const record: JobRecord = { id, kind: request.kind, name: request.name, state: "queued", createdAt: Date.now(), source: `${kind}/${sourceName}`, files: [], log: "", frames: false, userId, names: userId === undefined ? undefined : [request.name, ...(request.kind === "animation" ? [request.scene] : [])] };
     this.save(record);
     renameSync(temp, path.join(this.jobsDir, id));
     return record;
@@ -132,6 +141,13 @@ export class JobQueue {
     return existsSync(file) ? (JSON.parse(readFileSync(file, "utf-8")) as JobRecord) : undefined;
   }
 
+  /** How many renderings run or wait before this one: they are done one at a time, oldest first. */
+  ahead(id: string): number {
+    const job = this.get(id);
+    if (!job || job.state !== "queued") return 0;
+    return this.all().filter((r) => r.id !== id && (r.state === "running" || (r.state === "queued" && r.createdAt <= job.createdAt))).length;
+  }
+
   /** Jobs queued for more than five minutes without being taken: the render container is probably not running. */
   staleJobs(): number {
     return this.all().filter((r) => r.state === "queued" && Date.now() - r.createdAt > 5 * 60_000).length;
@@ -141,6 +157,19 @@ export class JobQueue {
   recent(limit = 20): JobRecord[] {
     this.collect();
     return this.all().sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+  }
+
+  /** Forgets the jobs finished for more than `days`, with their key frames. Their files stay in the library. */
+  prune(days = 30): number {
+    let removed = 0;
+    for (const record of this.all()) {
+      if (record.state !== "done" && record.state !== "failed") continue;
+      if (Date.now() - record.createdAt < days * 86_400_000) continue;
+      rmSync(this.recordFile(record.id), { force: true });
+      rmSync(this.framesFile(record.id), { force: true });
+      removed++;
+    }
+    return removed;
   }
 
   framesFile(id: string): string {
@@ -192,6 +221,8 @@ export class JobQueue {
     const files: string[] = [];
     for (const name of listed.slice(0, MAX_FILES)) {
       if (typeof name !== "string" || !SAFE_NAME.test(name) || !ALLOWED[record.kind].has(path.extname(name).toLowerCase())) continue;
+      // On a shared server the worker cannot write over a name this account did not reserve (someone else's video).
+      if (record.names && !record.names.includes(path.basename(name, path.extname(name)))) continue;
       const source = path.join(dir, "output", name);
       if (!regularFile(source, MAX_FILE_BYTES)) continue;
       const partial = path.join(destination, `.${name}.partial`);

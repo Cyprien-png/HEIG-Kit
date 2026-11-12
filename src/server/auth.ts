@@ -1,4 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { seal, unseal } from "../accounts/password.js";
 import { SignJWT, jwtVerify } from "jose";
 import type { ServerConfig } from "./config.js";
 
@@ -7,34 +8,71 @@ const MCP_AUDIENCE = "heig-kit-mcp";
 const FILE_AUDIENCE = "heig-kit-file";
 const CAPTURE_AUDIENCE = "heig-kit-capture";
 
-const digest = (text: string) => createHash("sha256").update(text).digest();
+/** Who an access token was issued to. The account itself is read again at each request (role, state, revocation). */
+export interface TokenSubject {
+  userId: number;
+  /** The account's token version when the token was issued: a later version revokes it. */
+  version: number;
+  /** The key of the account's sealed edu-ID credentials, when the token carries it (see `wrapVaultKey`). */
+  vaultKey?: Buffer;
+}
 
-/** Access tokens and download links, each with its own key: a link can never be used as an access token. */
+export interface Holder {
+  id: number;
+  tokenVersion: number;
+}
+
+const accountId = (value: unknown): number | undefined => {
+  const id = typeof value === "string" && /^\d{1,15}$/.test(value) ? Number(value) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+};
+
+/**
+ * Access tokens, download links and capture links, each with its own key: one can never be used as another. An access
+ * token names one account (`sub`) and nothing in a request can name another: that is where the separation starts.
+ */
 export class Auth {
   private readonly accessKey: Uint8Array;
   private readonly fileKey: Uint8Array;
   private readonly captureKey: Uint8Array;
+  private readonly formKey: Buffer;
+  private readonly wrapKey: Buffer;
+  private readonly filesAtRestKey: Buffer;
 
-  constructor(private readonly config: Pick<ServerConfig, "username" | "password" | "jwtSecret" | "tokenVersion" | "tokenDays" | "linkMinutes">) {
-    this.accessKey = createHmac("sha256", config.jwtSecret).update("access").digest();
-    this.fileKey = createHmac("sha256", config.jwtSecret).update("file").digest();
-    this.captureKey = createHmac("sha256", config.jwtSecret).update("capture").digest();
+  constructor(private readonly config: Pick<ServerConfig, "jwtSecret" | "tokenVersion" | "tokenDays" | "linkMinutes">) {
+    const key = (purpose: string) => createHmac("sha256", config.jwtSecret).update(purpose).digest();
+    this.accessKey = key("access");
+    this.fileKey = key("file");
+    this.captureKey = key("capture");
+    this.formKey = key("form");
+    this.wrapKey = key("vault key wrap");
+    this.filesAtRestKey = key("campus files at rest");
   }
 
-  /** Compares digests in constant time; both fields are always compared, so timing tells nothing about the username. */
-  checkCredentials(username: unknown, password: unknown): boolean {
-    if (typeof username !== "string" || typeof password !== "string") return false;
-    const user = timingSafeEqual(digest(username), digest(this.config.username));
-    const pass = timingSafeEqual(digest(password), digest(this.config.password));
-    return user && pass;
+  /**
+   * The key of an account's sealed edu-ID credentials, encrypted for this server alone, to travel in the account's own
+   * tokens. The server stores neither the key nor its wrapped form: opening the credentials takes the database, the
+   * server's secret and a token the person holds, all three. So a request of the person is enough for the server to
+   * log in to edu-ID again in their name, and nobody can without one.
+   */
+  wrapVaultKey(userId: number, vaultKey: Buffer): string {
+    return seal(this.wrapKey, `${userId}:${vaultKey.toString("base64")}`).toString("base64url");
   }
 
-  /** An access token for `days` (default HEIG_JWT_DAYS; OAuth connectors get shorter ones and refresh them). */
-  async issueToken(days = this.config.tokenDays): Promise<{ token: string; expiresAt: Date }> {
+  /** The key a wrapped form holds, when it was made by this server for this account. */
+  unwrapVaultKey(userId: number, wrapped: unknown): Buffer | undefined {
+    if (typeof wrapped !== "string" || wrapped.length > 400 || !/^[A-Za-z0-9_-]+$/.test(wrapped)) return undefined;
+    const text = unseal(this.wrapKey, Buffer.from(wrapped, "base64url"));
+    const [owner, key] = text?.split(":") ?? [];
+    return owner === String(userId) && key ? Buffer.from(key, "base64") : undefined;
+  }
+
+  /** An access token of an account for `days` (default HEIG_JWT_DAYS; OAuth connectors get shorter ones and refresh them). */
+  async issueToken(holder: Holder, days = this.config.tokenDays, vaultKey?: Buffer): Promise<{ token: string; expiresAt: Date }> {
     const expiresAt = new Date(Date.now() + Math.min(days, this.config.tokenDays) * 86_400_000);
-    const token = await new SignJWT({ ver: this.config.tokenVersion })
+    const token = await new SignJWT({ ver: this.config.tokenVersion, uv: holder.tokenVersion, ...(vaultKey ? { vk: this.wrapVaultKey(holder.id, vaultKey) } : {}) })
       .setProtectedHeader({ alg: "HS256" })
-      .setSubject(this.config.username)
+      .setSubject(String(holder.id))
       .setIssuer(ISSUER)
       .setAudience(MCP_AUDIENCE)
       .setIssuedAt()
@@ -43,19 +81,21 @@ export class Auth {
     return { token, expiresAt };
   }
 
-  /** Whether an Authorization header holds a valid access token. */
-  async verifyHeader(header: string | undefined): Promise<boolean> {
+  /** The account an Authorization header names, when its token is valid. */
+  async verifyHeader(header: string | undefined): Promise<TokenSubject | undefined> {
     const token = /^Bearer (\S+)$/.exec(header ?? "")?.[1];
-    return token ? this.verifyAccessToken(token) : false;
+    return token ? this.verifyAccessToken(token) : undefined;
   }
 
-  /** Whether a token (from a header or the session cookie) is a valid access token. */
-  async verifyAccessToken(token: string): Promise<boolean> {
+  /** The account a token (from a header or the session cookie) names, when it is a valid access token. */
+  async verifyAccessToken(token: string): Promise<TokenSubject | undefined> {
     try {
       const { payload } = await jwtVerify(token, this.accessKey, { issuer: ISSUER, audience: MCP_AUDIENCE, algorithms: ["HS256"] });
-      return payload.ver === this.config.tokenVersion && payload.sub === this.config.username;
+      const userId = accountId(payload.sub);
+      if (payload.ver !== this.config.tokenVersion || userId === undefined || typeof payload.uv !== "number") return undefined;
+      return { userId, version: payload.uv, vaultKey: this.unwrapVaultKey(userId, payload.vk) };
     } catch {
-      return false;
+      return undefined;
     }
   }
 
@@ -70,9 +110,9 @@ export class Auth {
       .sign(this.fileKey);
   }
 
-  /** A token letting a phone add photos to one correction, for a few hours. */
-  async issueCaptureToken(correctionId: string, hours = 6): Promise<string> {
-    return new SignJWT({ ver: this.config.tokenVersion })
+  /** A token letting a phone add photos to one correction of one account, for a few hours. */
+  async issueCaptureToken(correctionId: string, userId: number, hours = 6): Promise<string> {
+    return new SignJWT({ ver: this.config.tokenVersion, uid: String(userId) })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(correctionId)
       .setIssuer(ISSUER)
@@ -82,11 +122,12 @@ export class Auth {
       .sign(this.captureKey);
   }
 
-  /** The correction a capture token gives access to, or undefined. */
-  async verifyCaptureToken(token: string): Promise<string | undefined> {
+  /** The correction a capture token gives access to and the account it belongs to, or undefined. */
+  async verifyCaptureToken(token: string): Promise<{ correctionId: string; userId: number } | undefined> {
     try {
       const { payload } = await jwtVerify(token, this.captureKey, { issuer: ISSUER, audience: CAPTURE_AUDIENCE, algorithms: ["HS256"] });
-      return payload.ver === this.config.tokenVersion && typeof payload.sub === "string" ? payload.sub : undefined;
+      const userId = accountId(payload.uid);
+      return payload.ver === this.config.tokenVersion && typeof payload.sub === "string" && userId !== undefined ? { correctionId: payload.sub, userId } : undefined;
     } catch {
       return undefined;
     }
@@ -100,6 +141,23 @@ export class Auth {
     } catch {
       return undefined;
     }
+  }
+
+  /** The key that encrypts the edu-ID sessions and Cyberlearn tokens the server keeps on its disk (src/secretfile.ts). */
+  get secretFileKey(): Buffer {
+    return this.filesAtRestKey;
+  }
+
+  /** Ties a form of the server's own pages to the session that displayed it (CSRF). */
+  formToken(session: string, purpose: string): string {
+    return createHmac("sha256", this.formKey).update(`${purpose}\n${session}`).digest("base64url");
+  }
+
+  checkFormToken(given: unknown, session: string, purpose: string): boolean {
+    if (typeof given !== "string") return false;
+    const expected = Buffer.from(this.formToken(session, purpose));
+    const actual = Buffer.from(given);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
   }
 }
 

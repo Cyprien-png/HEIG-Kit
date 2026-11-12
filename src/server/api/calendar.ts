@@ -19,7 +19,7 @@ import {
 } from "../../app/calendar.js";
 import type { App } from "../app.js";
 import type { Router } from "./router.js";
-import { HttpError, dateField, intParam, readJson, stringField } from "./util.js";
+import { dateField, HttpError, intParam, readJson, rethrowRefusal, stringField } from "./util.js";
 
 const KINDS: EventKind[] = ["lesson", "deadline", "exam", "event"];
 
@@ -43,6 +43,7 @@ async function domain<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
+    rethrowRefusal(error);
     const message = error instanceof Error ? error.message : String(error);
     throw new HttpError(/^No (event|calendar)/.test(message) ? 404 : 400, message);
   }

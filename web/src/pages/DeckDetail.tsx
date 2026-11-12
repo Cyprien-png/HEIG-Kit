@@ -42,21 +42,25 @@ export function DeckDetail() {
     void deck.reload();
   };
 
+  // A shared deck is changed by its author (or an administrator) only; everyone studies it.
+  const editable = d.editable !== false;
+  // Deleting takes the deck or the card, and everyone's progress on it, away from the class: administrators only.
+  const deletable = d.deletable !== false;
   return (
     <div className="space-y-4">
       <PageHeader
         title={<span className="flex items-center gap-3"><CourseChip code={d.course} /> {d.title}</span>}
-        subtitle={<>{d.cards} cartes · {d.due} à réviser · {d.fresh} nouvelles{d.description ? ` · ${d.description}` : ""}</>}
+        subtitle={<>{d.cards} cartes · {d.due} à réviser · {d.fresh} nouvelles{!d.mine && d.author ? ` · par ${d.author}` : ""}{d.description ? ` · ${d.description}` : ""}</>}
         actions={
           <>
             <ShuffleToggle on={shuffle} onChange={setShuffle} />
-            <Button onClick={() => setEditingDeck(true)}><PencilSquareIcon className="h-4 w-4" /> Paquet</Button>
-            <Button onClick={() => setEditing("new")}><PlusIcon className="h-4 w-4" /> Carte</Button>
+            {editable && <Button onClick={() => setEditingDeck(true)}><PencilSquareIcon className="h-4 w-4" /> Paquet</Button>}
+            {editable && <Button onClick={() => setEditing("new")}><PlusIcon className="h-4 w-4" /> Carte</Button>}
             <ReviewButton deck={d.id} disabled={d.cards === 0} shuffle={shuffle} />
           </>
         }
       />
-      {d.cardList.length === 0 ? <Empty title="Paquet vide" hint="Ajoutez des cartes, ou demandez à l'agent d'en créer depuis le cours." action={<Button onClick={() => setEditing("new")}>Ajouter une carte</Button>} /> : (
+      {d.cardList.length === 0 ? <Empty title="Paquet vide" hint="Ajoutez des cartes, ou demandez à l'agent d'en créer depuis le cours." action={editable ? <Button onClick={() => setEditing("new")}>Ajouter une carte</Button> : undefined} /> : (
         <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-3">
           {d.cardList.map((c) => {
             const back = flipped.has(c.id);
@@ -72,19 +76,25 @@ export function DeckDetail() {
                   <Badge tone={tone}>{!state ? "nouvelle" : new Date(state.dueAt) <= new Date() ? "à réviser" : `revient ${relative(state.dueAt)}`}</Badge>
                   {c.tags.slice(0, 2).map((t) => <Badge key={t}>{t}</Badge>)}
                   {c.source && <span className="min-w-0 truncate ml-1" title={c.source}>{c.source}</span>}
-                  <span className="ml-auto flex items-center">
-                    <IconButton label="Modifier" className="h-7 w-7" onClick={() => setEditing(c)}><PencilSquareIcon className="h-4 w-4" /></IconButton>
-                    <IconButton label="Supprimer" className="h-7 w-7" onClick={() => void removeCard(c)}><TrashIcon className="h-4 w-4" /></IconButton>
-                  </span>
+                  {editable && (
+                    <span className="ml-auto flex items-center">
+                      <IconButton label="Modifier" className="h-7 w-7" onClick={() => setEditing(c)}><PencilSquareIcon className="h-4 w-4" /></IconButton>
+                      {deletable && <IconButton label="Supprimer" className="h-7 w-7" onClick={() => void removeCard(c)}><TrashIcon className="h-4 w-4" /></IconButton>}
+                    </span>
+                  )}
                 </div>
               </Card>
             );
           })}
         </div>
       )}
-      <div className="pt-4">
-        <Button variant="danger" size="sm" onClick={removeDeck}><TrashIcon className="h-4 w-4" /> Supprimer le paquet</Button>
-      </div>
+      {deletable ? (
+        <div className="pt-4">
+          <Button variant="danger" size="sm" onClick={removeDeck}><TrashIcon className="h-4 w-4" /> Supprimer le paquet</Button>
+        </div>
+      ) : (
+        <p className="pt-4 text-xs text-ink-3">{editable ? "Paquet partagé avec la classe : vous le modifiez, seul un administrateur peut supprimer un paquet ou une carte." : `Paquet partagé${d.author ? ` par ${d.author}` : ""} : vous l'étudiez avec votre propre progression ; seul son auteur le modifie.`}</p>
+      )}
       {editing && <CardEditor deckId={d.id} card={editing === "new" ? undefined : editing} onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); void deck.reload(); }} />}
       {editingDeck && <DeckEditor deck={d} onClose={() => setEditingDeck(false)} onSaved={() => { setEditingDeck(false); void deck.reload(); }} />}
     </div>

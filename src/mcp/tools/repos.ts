@@ -34,7 +34,7 @@ export function registerRepoTools(server: McpServer, repos: CourseRepos, where: 
     "add_course_repo",
     {
       title: "Index a GitHub repository",
-      description: `Adds a GitHub repository as material of a course, read by ${where === "the server" ? "the server with its git token" : "the user's local git account"}. Then call update_course_repos.`,
+      description: `Adds a GitHub repository as material of a course, read by ${where === "the server" ? "the server with its git token" : "the user's local git account"}. Then call update_course_repos. On a shared server only an administrator may; anyone else is refused and must not retry.`,
       inputSchema: {
         url: z.string().describe("https://github.com/owner/repo, or …/tree/branch/folder for one folder"),
         course: z.string().describe("Timetable course code, e.g. PRG"),
@@ -49,7 +49,7 @@ export function registerRepoTools(server: McpServer, repos: CourseRepos, where: 
     "remove_course_repo",
     {
       title: "Stop indexing a GitHub repository",
-      description: "Removes a GitHub repository from the indexed ones; its documents leave the index at the next update_course_repos.",
+      description: "Removes a GitHub repository from the indexed ones; its documents leave the index at the next update_course_repos. On a shared server only an administrator may.",
       inputSchema: { url: z.string() },
       annotations: { destructiveHint: true },
     },
@@ -60,7 +60,7 @@ export function registerRepoTools(server: McpServer, repos: CourseRepos, where: 
     "update_course_repos",
     {
       title: "Update the GitHub repositories now",
-      description: `Fetches the indexed GitHub repositories and indexes what is new or changed on ${where} (the daily update does it too). May take minutes.`,
+      description: `Fetches the indexed GitHub repositories and indexes what is new or changed on ${where} (the daily update does it too). May take minutes. On a shared server only an administrator may.`,
     },
     async () => respond(() => repos.update()),
   );

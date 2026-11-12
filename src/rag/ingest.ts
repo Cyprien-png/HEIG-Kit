@@ -205,7 +205,7 @@ function contextualize(doc: SourceDocument, chunk: Chunk): string {
   return [where, chunk.headingPath, chunk.text].filter(Boolean).join("\n");
 }
 
-async function upsertDocument(db: pg.Pool | pg.PoolClient, doc: SourceDocument, contentHash: string): Promise<void> {
+async function upsertDocument(db: { query(text: string, values?: unknown[]): Promise<unknown> }, doc: SourceDocument, contentHash: string): Promise<void> {
   await db.query(
     `INSERT INTO documents (source, external_id, title, url, local_path, version, content_hash, course_code, course_name,
                             teachers, chapter, doc_type, uploaded_at, indexed_at, removed_at)

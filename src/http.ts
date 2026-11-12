@@ -1,6 +1,7 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as cheerio from "cheerio";
+import { readSecretFile, writeSecretFile } from "./secretfile.js";
 import makeFetchCookie from "fetch-cookie";
 import { CookieJar } from "tough-cookie";
 
@@ -44,7 +45,7 @@ export class Session {
     let jar = new CookieJar();
     if (options.cookieFile) {
       try {
-        jar = CookieJar.fromJSON(await readFile(options.cookieFile, "utf-8"));
+        jar = CookieJar.fromJSON(await readSecretFile(options.cookieFile));
       } catch {
         // No saved session yet, or an unreadable one: start from scratch.
       }
@@ -52,13 +53,14 @@ export class Session {
     return new Session(jar, options);
   }
 
-  /** Saves the cookies to `cookieFile`, readable by the current user only since they grant access to the account. */
+  /**
+   * Saves the cookies to `cookieFile`, readable by the current user only since they grant access to the account, and
+   * encrypted on a shared server (src/secretfile.ts).
+   */
   async save(): Promise<void> {
     const file = this.options.cookieFile;
     if (!file) return;
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, JSON.stringify(this.jar.toJSON()), { mode: 0o600 });
-    await chmod(file, 0o600);
+    await writeSecretFile(file, JSON.stringify(this.jar.toJSON()));
   }
 
   async get(url: string): Promise<Page> {

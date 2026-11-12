@@ -7,6 +7,7 @@
  * solutions), the generated `enonce.md` / `enonce.pdf` (the statement alone, nothing a student wrote) and `corrige.md`
  * / `corrige.pdf`, the page images `pages/p01.png`… the agent reads, and `exam.json` (what the file names said).
  */
+import { requireAdmin } from "./sharing.js";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -104,6 +105,7 @@ export function pastExamFile(id: string): string | undefined {
 
 /** Writes a file of the tree atomically, keeping its modification time (for syncs). */
 export function savePastExamFile(id: string, content: Buffer, modifiedAt?: Date): ExamTreeFile {
+  requireAdmin("add or change a past written test");
   const parsed = parseExamPath(id);
   if (!parsed) throw new Error(`"${id}" is not an acceptable past exam file (<branch>/<year>/<exam>/<name>.pdf|md|png|svg|json)`);
   const file = path.join(path.resolve(examsDir()), ...id.split("/"));
@@ -118,6 +120,7 @@ export function savePastExamFile(id: string, content: Buffer, modifiedAt?: Date)
 }
 
 export function deletePastExamFile(id: string): boolean {
+  requireAdmin("delete a past written test");
   const file = pastExamFile(id);
   if (!file) return false;
   rmSync(file);

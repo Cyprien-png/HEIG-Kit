@@ -1,3 +1,4 @@
+import { useSession } from "../lib/auth";
 import { ArrowRightIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -59,7 +60,10 @@ export function Dashboard() {
   const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${from}&to=${addDays(from, 8)}&visible=true`, [], { refreshMs: 120_000 });
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections");
-  const status = useApi<StatusReport>("/api/status", [], { refreshMs: 60_000 });
+  const { me } = useSession();
+  const admin = me?.role === "admin";
+  // The state of the server is its administrators' business; everyone else sees their own edu-ID connection in the shell.
+  const status = useApi<StatusReport>(admin ? "/api/status" : null, [], { refreshMs: 60_000 });
   const profile = useApi<ProfileSummary>("/api/profile");
   const plan = useApi<Snapshot<PlanUnit[]>>("/api/campus/plan");
 
@@ -95,7 +99,11 @@ export function Dashboard() {
         <Stat compact label="À réviser" value={decks.data?.stats.due ?? "–"} tone={decks.data && decks.data.stats.due > 0 ? "accent" : "neutral"} to="/study" />
         <Stat compact label="Rendus" value={deadlines.length} tone={deadlines.length > 0 ? "warn" : "neutral"} to="/calendar" />
         <Stat compact label="Corrections" value={open.length} to="/corrections" />
-        <Stat compact label="Serveur" value={status.loading ? "…" : problems === 0 ? "OK" : problems} tone={problems === 0 ? "ok" : "bad"} to="/status" />
+        {admin ? (
+          <Stat compact label="Serveur" value={status.loading ? "…" : problems === 0 ? "OK" : problems} tone={problems === 0 ? "ok" : "bad"} to="/status" />
+        ) : (
+          <Stat compact label="edu-ID" value={me?.campus.state === "ok" ? "OK" : "!"} tone={me?.campus.state === "ok" ? "ok" : "warn"} to="/account" />
+        )}
       </div>
 
       <div className="grid lg:grid-cols-5 gap-4">

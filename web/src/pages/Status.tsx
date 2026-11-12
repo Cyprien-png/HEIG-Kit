@@ -1,21 +1,20 @@
 import { ArrowPathIcon, KeyIcon } from "@heroicons/react/24/outline";
-import { type FormEvent, useState } from "react";
-import { Badge, Button, Card, Dot, Empty, ErrorBox, Input, Loading, PageHeader, Table, Td, cx } from "../components/ui";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Badge, Button, Card, Dot, Empty, ErrorBox, Loading, PageHeader, Table, Td, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { dateTime, relative } from "../lib/format";
 import type { RequestEntry, StatusReport, SyncRun } from "../lib/types";
 
 const STATE_TONE = { up: "ok", down: "bad", warning: "warn", off: "neutral" } as const;
 const STATE_LABEL = { up: "actif", down: "arrêté", warning: "à vérifier", off: "inactif" } as const;
-const RUN_LABEL: Record<string, string> = { gaps: "GAPS (horaire, notes, plan)", cyberlearn: "Cyberlearn (cours, rendus)", "ingest-check": "Vérification Cyberlearn ↔ index", github: "GitHub (dépôts de cours)" };
+const RUN_LABEL: Record<string, string> = { gaps: "GAPS (horaire, notes, plan)", cyberlearn: "Cyberlearn (cours, rendus)", "ingest-check": "Vérification Cyberlearn ↔ index", github: "GitHub (dépôts de cours)", ingest: "Indexation des cours" };
 
 export function Status() {
   const status = useApi<StatusReport>("/api/status", [], { refreshMs: 20_000 });
   const requests = useApi<{ requests: RequestEntry[] }>("/api/status/requests?limit=80", [], { refreshMs: 20_000 });
   const [busy, setBusy] = useState<string>();
   const [message, setMessage] = useState<{ tone: "ok" | "bad" | "warn"; text: string }>();
-  const [code, setCode] = useState("");
-  const [askCode, setAskCode] = useState(false);
   const s = status.data;
 
   const run = async (label: string, fn: () => Promise<unknown>, done: string) => {
@@ -26,24 +25,15 @@ export function Status() {
       setMessage({ tone: "ok", text: done });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/two-step|code/i.test(msg)) {
-        setAskCode(true);
-        setMessage({ tone: "warn", text: "edu-ID demande le code de votre application d'authentification." });
-      } else setMessage({ tone: "bad", text: msg });
+      setMessage({ tone: "bad", text: msg });
     } finally {
       setBusy(undefined);
       void status.reload();
       void requests.reload();
     }
   };
+  const ingest = () => run("ingest", () => api("/api/status/ingest", { method: "POST" }), "Indexation lancée : elle continue en arrière-plan, sa progression s'affiche ici.");
   const sync = (kind?: string) => run(kind ?? "all", () => api("/api/status/sync", { method: "POST", json: kind ? { kind } : {} }), "Synchronisation terminée.");
-  const reconnect = (e?: FormEvent) => {
-    e?.preventDefault();
-    return run("reconnect", () => api("/api/status/reconnect", { method: "POST", json: code ? { mfa_code: code } : {} }), "Reconnecté : GAPS et Cyberlearn répondent.").then(() => {
-      setCode("");
-      setAskCode(false);
-    });
-  };
 
   return (
     <div className="space-y-5">
@@ -67,7 +57,7 @@ export function Status() {
               </ul>
             </Card>
 
-            <Card title="Connexion edu-ID" actions={<Button size="sm" variant={s.login.needsCode ? "primary" : "secondary"} onClick={() => (s.login.needsCode ? setAskCode(true) : void reconnect())} disabled={Boolean(busy)}><KeyIcon className="h-4 w-4" /> Reconnecter</Button>}>
+            <Card title="Ma connexion edu-ID" actions={<Link to="/account"><Button size="sm" variant={s.login.needsCode ? "primary" : "secondary"}><KeyIcon className="h-4 w-4" /> {s.login.needsCode ? "Reconnecter" : "Gérer"}</Button></Link>}>
               <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-sm">
                 <dt className="text-ink-3">État</dt>
                 <dd>{s.login.needsCode ? <Badge tone="bad">code 2FA demandé</Badge> : <Badge tone="ok">session valide</Badge>}</dd>
@@ -80,15 +70,6 @@ export function Status() {
                 <dt className="text-ink-3">Dernier Cyberlearn OK</dt>
                 <dd>{s.login.lastCyberlearnOk ? relative(s.login.lastCyberlearnOk) : "jamais"}</dd>
               </dl>
-              {(askCode || s.login.needsCode) && (
-                <form onSubmit={reconnect} className="mt-3 flex gap-2 items-end">
-                  <label className="flex-1">
-                    <span className="block text-xs text-ink-2 mb-1">Code à 6 chiffres de l'application d'authentification</span>
-                    <Input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" className="font-mono tracking-widest" />
-                  </label>
-                  <Button type="submit" variant="primary" disabled={code.length !== 6 || Boolean(busy)}>{busy === "reconnect" ? "Connexion…" : "Valider"}</Button>
-                </form>
-              )}
             </Card>
           </div>
 
@@ -116,7 +97,14 @@ export function Status() {
               </div>
             </Card>
 
-            <Card title="Base de connaissances">
+            <Card
+              title="Base de connaissances"
+              actions={
+                <Button size="sm" variant={s.ingestion.pending && s.ingestion.pending.added + s.ingestion.pending.changed + s.ingestion.pending.removed > 0 ? "primary" : "secondary"} onClick={() => void ingest()} disabled={Boolean(busy) || s.ingestion.running}>
+                  <ArrowPathIcon className={cx("h-4 w-4", s.ingestion.running && "animate-spin")} /> {s.ingestion.running ? "Indexation…" : "Indexer mes cours"}
+                </Button>
+              }
+            >
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div><div className="text-2xl font-semibold tabular-nums">{s.ingestion.documents}</div><div className="text-[11px] uppercase tracking-wide text-ink-3">documents</div></div>
                 <div><div className="text-2xl font-semibold tabular-nums">{s.ingestion.chunks}</div><div className="text-[11px] uppercase tracking-wide text-ink-3">passages</div></div>
@@ -130,12 +118,20 @@ export function Status() {
                   <div className="mt-2 rounded-lg bg-warn-soft text-warn px-3 py-2 text-sm">
                     <p className="font-medium">Cyberlearn a changé depuis l'indexation : {s.ingestion.pending.added} nouveau(x), {s.ingestion.pending.changed} modifié(s), {s.ingestion.pending.removed} retiré(s).</p>
                     <ul className="text-xs mt-1 list-disc pl-4">{s.ingestion.pending.examples.map((x) => <li key={x}>{x}</li>)}</ul>
-                    <p className="text-xs mt-1">Sur le serveur : <code className="font-mono">npm run ingest</code> (ou attendez la mise à jour quotidienne).</p>
+                    <p className="text-xs mt-1">Le serveur indexe ces changements de lui-même ; « Indexer mes cours » le fait tout de suite.</p>
                   </div>
                 )
               ) : (
                 <p className="text-sm text-ink-3 mt-1">Pas encore vérifié face à Cyberlearn.</p>
               )}
+              {s.ingestion.running && <p className="mt-2 rounded-lg bg-info-soft text-info px-3 py-2 text-xs font-mono break-words">{s.ingestion.progress ?? "démarrage…"}</p>}
+              {!s.ingestion.running && s.ingestion.last && (
+                <p className={cx("text-xs mt-2", s.ingestion.last.ok ? "text-ink-3" : "text-bad")}>
+                  Dernière indexation lancée ici {s.ingestion.last.finishedAt ? relative(s.ingestion.last.finishedAt) : ""} :{" "}
+                  {s.ingestion.last.ok ? `${Number(s.ingestion.last.stats?.indexed ?? 0)} indexé(s), ${Number(s.ingestion.last.stats?.unchanged ?? 0)} inchangé(s), ${Number(s.ingestion.last.stats?.skipped ?? 0)} en attente, ${Number(s.ingestion.last.stats?.failed ?? 0)} en échec.` : s.ingestion.last.message}
+                </p>
+              )}
+              <p className="text-xs text-ink-3 mt-2">L'indexation lit Cyberlearn avec votre propre connexion edu-ID (les cours de votre horaire) et alimente la base partagée par toute la classe.</p>
             </Card>
           </div>
 

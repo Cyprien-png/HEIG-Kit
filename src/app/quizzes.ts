@@ -4,14 +4,16 @@
  * with a voice assistant through the MCP tools, the keyboard in the terminal) and gets a score and the list of
  * mistakes at the end. Each attempt keeps its answers, so a quiz can be redone.
  */
+import { type Authorship, authorColumns, authorship, requireAdminToDelete, requireEditable } from "./sharing.js";
 import type { Db } from "../rag/db.js";
+import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
 
 export type AttemptMode = "web" | "voice" | "cli";
 
 /** What a quiz is made of: only true/false statements, only multiple-choice questions, or both. */
 export type QuizKind = "truefalse" | "mcq" | "mixed";
 
-export interface QuizSummary {
+export interface QuizSummary extends Authorship {
   id: number;
   kind: QuizKind;
   course?: string;
@@ -122,6 +124,7 @@ const toSummary = (r: Record<string, unknown>): QuizSummary => ({
   title: r.title as string,
   description: (r.description as string | null) ?? undefined,
   createdAt: r.created_at as Date,
+  ...authorship(r),
   questions: Number(r.questions ?? 0),
   attempts: Number(r.attempts ?? 0),
   last: r.last_attempt_id ? { attemptId: Number(r.last_attempt_id), score: Number(r.last_score), total: Number(r.last_total), finishedAt: r.last_finished_at as Date } : undefined,
@@ -163,7 +166,7 @@ export const asked = (q: Question): AskedQuestion => ({
   ...(q.options ? { options: q.options, multiple: (q.correct?.length ?? 0) > 1 } : {}),
 });
 
-const SUMMARY_COLUMNS = `q.*,
+const SUMMARY_COLUMNS = `q.*, ${authorColumns("q")},
   (SELECT count(*) FROM quiz_questions x WHERE x.quiz_id = q.id)::int AS questions,
   (SELECT count(*) FROM quiz_questions x WHERE x.quiz_id = q.id AND x.options IS NOT NULL)::int AS mcq_questions,
   (SELECT count(*) FROM quiz_attempts a WHERE a.quiz_id = q.id AND a.finished_at IS NOT NULL)::int AS attempts,
@@ -203,7 +206,10 @@ function checkQuestion(q: QuestionInput, index: number): QuestionInput {
   return { ...common, answer: q.answer };
 }
 
-export async function createQuiz(db: Db, input: { title: string; course?: string; description?: string }, questions: QuestionInput[]): Promise<QuizSummary & { questionList: Question[] }> {
+/** Creates a quiz, unless similar ones exist and the caller did not say why another is needed (src/app/reuse.ts). */
+export async function createQuiz(db: Db, input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }, questions: QuestionInput[]): Promise<QuizSummary & { questionList: Question[] }> {
+  const existing = (await listQuizzes(db)).map((q): Existing => ({ ref: `quiz ${q.id}`, title: q.title, course: q.course, author: q.author, mine: q.mine }));
+  requireNew("quiz", input, existing, input.reuse, "Read them with list_quizzes: a quiz can be started again by anyone (start_quiz).");
   if (!input.title.trim()) throw new Error("title is required");
   if (questions.length === 0) throw new Error("a quiz needs at least one question");
   const checked = questions.map(checkQuestion);
@@ -263,6 +269,8 @@ export async function latestQuizAnswers(db: Db, course?: string, since?: Date): 
 }
 
 export async function deleteQuiz(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a quiz");
+  if (!(await requireEditable(db, "quizzes", id))) return false;
   const { rowCount } = await db.query("DELETE FROM quizzes WHERE id = $1", [id]);
   return (rowCount ?? 0) > 0;
 }

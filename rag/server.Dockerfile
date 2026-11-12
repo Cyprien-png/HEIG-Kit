@@ -16,6 +16,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+# The administration commands run on the server itself: npm run users, npm run housekeeping (docs/accounts.md).
+COPY scripts/users.ts scripts/housekeeping.ts ./scripts/
 COPY rag/migrations ./rag/migrations
 COPY --from=web /web/dist ./web/dist
 RUN mkdir -p /outputs /jobs data .cache && chown node:node /outputs /jobs data .cache

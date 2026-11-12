@@ -8,7 +8,7 @@ export const remote: Module = {
   summary: "use your HEIG-Kit server from this computer: HEIG_REMOTE_URL in .env, then a login (docs/app.md)",
   async install(options) {
     if (!remoteUrl()) throw new Error("Set HEIG_REMOTE_URL in .env (the public address of your server, e.g. https://heig.example.org), then run the setup again");
-    if (!options.interactive && !(process.env.HEIG_REMOTE_USERNAME && process.env.HEIG_REMOTE_PASSWORD)) {
+    if (!options.interactive) {
       throw new Error("Run `npm run remote -- login` in a terminal to log in to the server");
     }
     runScript("scripts/remote.ts", "login");

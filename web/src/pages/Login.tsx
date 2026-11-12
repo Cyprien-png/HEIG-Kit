@@ -1,13 +1,13 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useSession } from "../lib/auth";
 import { Button, Field, Input } from "../components/ui";
+import { pendingAuthorization, useSession } from "../lib/auth";
 
 export function Login() {
   const { login } = useSession();
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: string } };
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -17,11 +17,15 @@ export function Login() {
     setBusy(true);
     setError(undefined);
     try {
-      await login(username.trim(), password);
-      navigate(location.state?.from ?? "/", { replace: true });
+      const account = await login(email.trim(), password);
+      const from = location.state?.from ?? "/";
+      // An application waits for its authorization: back to the server's page, unless the account must be set up first.
+      const waiting = pendingAuthorization(from.includes("?") ? from.slice(from.indexOf("?")) : "");
+      if (waiting && !account.setup) window.location.assign(waiting);
+      else navigate(from, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setError(/credentials/.test(message) ? "Identifiants refusés : utilisez HEIG_AUTH_USERNAME et HEIG_AUTH_PASSWORD du .env du serveur." : /too many/.test(message) ? "Trop de tentatives : réessayez dans 15 minutes." : message);
+      setError(/credentials/.test(message) ? "Adresse ou mot de passe refusé." : /too many/.test(message) ? "Trop de tentatives : réessayez dans 15 minutes." : message);
     } finally {
       setBusy(false);
     }
@@ -34,11 +38,11 @@ export function Login() {
           <img src="/favicon.svg" alt="" className="h-10 w-10 rounded-lg" />
           <div>
             <h1 className="text-lg font-semibold tracking-tight">HEIG-Kit</h1>
-            <p className="text-xs text-ink-2">Le compte défini dans le .env du serveur</p>
+            <p className="text-xs text-ink-2">Votre compte sur ce serveur</p>
           </div>
         </div>
-        <Field label="Utilisateur">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
+        <Field label="Adresse e-mail">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" autoFocus required placeholder="prenom.nom@heig-vd.ch" />
         </Field>
         <Field label="Mot de passe">
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
@@ -47,6 +51,7 @@ export function Login() {
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
           {busy ? "Connexion…" : "Se connecter"}
         </Button>
+        <p className="text-xs text-ink-3">Les comptes sont créés par l'administrateur du serveur. Mot de passe oublié : demandez-lui de le réinitialiser.</p>
       </form>
     </div>
   );

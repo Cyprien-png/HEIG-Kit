@@ -12,7 +12,10 @@ import { type App, createApp } from "../src/server/app.js";
 import { type ServerConfig, loadServerConfig } from "../src/server/config.js";
 import { resolveGenerated } from "../src/server/files.js";
 import { createRemoteServer } from "../src/server/http.js";
-import { JobQueue, safeBaseName } from "../src/server/jobs.js";
+import { JobQueue, MAX_ACTIVE, safeBaseName } from "../src/server/jobs.js";
+import { updateUser } from "../src/accounts/users.js";
+import { type TestAccount, newAccount, readyAccount } from "./helpers/accounts.js";
+import { testDb } from "./helpers/db.js";
 
 const base = mkdtempSync(path.join(os.tmpdir(), "heig-server-"));
 const secretFile = path.join(base, "secret.pdf");
@@ -28,15 +31,14 @@ writeFileSync(path.join(documents, ".hidden.pdf"), "hidden");
 writeFileSync(path.join(documents, "notes.env"), "SECRET=1");
 symlinkSync(secretFile, path.join(documents, "lien.pdf"));
 
-const ENV = { HEIG_AUTH_USERNAME: "me", HEIG_AUTH_PASSWORD: "correct-horse-battery", HEIG_JWT_SECRET: "x".repeat(40), HEIG_PUBLIC_URL: "https://heig.example.org" };
+const ENV = { HEIG_JWT_SECRET: "0123456789abcdef".repeat(3), HEIG_PUBLIC_URL: "https://heig.example.org", HEIG_SYNC_MINUTES: "0" };
 const config: ServerConfig = { ...loadServerConfig(ENV), tokenDays: 1 };
 
 test("the server refuses to start with missing or weak settings", () => {
   for (const [change, message] of [
-    [{ HEIG_AUTH_PASSWORD: "" }, /HEIG_AUTH_PASSWORD/],
-    [{ HEIG_AUTH_PASSWORD: "short" }, /12 characters/],
+    [{ HEIG_JWT_SECRET: "" }, /HEIG_JWT_SECRET/],
     [{ HEIG_JWT_SECRET: "short" }, /32 characters/],
-    [{ HEIG_JWT_SECRET: ENV.HEIG_AUTH_PASSWORD.repeat(2), HEIG_AUTH_PASSWORD: ENV.HEIG_AUTH_PASSWORD.repeat(2) }, /differ/],
+    [{ HEIG_JWT_SECRET: "x".repeat(40) }, /too simple/],
     [{ HEIG_PUBLIC_URL: "http://heig.example.org" }, /https/],
   ] as const) {
     assert.throws(() => loadServerConfig({ ...ENV, ...change }), message);
@@ -45,28 +47,42 @@ test("the server refuses to start with missing or weak settings", () => {
   assert.equal(loadServerConfig(ENV).host, "127.0.0.1");
 });
 
-test("access tokens: expiry, version, algorithm and purpose are all checked", async () => {
+test("access tokens name one account; expiry, version, algorithm and purpose are all checked", async () => {
   const auth = new Auth(config);
-  const { token } = await auth.issueToken();
-  assert.equal(await auth.verifyHeader(`Bearer ${token}`), true);
-  assert.equal(await auth.verifyHeader(token), false);
-  assert.equal(await auth.verifyHeader(undefined), false);
-  assert.equal(await auth.verifyHeader(`Bearer ${token.slice(0, -2)}xx`), false);
-  assert.equal(await new Auth({ ...config, tokenVersion: "2" }).verifyHeader(`Bearer ${token}`), false, "revoked by a new version");
-  assert.equal(await new Auth({ ...config, jwtSecret: "y".repeat(40) }).verifyHeader(`Bearer ${token}`), false);
+  const holder = { id: 7, tokenVersion: 3 };
+  const { token } = await auth.issueToken(holder);
+  assert.deepEqual(await auth.verifyHeader(`Bearer ${token}`), { userId: 7, version: 3, vaultKey: undefined });
+  assert.equal(await auth.verifyHeader(token), undefined);
+  assert.equal(await auth.verifyHeader(undefined), undefined);
+  assert.equal(await auth.verifyHeader(`Bearer ${token.slice(0, -2)}xx`), undefined);
+  assert.equal(await new Auth({ ...config, tokenVersion: "2" }).verifyHeader(`Bearer ${token}`), undefined, "revoked by a new version");
+  assert.equal(await new Auth({ ...config, jwtSecret: "fedcba9876543210".repeat(3) }).verifyHeader(`Bearer ${token}`), undefined);
   // Unsigned token.
   const none = `${Buffer.from('{"alg":"none"}').toString("base64url")}.${token.split(".")[1]}.`;
-  assert.equal(await auth.verifyHeader(`Bearer ${none}`), false);
+  assert.equal(await auth.verifyHeader(`Bearer ${none}`), undefined);
+  // The account of a token cannot be rewritten: the payload of another account with this signature is refused.
+  const [head, , signature] = token.split(".");
+  const other = (await auth.issueToken({ id: 8, tokenVersion: 3 })).token.split(".")[1];
+  assert.equal(await auth.verifyHeader(`Bearer ${head}.${other}.${signature}`), undefined);
   // A download link is not an access token, and the other way round.
   const fileToken = await auth.issueFileToken("documents/cours.pdf");
-  assert.equal(await auth.verifyHeader(`Bearer ${fileToken}`), false);
+  assert.equal(await auth.verifyHeader(`Bearer ${fileToken}`), undefined);
   assert.equal(await auth.verifyFileToken(token), undefined);
   assert.equal(await auth.verifyFileToken(fileToken), "documents/cours.pdf");
-  // Signed with the raw secret instead of the derived key.
-  const raw = await new SignJWT({ ver: "1" }).setProtectedHeader({ alg: "HS256" }).setSubject("me").setIssuer("heig-kit").setAudience("heig-kit-mcp").setExpirationTime("1h").sign(new TextEncoder().encode(config.jwtSecret));
-  assert.equal(await auth.verifyHeader(`Bearer ${raw}`), false);
+  // A capture link names its correction and its owner, and is neither an access token nor a download link.
+  const capture = await auth.issueCaptureToken("c1", 7);
+  assert.deepEqual(await auth.verifyCaptureToken(capture), { correctionId: "c1", userId: 7 });
+  assert.equal(await auth.verifyHeader(`Bearer ${capture}`), undefined);
+  assert.equal(await auth.verifyCaptureToken(token), undefined);
+  // Signed with the raw secret instead of the derived key, or without a numeric account.
+  const raw = await new SignJWT({ ver: "1", uv: 3 }).setProtectedHeader({ alg: "HS256" }).setSubject("7").setIssuer("heig-kit").setAudience("heig-kit-mcp").setExpirationTime("1h").sign(new TextEncoder().encode(config.jwtSecret));
+  assert.equal(await auth.verifyHeader(`Bearer ${raw}`), undefined);
   const expired = new Auth({ ...config, tokenDays: -1 });
-  assert.equal(await expired.verifyHeader(`Bearer ${(await expired.issueToken()).token}`), false);
+  assert.equal(await expired.verifyHeader(`Bearer ${(await expired.issueToken(holder)).token}`), undefined);
+  // Forms of the server's own pages are tied to the session that displayed them.
+  assert.equal(auth.checkFormToken(auth.formToken("session-a", "oauth:x"), "session-a", "oauth:x"), true);
+  assert.equal(auth.checkFormToken(auth.formToken("session-a", "oauth:x"), "session-b", "oauth:x"), false);
+  assert.equal(auth.checkFormToken(auth.formToken("session-a", "oauth:x"), "session-a", "oauth:y"), false);
   const expiredLink = new Auth({ ...config, linkMinutes: -1 });
   assert.equal(await expiredLink.verifyFileToken(await expiredLink.issueFileToken("documents/cours.pdf")), undefined);
 });
@@ -95,14 +111,19 @@ test("only regular generated files of the output folders can be resolved", () =>
 let server: Server;
 let origin: string;
 const auth = new Auth(config);
-/** A database that accepts the request log writes and nothing else. */
-const fakeDb = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as App["db"];
+const db = await testDb("heigkit_test_server");
+const NO_DB = !db && "no local database";
+let ready: TestAccount;
+let pending: TestAccount;
 const appFor = (publicUrl: URL, limiter?: LoginLimiter): App => {
-  const app = createApp({ ...config, publicUrl }, fakeDb, undefined, auth);
+  const app = createApp({ ...config, publicUrl }, db!, undefined, { auth });
   return limiter ? { ...app, limiter } : app;
 };
 
 before(async () => {
+  if (!db) return;
+  ready = await readyAccount(db, "lea.ready@heig-vd.ch");
+  pending = await newAccount(db, "noe.pending@heig-vd.ch");
   server = createRemoteServer(appFor(new URL("http://127.0.0.1")), async () => new McpServer({ name: "test", version: "1" }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
@@ -113,12 +134,13 @@ before(async () => {
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 });
 
-after(() => {
+after(async () => {
   server?.close();
   rmSync(base, { recursive: true, force: true });
+  await db?.end();
 });
 
-const login = (body: unknown) => fetch(`${origin}/auth/login`, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+const login = (body: unknown, at = origin) => fetch(`${at}/api/auth/login`, { method: "POST", headers: { "X-Requested-With": "heig-kit" }, body: typeof body === "string" ? body : JSON.stringify(body) });
 const INIT = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } };
 const mcp = (token?: string) =>
   fetch(`${origin}/mcp`, {
@@ -127,21 +149,41 @@ const mcp = (token?: string) =>
     body: JSON.stringify(INIT),
   });
 
-test("the HTTP API: login, protected MCP, signed downloads", async () => {
+test("the HTTP API: login, MCP for the account of the token only, signed downloads", { skip: NO_DB }, async () => {
   assert.equal((await fetch(`${origin}/health`)).status, 200);
   assert.equal((await fetch(`${origin}/nope`)).status, 404);
-  assert.equal((await fetch(`${origin}/auth/login`)).status, 405);
+  assert.equal((await fetch(`${origin}/api/auth/login`)).status, 405);
+  assert.equal((await fetch(`${origin}/auth/login`, { method: "POST", body: JSON.stringify({ email: ready.email, password: ready.password }) })).status, 404, "no token against a password outside OAuth");
+  assert.equal((await fetch(`${origin}/api/auth/login`, { method: "POST", body: JSON.stringify({ email: ready.email, password: ready.password }) })).status, 403, "a page of another site cannot log in");
   assert.equal((await login("not json")).status, 400);
   assert.equal((await login([1])).status, 400);
-  assert.equal((await login({ username: "me", password: "wrong" })).status, 401);
+  assert.equal((await login({ email: ready.email, password: "wrong" })).status, 401);
+  assert.equal((await login({ email: "nobody@heig-vd.ch", password: ready.password })).status, 401);
 
-  const ok = await login({ username: "me", password: ENV.HEIG_AUTH_PASSWORD });
+  const ok = await login({ email: ready.email.toUpperCase(), password: ready.password });
   assert.equal(ok.status, 200);
-  const { access_token: token } = (await ok.json()) as { access_token: string };
+  const me = (await ok.json()) as Record<string, unknown>;
+  assert.equal(me.email, ready.email);
+  assert.equal(me.setup, null);
+  assert.equal(JSON.stringify(me).includes("password"), false, "nothing of a password comes back");
 
+  const token = (await auth.issueToken(ready.user)).token;
   assert.equal((await mcp()).status, 401);
   assert.equal((await mcp("invalid")).status, 401);
   assert.equal((await mcp(token)).status, 200);
+
+  // A token is worth what its account is: unknown account, account not ready, revoked, disabled.
+  assert.equal((await mcp((await auth.issueToken({ id: 9999, tokenVersion: 0 })).token)).status, 401);
+  const notReady = await mcp((await auth.issueToken(pending.user)).token);
+  assert.equal(notReady.status, 403);
+  assert.equal(((await notReady.json()) as { setup: string }).setup, "terms");
+  assert.equal((await mcp((await auth.issueToken({ id: ready.user.id, tokenVersion: ready.user.tokenVersion + 1 })).token)).status, 401);
+  const gone = await readyAccount(db!, "max.gone@heig-vd.ch");
+  const goneToken = (await auth.issueToken(gone.user)).token;
+  assert.equal((await mcp(goneToken)).status, 200);
+  await updateUser(db!, gone.user.id, { disabled: true });
+  assert.equal((await mcp(goneToken)).status, 401, "a disabled account loses its tokens at once");
+  assert.equal((await login({ email: gone.email, password: gone.password })).status, 401);
 
   const link = await auth.issueFileToken("documents/cours.pdf");
   const file = await fetch(`${origin}/files?token=${encodeURIComponent(link)}`);
@@ -158,10 +200,10 @@ test("the HTTP API: login, protected MCP, signed downloads", async () => {
   }
 });
 
-test("requests for another host name are refused, and large logins too", async () => {
+test("requests for another host name are refused, and large logins too", { skip: NO_DB }, async () => {
   const { request } = await import("node:http");
   const status = await new Promise<number>((resolve, reject) => {
-    const req = request(`${origin}/auth/login`, { method: "POST", headers: { Host: "evil.example.org" } }, (res) => {
+    const req = request(`${origin}/api/auth/login`, { method: "POST", headers: { Host: "evil.example.org" } }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     });
@@ -172,14 +214,14 @@ test("requests for another host name are refused, and large logins too", async (
   assert.equal((await login("x".repeat(10_000))).status, 413);
 });
 
-test("login is blocked after repeated failures, even with the right password", async () => {
+test("login is blocked after repeated failures, even with the right password", { skip: NO_DB }, async () => {
   const limited = createRemoteServer(appFor(new URL("http://127.0.0.1:18766"), new LoginLimiter(2)), async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => limited.listen(18766, "127.0.0.1", resolve));
   try {
-    const attempt = (password: string) => fetch("http://127.0.0.1:18766/auth/login", { method: "POST", body: JSON.stringify({ username: "me", password }) });
+    const attempt = (password: string) => login({ email: ready.email, password }, "http://127.0.0.1:18766");
     assert.equal((await attempt("bad")).status, 401);
     assert.equal((await attempt("bad")).status, 401);
-    assert.equal((await attempt(ENV.HEIG_AUTH_PASSWORD)).status, 429);
+    assert.equal((await attempt(ready.password)).status, 429);
   } finally {
     limited.close();
   }
@@ -221,10 +263,16 @@ test("a job whose status is a link or has no usable file fails, and the queue is
   writeFileSync(path.join(jobs, job.id, "status.json"), JSON.stringify({ state: "done", files: ["nothing.mp4"] }));
   assert.equal(queue.get(job.id)?.state, "failed");
 
-  queue.submit({ kind: "document", name: "a", formats: ["pdf"] }, "a.md", "");
-  queue.submit({ kind: "document", name: "b", formats: ["pdf"] }, "b.md", "");
-  queue.submit({ kind: "document", name: "c", formats: ["pdf"] }, "c.md", "");
-  assert.throws(() => queue.submit({ kind: "document", name: "d", formats: ["pdf"] }, "d.md", ""), /Too many/);
+  // One account cannot fill the queue alone, and the queue itself is bounded.
+  const doc = (name: string, userId?: number) => queue.submit({ kind: "document", name, formats: ["pdf"] }, `${name}.md`, "", [], [], userId);
+  assert.equal(doc("a", 7).userId, 7);
+  doc("b", 7);
+  assert.throws(() => doc("c", 7), /already have renderings/);
+  // Renderings are done one at a time, oldest first: each one knows how many are before it.
+  const third = doc("c", 8);
+  assert.equal(queue.ahead(third.id), 2);
+  for (let i = 3; i < MAX_ACTIVE; i++) doc(`n${i}`, 100 + i);
+  assert.throws(() => doc("last", 10), /Too many/);
 });
 
 test("a high quality video is queued with its narration, and its check succeeds with key frames only", () => {

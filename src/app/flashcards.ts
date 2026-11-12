@@ -2,9 +2,11 @@
  * Flashcards: decks of two-sided cards (Markdown with LaTeX) per course, studied with a small spaced repetition
  * scheme (four grades: again, hard, good, easy).
  */
+import { type Authorship, authorColumns, authorship, requireAdminToDelete, requireEditable } from "./sharing.js";
 import type { Db } from "../rag/db.js";
+import { type Existing, type ReuseClaim, requireNew } from "./reuse.js";
 
-export interface Deck {
+export interface Deck extends Authorship {
   id: number;
   course?: string;
   title: string;
@@ -56,6 +58,7 @@ function deckRow(r: Record<string, unknown>): Deck {
     description: (r.description as string | null) ?? undefined,
     createdAt: r.created_at as Date,
     updatedAt: r.updated_at as Date,
+    ...authorship(r),
     cards: Number(r.cards ?? 0),
     due: Number(r.due ?? 0),
     fresh: Number(r.fresh ?? 0),
@@ -87,7 +90,7 @@ function cardRow(r: Record<string, unknown>): Card {
   };
 }
 
-const DECK_COLUMNS = `d.*,
+const DECK_COLUMNS = `d.*, ${authorColumns("d")},
   (SELECT count(*) FROM cards c WHERE c.deck_id = d.id)::int AS cards,
   (SELECT count(*) FROM cards c JOIN card_state s ON s.card_id = c.id WHERE c.deck_id = d.id AND s.due_at <= now())::int AS due,
   (SELECT count(*) FROM cards c LEFT JOIN card_state s ON s.card_id = c.id WHERE c.deck_id = d.id AND s.card_id IS NULL)::int AS fresh`;
@@ -104,28 +107,35 @@ export async function getDeck(db: Db, id: number): Promise<(Deck & { cardList: C
   return { ...deckRow(rows[0]), cardList: cards.rows.map(cardRow) };
 }
 
-export async function createDeck(db: Db, input: { title: string; course?: string; description?: string }): Promise<Deck> {
+const asExisting = (kind: string) => (item: { id: number; title: string; course?: string; author?: string; mine: boolean }): Existing => ({ ref: `${kind} ${item.id}`, title: item.title, course: item.course, author: item.author, mine: item.mine });
+
+/** Creates a deck, unless similar ones exist and the caller did not say why another is needed (src/app/reuse.ts). */
+export async function createDeck(db: Db, input: { title: string; course?: string; description?: string; reuse?: ReuseClaim }): Promise<Deck> {
+  requireNew("deck", input, (await listDecks(db)).map(asExisting("deck")), input.reuse, "Read them with list_decks, and add what is missing to a deck of yours with add_flashcards.");
   const { rows } = await db.query("INSERT INTO decks (title, course, description) VALUES ($1, $2, $3) RETURNING id", [input.title, input.course ?? null, input.description ?? null]);
   return (await listDecks(db)).find((d) => d.id === Number(rows[0].id))!;
 }
 
 export async function updateDeck(db: Db, id: number, patch: { title?: string; course?: string | null; description?: string | null }): Promise<Deck | undefined> {
+  if (!(await requireEditable(db, "decks", id))) return undefined;
   await db.query(
     `UPDATE decks SET title = coalesce($2, title), course = CASE WHEN $3::boolean THEN $4 ELSE course END,
        description = CASE WHEN $5::boolean THEN $6 ELSE description END, updated_at = now() WHERE id = $1`,
     [id, patch.title ?? null, patch.course !== undefined, patch.course ?? null, patch.description !== undefined, patch.description ?? null],
   );
-  const deck = await getDeck(db, id);
-  return deck ? deckRow({ ...deck, created_at: deck.createdAt, updated_at: deck.updatedAt }) : undefined;
+  return (await listDecks(db)).find((d) => d.id === id);
 }
 
 export async function deleteDeck(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a deck");
+  if (!(await requireEditable(db, "decks", id))) return false;
   return (await db.query("DELETE FROM decks WHERE id = $1", [id])).rowCount === 1;
 }
 
 /** Appends cards to a deck. */
 export async function addCards(db: Db, deckId: number, cards: CardInput[]): Promise<Card[]> {
   if (cards.length === 0) return [];
+  if (!(await requireEditable(db, "decks", deckId))) throw new Error(`No deck ${deckId}`);
   const { rows: last } = await db.query<{ position: number | null }>("SELECT max(position) AS position FROM cards WHERE deck_id = $1", [deckId]);
   let position = (last[0]?.position ?? -1) + 1;
   const inserted: Card[] = [];
@@ -140,7 +150,16 @@ export async function addCards(db: Db, deckId: number, cards: CardInput[]): Prom
   return inserted;
 }
 
+/** The deck of a card, checked to be editable by the current account; undefined when the card does not exist. */
+async function editableDeckOf(db: Db, cardId: number): Promise<number | undefined> {
+  const { rows } = await db.query<{ deck_id: string }>("SELECT deck_id FROM cards WHERE id = $1", [cardId]);
+  if (!rows[0]) return undefined;
+  await requireEditable(db, "decks", Number(rows[0].deck_id));
+  return Number(rows[0].deck_id);
+}
+
 export async function updateCard(db: Db, id: number, patch: Partial<CardInput>): Promise<Card | undefined> {
+  if ((await editableDeckOf(db, id)) === undefined) return undefined;
   const { rows } = await db.query(
     `UPDATE cards SET front = coalesce($2, front), back = coalesce($3, back), hint = coalesce($4, hint), tags = coalesce($5, tags), source = coalesce($6, source)
      WHERE id = $1 RETURNING *`,
@@ -152,6 +171,8 @@ export async function updateCard(db: Db, id: number, patch: Partial<CardInput>):
 }
 
 export async function deleteCard(db: Db, id: number): Promise<boolean> {
+  requireAdminToDelete("a card");
+  if ((await editableDeckOf(db, id)) === undefined) return false;
   return (await db.query("DELETE FROM cards WHERE id = $1", [id])).rowCount === 1;
 }
 
@@ -199,7 +220,7 @@ export async function review(db: Db, cardId: number, grade: Grade): Promise<Card
   const next = schedule(card.state, grade);
   await db.query(
     `INSERT INTO card_state (card_id, due_at, interval_days, ease, reps, lapses, last_grade, reviewed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (card_id) DO UPDATE SET due_at = EXCLUDED.due_at, interval_days = EXCLUDED.interval_days, ease = EXCLUDED.ease,
+     ON CONFLICT (user_id, card_id) DO UPDATE SET due_at = EXCLUDED.due_at, interval_days = EXCLUDED.interval_days, ease = EXCLUDED.ease,
        reps = EXCLUDED.reps, lapses = EXCLUDED.lapses, last_grade = EXCLUDED.last_grade, reviewed_at = EXCLUDED.reviewed_at`,
     [cardId, next.dueAt, next.intervalDays, next.ease, next.reps, next.lapses, grade, next.reviewedAt],
   );

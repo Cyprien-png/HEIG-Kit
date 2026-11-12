@@ -35,8 +35,11 @@ export const NO_COURSE = "–";
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const byName = (a: string, b: string) => a.localeCompare(b, "fr", { numeric: true, sensitivity: "base" });
 
-function loadFilters(storageKey: string, defaultSort: SortKey): FilterState {
-  const fallback: FilterState = { q: "", sort: defaultSort, tags: [] };
+/** The category of what the account made itself: ticked by default on the lists of shared items. */
+export const MINE = "créés par moi";
+
+function loadFilters(storageKey: string, defaultSort: SortKey, defaultTags: string[]): FilterState {
+  const fallback: FilterState = { q: "", sort: defaultSort, tags: defaultTags };
   try {
     const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null") as Partial<FilterState> | null;
     return saved ? { ...fallback, ...saved, tags: Array.isArray(saved.tags) ? saved.tags : [] } : fallback;
@@ -46,9 +49,9 @@ function loadFilters(storageKey: string, defaultSort: SortKey): FilterState {
 }
 
 /** The filters of a page, kept while the student opens an item and comes back (same tab). */
-export function useFilterState(key: string, defaultSort: SortKey = "group"): [FilterState, (patch: Partial<FilterState>) => void] {
+export function useFilterState(key: string, defaultSort: SortKey = "group", defaultTags: string[] = []): [FilterState, (patch: Partial<FilterState>) => void] {
   const storageKey = `heig-filters:${key}`;
-  const [entry, setEntry] = useState(() => ({ key: storageKey, state: loadFilters(storageKey, defaultSort) }));
+  const [entry, setEntry] = useState(() => ({ key: storageKey, state: loadFilters(storageKey, defaultSort, defaultTags) }));
   const update = useCallback(
     (patch: Partial<FilterState>) =>
       setEntry((current) => {
@@ -64,7 +67,7 @@ export function useFilterState(key: string, defaultSort: SortKey = "group"): [Fi
   );
   // Another page of the same kind (another course): its own filters.
   if (entry.key !== storageKey) {
-    const next = { key: storageKey, state: loadFilters(storageKey, defaultSort) };
+    const next = { key: storageKey, state: loadFilters(storageKey, defaultSort, defaultTags) };
     setEntry(next);
     return [next.state, update];
   }
@@ -188,6 +191,19 @@ export function FilteredGroups<T>({ spec, filtered, grid, children }: { spec: Fi
           <div className={grid}>{group.items.map(children)}</div>
         </section>
       ))}
+    </div>
+  );
+}
+
+/** The list only shows what the account made, and it made nothing yet: the way to what the class shared. */
+export function NothingOfMine({ show }: { show: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center">
+      <p className="font-medium">Vous n'avez encore rien créé ici</p>
+      <p className="text-sm text-ink-2 mt-1">La liste montre par défaut ce que vous avez créé. Ce que les autres comptes ont partagé est juste derrière.</p>
+      <button onClick={show} className="mt-4 inline-flex items-center rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium hover:bg-surface-2">
+        Voir tout ce qui est partagé
+      </button>
     </div>
   );
 }
