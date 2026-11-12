@@ -39,8 +39,9 @@ export const JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 /** File names accepted back from the worker. */
 const SAFE_NAME = /^[\p{L}\p{N}_-][\p{L}\p{N}._-]*$/u;
 const ALLOWED = { document: new Set([".pdf", ".docx", ".html"]), animation: new Set([".mp4", ".mov", ".gif"]), hqvideo: new Set([".mp4"]) };
-const MAX_ACTIVE = 6;
-const MAX_ACTIVE_PER_ACCOUNT = 2;
+/** Renderings waiting or running. They run one at a time (src/server/worker.ts): this is the length of the line. */
+export const MAX_ACTIVE = 40;
+export const MAX_ACTIVE_PER_ACCOUNT = 2;
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4 * 1024 ** 3;
 const MAX_STATUS_BYTES = 256 * 1024;
@@ -138,6 +139,13 @@ export class JobQueue {
     this.collect();
     const file = this.recordFile(id);
     return existsSync(file) ? (JSON.parse(readFileSync(file, "utf-8")) as JobRecord) : undefined;
+  }
+
+  /** How many renderings run or wait before this one: they are done one at a time, oldest first. */
+  ahead(id: string): number {
+    const job = this.get(id);
+    if (!job || job.state !== "queued") return 0;
+    return this.all().filter((r) => r.id !== id && (r.state === "running" || (r.state === "queued" && r.createdAt <= job.createdAt))).length;
   }
 
   /** Jobs queued for more than five minutes without being taken: the render container is probably not running. */

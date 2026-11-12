@@ -4,7 +4,7 @@
  * scene left running or in memory survives.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../paths.js";
 import { JOB_ID } from "./jobs.js";
@@ -18,6 +18,41 @@ function setStatus(dir: string, status: object): void {
   writeFileSync(partial, JSON.stringify(status));
   renameSync(partial, path.join(dir, "status.json"));
 }
+
+/**
+ * One rendering at a time on the whole server, whatever the number of worker containers: a video with its voice takes
+ * most of the memory and the processors of a small machine. The lock is a folder (created atomically) whose date is
+ * refreshed while the job runs; one left by a worker that died is taken over after two minutes.
+ */
+const LOCK = path.join(JOBS_DIR, ".rendering");
+const LOCK_STALE_MS = 120_000;
+
+function takeLock(): boolean {
+  try {
+    mkdirSync(LOCK);
+    return true;
+  } catch {
+    try {
+      if (Date.now() - lstatSync(LOCK).mtimeMs < LOCK_STALE_MS) return false;
+      rmdirSync(LOCK);
+      mkdirSync(LOCK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function releaseLock(): void {
+  try {
+    rmdirSync(LOCK);
+  } catch {
+    // Already gone.
+  }
+}
+
+/** Processors a rendering may use at once (browser tabs, manim parts): 1 unless HEIG_RENDER_JOBS says otherwise. */
+const RENDER_JOBS = String(Math.max(1, Math.floor(Number(process.env.HEIG_RENDER_JOBS) || 1)));
 
 /** The oldest job not taken yet. */
 function nextJob(): string | undefined {
@@ -91,13 +126,15 @@ async function handle(id: string): Promise<void> {
             "--quality",
             request.quality,
             "--frames",
+            "--jobs",
+            RENDER_JOBS,
             "--out",
             output,
             ...(request.audio ? ["--audio"] : []),
             ...(request.check ? ["--check"] : []),
             ...(request.subtitles === false ? ["--no-subtitles"] : []),
           ]
-        : [path.join(ROOT, "modules", "visuals", "render.ts"), source, request.scene, "--quality", request.quality, "--frames", "--out", output, ...(request.voice ? ["--voice"] : [])];
+        : [path.join(ROOT, "modules", "visuals", "render.ts"), source, request.scene, "--quality", request.quality, "--frames", "--jobs", RENDER_JOBS, "--out", output, ...(request.voice ? ["--voice"] : [])];
   const result = await runRenderer(args);
 
   const frames = /^Frames: (.+)$/m.exec(result.output)?.[1]?.trim();
@@ -108,13 +145,26 @@ async function handle(id: string): Promise<void> {
 
 mkdirSync(JOBS_DIR, { recursive: true });
 for (;;) {
-  const id = nextJob();
+  // Looked at again once the lock is held: another worker may have taken the job in between.
+  const locked = nextJob() !== undefined && takeLock();
+  const id = locked ? nextJob() : undefined;
+  if (locked && !id) releaseLock();
   if (id) {
+    const beat = setInterval(() => {
+      const now = new Date();
+      try {
+        utimesSync(LOCK, now, now);
+      } catch {
+        // The folder is gone: nothing to refresh.
+      }
+    }, 15_000);
     try {
       await handle(id);
     } catch (error) {
       setStatus(path.join(JOBS_DIR, id), { state: "failed", log: error instanceof Error ? error.message : String(error) });
     }
+    clearInterval(beat);
+    releaseLock();
     process.exit(0);
   }
   await new Promise((resolve) => setTimeout(resolve, 1000));

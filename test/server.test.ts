@@ -12,7 +12,7 @@ import { type App, createApp } from "../src/server/app.js";
 import { type ServerConfig, loadServerConfig } from "../src/server/config.js";
 import { resolveGenerated } from "../src/server/files.js";
 import { createRemoteServer } from "../src/server/http.js";
-import { JobQueue, safeBaseName } from "../src/server/jobs.js";
+import { JobQueue, MAX_ACTIVE, safeBaseName } from "../src/server/jobs.js";
 import { updateUser } from "../src/accounts/users.js";
 import { type TestAccount, newAccount, readyAccount } from "./helpers/accounts.js";
 import { testDb } from "./helpers/db.js";
@@ -268,8 +268,11 @@ test("a job whose status is a link or has no usable file fails, and the queue is
   assert.equal(doc("a", 7).userId, 7);
   doc("b", 7);
   assert.throws(() => doc("c", 7), /already have renderings/);
-  for (const [name, userId] of [["c", 8], ["d", 8], ["e", 9], ["f", 9]] as const) doc(name, userId);
-  assert.throws(() => doc("g", 10), /Too many/);
+  // Renderings are done one at a time, oldest first: each one knows how many are before it.
+  const third = doc("c", 8);
+  assert.equal(queue.ahead(third.id), 2);
+  for (let i = 3; i < MAX_ACTIVE; i++) doc(`n${i}`, 100 + i);
+  assert.throws(() => doc("last", 10), /Too many/);
 });
 
 test("a high quality video is queued with its narration, and its check succeeds with key frames only", () => {

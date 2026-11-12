@@ -122,6 +122,8 @@ services:
     environment:
       HEIG_JOBS_DIR: /jobs
       HEIG_CACHE_DIR: /voice-cache
+      # Processors one rendering uses at once. Renderings themselves always run one after the other.
+      HEIG_RENDER_JOBS: ${HEIG_RENDER_JOBS:-1}
     volumes:
       - jobs:/jobs
       - voice-cache:/voice-cache

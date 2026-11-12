@@ -116,7 +116,12 @@ of claude.ai, `/mcp` in Claude Code), and you connect your edu-ID on the web app
 
 ## What differs from a local installation
 
-- `render_document` and `render_animation` return a job id, followed with `get_job`; results are download links.
+- `render_document`, `render_animation` and `render_hq_video` return a job id, followed with `get_job`; results are
+  download links. **Renderings wait in a queue and run one at a time**, oldest first, whatever the number of agents
+  sending them: a video with its voice takes most of the memory and the processors of a small machine. `get_job` says
+  how many are before; an account has at most 2 waiting, the server 40. One rendering uses a single processor at once
+  (`HEIG_RENDER_JOBS=1`); raise it in `.env` on a machine with cores and memory to spare (each one is a browser tab of
+  a few hundred MB, or a manim process).
 - `open_generated` is replaced by `get_download_link`.
 - The GitHub repositories of courses (`add_course_repo`, `update_course_repos`, `npm run repos` from a computer with
   `HEIG_REMOTE_URL`, the GitHub row of the status page) are fetched and indexed by the server itself, every sync and on
