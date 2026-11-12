@@ -2,6 +2,8 @@
  * Corrections of the student's handwritten work: a correction is created by the agent, photographed from a phone
  * (capture link), then transcribed and corrected by the agent into a structured result shown on the web (docs/app.md).
  */
+import { currentIdentity } from "../identity.js";
+import { notify } from "./notify.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -322,8 +324,15 @@ function parseRegions(value: unknown, i: number): CorrectedExercise["regions"] {
 
 export async function submitResult(db: Db, id: string, value: unknown): Promise<Correction | undefined> {
   const result = validateResult(value);
+  const before = (await db.query<{ state: CorrectionState }>("SELECT state FROM corrections WHERE id = $1", [id])).rows[0]?.state;
   const { rowCount } = await db.query("UPDATE corrections SET result = $2, state = 'corrected', corrected_at = now(), updated_at = now() WHERE id = $1", [id, JSON.stringify(result)]);
-  return rowCount === 1 ? getCorrection(db, id) : undefined;
+  if (rowCount !== 1) return undefined;
+  const correction = await getCorrection(db, id);
+  // Told once, when the work becomes corrected: not again when the agent amends its result.
+  if (correction && before !== "corrected") {
+    notify(currentIdentity()?.id, { kind: "correction", title: "Votre correction est prête", body: [correction.course, correction.title].filter(Boolean).join(" · "), url: `/corrections/${id}`, tag: `correction-${id}` });
+  }
+  return correction;
 }
 
 /** Share of correct, partial and wrong exercises over corrected work, per course. */

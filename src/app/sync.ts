@@ -3,6 +3,7 @@
  * every run in `sync_runs` for the status page. One sync at a time: GAPS and Cyberlearn share an account's saved edu-ID
  * session, and the school's servers are not asked by several accounts at once.
  */
+import { notify } from "./notify.js";
 import { existsSync, statSync } from "node:fs";
 import { MfaRequiredError } from "../auth/eduid.js";
 import { CampusLocked } from "../campus.js";
@@ -211,6 +212,9 @@ export class Syncer {
       this.log(`Sync ${kind}${userId ? ` (account ${userId})` : ""} failed: ${message}`);
     }
     await this.db.system.query("UPDATE sync_runs SET finished_at = now(), ok = $2, message = $3, stats = $4 WHERE id = $1", [id, ok, message ?? null, stats ? JSON.stringify(stats) : null]);
+    // The course material everyone shares changed: an ingestion, or the course repositories.
+    const fresh = ok && (kind === "ingest" || kind === "github") ? Number(stats?.indexed ?? 0) + Number(stats?.linked ?? 0) : 0;
+    if (fresh > 0) notify("all", { kind: "courses", title: "Les cours ont été mis à jour", body: fresh === 1 ? "1 document ajouté ou modifié." : `${fresh} documents ajoutés ou modifiés.`, url: "/courses", tag: "courses" });
     return { id, kind, userId, startedAt: rows[0].started_at, finishedAt: new Date(), ok, message, stats };
   }
 

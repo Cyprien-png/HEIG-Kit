@@ -9,6 +9,7 @@ import { registerFlashcardRoutes } from "./flashcards.js";
 import { registerKnowledgeRoutes } from "./knowledge.js";
 import { registerLibraryRoutes } from "./library.js";
 import { registerMeRoutes } from "./me.js";
+import { registerNotificationRoutes } from "./notifications.js";
 import { registerPastExamRoutes } from "./pastexams.js";
 import { registerProfileRoutes } from "./profile.js";
 import { registerQuizRoutes } from "./quizzes.js";
@@ -21,6 +22,7 @@ export function createApi(app: App): Router {
   const router = new Router();
   registerAuthRoutes(router, app);
   registerMeRoutes(router, app);
+  registerNotificationRoutes(router, app);
   registerAdminRoutes(router, app);
   registerCampusRoutes(router, app);
   registerCalendarRoutes(router, app);

@@ -38,6 +38,7 @@ export class Auth {
   private readonly formKey: Buffer;
   private readonly wrapKey: Buffer;
   private readonly filesAtRestKey: Buffer;
+  private readonly pushKey: Buffer;
 
   constructor(private readonly config: Pick<ServerConfig, "jwtSecret" | "tokenVersion" | "tokenDays" | "linkMinutes">) {
     const key = (purpose: string) => createHmac("sha256", config.jwtSecret).update(purpose).digest();
@@ -47,6 +48,7 @@ export class Auth {
     this.formKey = key("form");
     this.wrapKey = key("vault key wrap");
     this.filesAtRestKey = key("campus files at rest");
+    this.pushKey = key("web push");
   }
 
   /**
@@ -141,6 +143,11 @@ export class Auth {
     } catch {
       return undefined;
     }
+  }
+
+  /** What the server's identity towards the push services is derived from (src/webpush.ts). */
+  get webPushSecret(): Buffer {
+    return this.pushKey;
   }
 
   /** The key that encrypts the edu-ID sessions and Cyberlearn tokens the server keeps on its disk (src/secretfile.ts). */

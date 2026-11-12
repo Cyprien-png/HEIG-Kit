@@ -65,6 +65,14 @@ export function safeBaseName(name: string): string {
 
 export class JobQueue {
   private readonly records: string;
+  /** Called once when a job ends, done or failed, with its final record. */
+  onFinished?: (record: JobRecord) => void;
+
+  private finish(record: JobRecord): void {
+    this.save(record);
+    // A check of a high quality video gives key frames to the agent and nothing to the person.
+    if (record.state === "failed" || record.files.length > 0) this.onFinished?.(record);
+  }
 
   constructor(private readonly jobsDir: string, recordsDir = path.join(DATA_DIR, "jobs")) {
     this.records = recordsDir;
@@ -201,12 +209,12 @@ export class JobQueue {
       const frames = status.state === "done" && this.bringBackFrames(record, dir);
       // A check of a high quality video only gives its key frames.
       const failed = status.state === "failed" || (files.length === 0 && !frames);
-      this.save({ ...record, state: failed ? "failed" : "done", files, log: log || (failed ? "The worker produced no usable file." : ""), frames });
+      this.finish({ ...record, state: failed ? "failed" : "done", files, log: log || (failed ? "The worker produced no usable file." : ""), frames });
       rmSync(dir, { recursive: true, force: true });
       return;
     }
     if (Date.now() - record.createdAt > TIMEOUT_MS) {
-      this.save({ ...record, state: "failed", log: "Timed out: the render worker did not finish this job." });
+      this.finish({ ...record, state: "failed", files: [], log: "Timed out: the render worker did not finish this job." });
       rmSync(dir, { recursive: true, force: true });
       return;
     }

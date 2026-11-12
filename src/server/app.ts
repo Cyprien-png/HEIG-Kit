@@ -11,7 +11,19 @@ import { setSecretFileKey } from "../secretfile.js";
 import type { Db } from "../rag/db.js";
 import { Auth, LoginLimiter } from "./auth.js";
 import type { ServerConfig } from "./config.js";
-import type { JobQueue } from "./jobs.js";
+import type { JobQueue, JobRecord } from "./jobs.js";
+import { Pusher } from "./push.js";
+import type { PushPost } from "../webpush.js";
+import { type Notice, notify, setNotifier } from "../app/notify.js";
+
+/** What an account is told when one of its renderings ends. */
+function jobNotice(job: JobRecord): Notice {
+  const video = job.kind !== "document";
+  const file = job.files[0];
+  const url = file ? `/library/${file.split("/").map(encodeURIComponent).join("/")}` : "/library";
+  if (job.state === "failed") return { kind: "document", title: video ? "La génération de la vidéo a échoué" : "La génération du document a échoué", body: job.name, url: "/library", tag: `job-${job.id}` };
+  return { kind: "document", title: video ? "Votre vidéo est prête" : "Votre document est prêt", body: job.name, url, tag: `job-${job.id}` };
+}
 
 /** Everything the API routes, the MCP tools and the background jobs of the remote server share. */
 export interface App {
@@ -27,10 +39,14 @@ export interface App {
   /** Keys and edu-ID credentials of the accounts that just logged in, in memory for a short while. */
   vault: Vault;
   connector: CampusConnector;
+  /** Notifications to the devices of the accounts. */
+  pusher: Pusher;
 }
 
 export interface AppOptions {
   auth?: Auth;
+  /** Replaces the calls to the push services (tests). */
+  push?: PushPost;
   /** Replaces the real login on GAPS (tests). */
   campusLogin?: (mfaCode?: string) => Promise<unknown>;
 }
@@ -67,7 +83,11 @@ export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, option
   const syncer = new Syncer(db, config.syncMinutes, undefined, accounts);
   // edu-ID locks an account after repeated wrong passwords: five tries per account and quarter of an hour, no more.
   const connector = new CampusConnector(db, vault, new LoginLimiter(5, 1000), options.campusLogin);
+  const pusher = new Pusher(db, auth.webPushSecret, config.publicUrl, options.push);
+  setNotifier((to, notice) => void pusher.send(to, notice).catch((error: unknown) => console.error(`Notification not sent: ${error instanceof Error ? error.message : error}`)));
+  if (queue) queue.onFinished = (job) => notify(job.userId, jobNotice(job));
   return {
+    pusher,
     config,
     auth,
     db,

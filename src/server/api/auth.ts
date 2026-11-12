@@ -1,3 +1,4 @@
+import { removeDevices } from "../../accounts/notifications.js";
 import { ConnectError, type ConnectProblem } from "../../accounts/connect.js";
 import { REPOSITORY_URL, TERMS_MARKDOWN, TERMS_VERSION } from "../../accounts/terms.js";
 import { NO_CAMPUS_MESSAGE } from "../../accounts/access.js";
@@ -36,6 +37,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
       // Logging out ends everything the account had open: this browser, the others, the agents and the CLI. They log
       // in again; a token copied somewhere dies with the rest.
       await revokeTokens(app.db, accountOf(principal).id);
+      await removeDevices(app.db, accountOf(principal).id);
       app.vault.forget(accountOf(principal).id);
       json(res, 200, { ok: true }, { "Set-Cookie": clearedSessionCookie(app) });
     },
