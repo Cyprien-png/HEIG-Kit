@@ -37,6 +37,7 @@ export class Auth {
   private readonly captureKey: Uint8Array;
   private readonly formKey: Buffer;
   private readonly wrapKey: Buffer;
+  private readonly filesAtRestKey: Buffer;
 
   constructor(private readonly config: Pick<ServerConfig, "jwtSecret" | "tokenVersion" | "tokenDays" | "linkMinutes">) {
     const key = (purpose: string) => createHmac("sha256", config.jwtSecret).update(purpose).digest();
@@ -45,6 +46,7 @@ export class Auth {
     this.captureKey = key("capture");
     this.formKey = key("form");
     this.wrapKey = key("vault key wrap");
+    this.filesAtRestKey = key("campus files at rest");
   }
 
   /**
@@ -139,6 +141,11 @@ export class Auth {
     } catch {
       return undefined;
     }
+  }
+
+  /** The key that encrypts the edu-ID sessions and Cyberlearn tokens the server keeps on its disk (src/secretfile.ts). */
+  get secretFileKey(): Buffer {
+    return this.filesAtRestKey;
   }
 
   /** Ties a form of the server's own pages to the session that displayed it (CSRF). */

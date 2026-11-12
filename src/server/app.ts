@@ -6,6 +6,7 @@ import { RequestLog } from "../app/requests.js";
 import { type SyncAccounts, Syncer } from "../app/sync.js";
 import { CampusLocked, setCampusProvider } from "../campus.js";
 import { requireExplicitIdentity } from "../identity.js";
+import { setSecretFileKey } from "../secretfile.js";
 import type { Db } from "../rag/db.js";
 import { Auth, LoginLimiter } from "./auth.js";
 import type { ServerConfig } from "./config.js";
@@ -39,6 +40,9 @@ export interface AppOptions {
  */
 export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, options: AppOptions = {}): App {
   requireExplicitIdentity();
+  const auth = options.auth ?? new Auth(config);
+  // The sessions and tokens of the accounts are encrypted on the disk, with a key that is not on it.
+  setSecretFileKey(auth.secretFileKey);
   const vault = new Vault();
   setInterval(() => vault.sweep(), 60_000).unref();
   setCampusProvider((identity) => ({
@@ -59,7 +63,7 @@ export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, option
   const connector = new CampusConnector(db, vault, new LoginLimiter(5, 1000), options.campusLogin);
   return {
     config,
-    auth: options.auth ?? new Auth(config),
+    auth,
     db,
     queue,
     limiter: new LoginLimiter(),

@@ -2,7 +2,7 @@
  * What HEIG-Kit can do, shared by the command line (src/cli.ts) and the MCP server (src/mcp/host.ts): logins with
  * the saved session and two-step login codes, timetables, GAPS and Cyberlearn information, knowledge base queries.
  */
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type Credentials, MfaRequiredError } from "./auth/eduid.js";
@@ -17,6 +17,7 @@ import { renderAbsences, renderEntities, renderGrades, renderPlan } from "./gaps
 import { fetchSheet } from "./gaps/sheets.js";
 import { fetchStudentRecord } from "./gaps/student.js";
 import { type Page, Session } from "./http.js";
+import { readSecretFile, writeSecretFile } from "./secretfile.js";
 import { CACHE_DIR } from "./paths.js";
 import { type KnowledgeBase, LocalKnowledge, RemoteKnowledge } from "./app/knowledge.js";
 import { openDb } from "./rag/db.js";
@@ -43,9 +44,7 @@ export async function loadSchedule(refresh: boolean, debug: boolean, mfaCode?: s
 
   const gaps = await loginGaps(debug, mfaCode);
   const cache = { fetchedAt: new Date().toISOString(), lessons: await gaps.fetchSchedule() };
-  const file = campusFiles().schedule;
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
+  await writeSecretFile(campusFiles().schedule, JSON.stringify(cache, null, 2));
   return cache;
 }
 
@@ -213,15 +212,13 @@ export async function withCyberlearn<T>(
   const client = await withLogin(debug, mfaCode, (session, creds, resumeFrom) =>
     CyberlearnClient.login(session, creds, resumeFrom),
   );
-  const file = campusFiles().cyberlearnToken;
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify({ token: client.apiToken }), { mode: 0o600 });
+  await writeSecretFile(campusFiles().cyberlearnToken, JSON.stringify({ token: client.apiToken }));
   return use(client);
 }
 
 export async function readCyberlearnToken(): Promise<string | undefined> {
   try {
-    return (JSON.parse(await readFile(campusFiles().cyberlearnToken, "utf-8")) as { token: string }).token;
+    return (JSON.parse(await readSecretFile(campusFiles().cyberlearnToken)) as { token: string }).token;
   } catch {
     return undefined;
   }
@@ -265,8 +262,7 @@ export async function withLogin<T>(
     return result;
   } catch (error) {
     if (error instanceof MfaRequiredError) {
-      await mkdir(path.dirname(files.pendingMfa), { recursive: true });
-      await writeFile(files.pendingMfa, JSON.stringify(error.page), { mode: 0o600 });
+      await writeSecretFile(files.pendingMfa, JSON.stringify(error.page));
     }
     throw error;
   } finally {
@@ -287,7 +283,7 @@ export async function askMfaCode(): Promise<string | undefined> {
 
 export async function readPendingMfa(file = campusFiles().pendingMfa): Promise<Page | undefined> {
   try {
-    return JSON.parse(await readFile(file, "utf-8")) as Page;
+    return JSON.parse(await readSecretFile(file)) as Page;
   } catch {
     return undefined;
   }
@@ -295,7 +291,7 @@ export async function readPendingMfa(file = campusFiles().pendingMfa): Promise<P
 
 export async function readCache(): Promise<ScheduleCache | undefined> {
   try {
-    return JSON.parse(await readFile(campusFiles().schedule, "utf-8")) as ScheduleCache;
+    return JSON.parse(await readSecretFile(campusFiles().schedule)) as ScheduleCache;
   } catch {
     return undefined;
   }
