@@ -75,7 +75,7 @@ export function PdfReader({ url, title, overlay, onClose, downloadUrl, actions, 
   const [full, setFull] = useState(false);
   const [tool, setTool] = useState<Tool>(edit ? "pen" : "hand");
   const [shape, setShape] = useState<ShapeKind>("line");
-  const [color, setColor] = useState(COLORS[1]);
+  const [color, setColor] = useState(COLORS[0]);
   const [stroke, setStroke] = useState(1);
   const [textSize, setTextSize] = useState(1);
 
