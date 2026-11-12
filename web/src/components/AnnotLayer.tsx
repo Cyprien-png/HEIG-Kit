@@ -207,6 +207,9 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
         ref={canvas}
         width={pixelsW}
         height={pixelsH}
+        // The click that follows a tap (and the press of a mouse) would move the focus to the page, away from the text
+        // field that the tap has just opened: the canvas never takes the focus, a text is finished by `up`.
+        onMouseDown={interactive ? (e) => e.preventDefault() : undefined}
         onPointerDown={interactive ? down : undefined}
         onPointerMove={interactive ? move : undefined}
         onPointerUp={interactive ? up : undefined}
@@ -275,8 +278,12 @@ function TextEditor({ op, cssW, live, onDone }: { op: TextOp; cssW: number; live
         onBlur={() => {
           if (done.current) return;
           // A tap is followed by simulated mouse events that steal the focus: during the first instants, take it back.
-          if (performance.now() - born.current < 400) ref.current?.focus({ preventScroll: true });
-          else finish(value);
+          if (performance.now() - born.current < 700) {
+            ref.current?.focus({ preventScroll: true });
+            // Again once the browser has finished moving the focus: some ignore a focus asked while they are at it.
+            setTimeout(() => !done.current && ref.current?.focus({ preventScroll: true }), 0);
+            setTimeout(() => !done.current && document.activeElement !== ref.current && ref.current?.focus({ preventScroll: true }), 120);
+          } else finish(value);
         }}
         onKeyDown={(e) => {
           e.stopPropagation();
