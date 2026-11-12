@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfOverlay } from "../components/PdfOverlay";
 import { Markdown } from "../components/Markdown";
 import { type FilterSpec, FilterBar, FilteredGroups, MINE, NothingOfMine, useFilterState, useFiltered } from "../components/ListFilters";
-import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Modal, PageHeader, Select, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { bytes, dateTime } from "../lib/format";
 import type { LibraryFile, LibraryItem } from "../lib/types";
@@ -25,7 +25,9 @@ const SPEC: FilterSpec<LibraryItem> = {
   course: (i) => i.course,
   date: (i) => i.modifiedAt,
   categories: (i) => [i.mine && MINE, ...i.tags],
-  kinds: ["créés par moi", ...TYPE_TAGS],
+  kinds: [MINE, ...TYPE_TAGS],
+  topicsLabel: "Sujet",
+  topicsAll: "Tous les sujets",
 };
 
 export function Library() {
@@ -43,7 +45,13 @@ export function Library() {
   return (
     <div className="space-y-4">
       <PageHeader title="Bibliothèque" />
-      <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer par mots-clés…" extra={<Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: "all", label: "Tout" }, { value: "document", label: "Documents" }, { value: "video", label: "Vidéos" }]} />} />
+      <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer par mots-clés…" extra={
+          <Select aria-label="Format" className={cx("h-8 text-xs", filter !== "all" && "ring-1 ring-accent font-medium")} value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+            <option value="all">Tous les formats</option>
+            <option value="document">Documents</option>
+            <option value="video">Vidéos</option>
+          </Select>
+        } />
       {items.error && <ErrorBox error={items.error} retry={items.reload} />}
       {items.loading && !items.data ? <Loading /> : filtered.list.length === 0 && state.tags.length === 1 && state.tags[0] === MINE && !state.q.trim() && !state.course && all.length > 0 ? (
         <NothingOfMine show={() => set({ tags: [] })} />
@@ -68,8 +76,8 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
     onDeleted();
   };
   return (
-    <Card padded={false} className="flex flex-col overflow-hidden hover:border-line-strong transition-colors">
-      <button onClick={() => onOpen(main)} className="text-left p-4 flex-1">
+    <Card padded={false} className="h-full flex flex-col overflow-hidden hover:border-line-strong transition-colors">
+      <button onClick={() => onOpen(main)} className="text-left p-4 flex-1 flex flex-col justify-start">
         <div className="flex items-start gap-3">
           <span className={cx("h-10 w-10 rounded-lg grid place-items-center shrink-0", item.kind === "video" ? "bg-info-soft text-info" : "bg-accent-soft text-accent")}>
             <Icon className="h-5 w-5" />
@@ -88,8 +96,9 @@ function LibraryCard({ item, onOpen, onDeleted }: { item: LibraryItem; onOpen: (
           </div>
         </div>
       </button>
-      <div className="flex items-center gap-1 px-3 py-2 border-t border-line text-xs text-ink-2">
-        <span className="mr-auto">{dateTime(item.modifiedAt)}</span>
+      {/* Always the same height, at the bottom of the card whatever the content above. */}
+      <div className="h-11 shrink-0 flex items-center gap-1 px-3 border-t border-line text-xs text-ink-2 overflow-hidden">
+        <span className="mr-auto truncate">{dateTime(item.modifiedAt)}</span>
         {item.files.map((f) => (
           <button key={f.id} onClick={() => onOpen(f)} className="hover:text-accent">
             <Badge>{f.ext.slice(1)}</Badge>
