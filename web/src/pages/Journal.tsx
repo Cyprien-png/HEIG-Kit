@@ -10,6 +10,7 @@ const dateTime = (iso: string) => new Intl.DateTimeFormat("fr-CH", { day: "2-dig
 
 const STATE: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neutral" }> = {
   ready: { label: "Prêt", tone: "ok" },
+  terms: { label: "Conditions à accepter", tone: "warn" },
   password: { label: "Mot de passe à choisir", tone: "warn" },
   campus: { label: "edu-ID à connecter", tone: "warn" },
   expired: { label: "edu-ID à reconnecter", tone: "warn" },

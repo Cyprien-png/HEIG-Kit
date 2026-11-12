@@ -1,6 +1,7 @@
 import { ArrowRightStartOnRectangleIcon, CheckCircleIcon, ExclamationTriangleIcon, LockClosedIcon } from "@heroicons/react/24/outline";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { Markdown } from "../components/Markdown";
 import { Badge, Button, Card, Field, Input, PageHeader } from "../components/ui";
 import { ApiError, api } from "../lib/api";
 import { pendingAuthorization, useSession } from "../lib/auth";
@@ -157,6 +158,75 @@ function Step({ n, title, state, children }: { n: number; title: string; state: 
   );
 }
 
+interface Terms {
+  version: string;
+  repository: string;
+  markdown: string;
+}
+
+/** The conditions of use, as the server gives them; their links open beside the application. */
+function TermsText({ onLoaded }: { onLoaded?: (terms: Terms) => void }) {
+  const [terms, setTerms] = useState<Terms>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    api<Terms>("/api/auth/terms")
+      .then((t) => {
+        setTerms(t);
+        onLoaded?.(t);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const outside = (e: MouseEvent<HTMLDivElement>) => {
+    const link = (e.target as HTMLElement).closest("a");
+    if (!link?.href) return;
+    e.preventDefault();
+    window.open(link.href, "_blank", "noopener,noreferrer");
+  };
+  if (error) return <p className="text-sm text-bad">{error}</p>;
+  if (!terms) return <p className="text-sm text-ink-3">Chargement…</p>;
+  return (
+    <div onClick={outside} className="max-h-[50vh] overflow-y-auto rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm" tabIndex={0}>
+      <Markdown source={terms.markdown} />
+      <p className="text-xs text-ink-3 mt-4">Version du {terms.version}</p>
+    </div>
+  );
+}
+
+/** The conditions to read, and the box to tick: nothing else is offered before. */
+function TermsForm({ onDone }: { onDone: (me: AccountT) => void }) {
+  const [terms, setTerms] = useState<Terms>();
+  const [accepted, setAccepted] = useState(false);
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!terms || !accepted) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      onDone(await api<AccountT>("/api/auth/terms", { method: "POST", json: { accept: true, version: terms.version } }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <TermsText onLoaded={setTerms} />
+      <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+        <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-accent" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} disabled={!terms} required />
+        <span>J'ai lu et j'accepte les conditions d'utilisation.</span>
+      </label>
+      {error && <p className="text-sm text-bad">{error}</p>}
+      <Button type="submit" variant="primary" className="w-full" disabled={busy || !terms || !accepted}>
+        {busy ? "Enregistrement…" : "Continuer"}
+      </Button>
+    </form>
+  );
+}
+
 /**
  * Shown instead of the application until the account is ready: the first password must be replaced, then edu-ID
  * connected and accepted by GAPS. There is no way around it; the server refuses everything else meanwhile.
@@ -172,16 +242,19 @@ export function Setup({ me }: { me: AccountT }) {
   };
   return (
     <div className="min-h-full grid place-items-center px-4 py-10">
-      <div className="w-full max-w-md bg-surface border border-line rounded-2xl shadow-card p-6 space-y-5">
+      <div className={`w-full ${me.setup === "terms" ? "max-w-2xl" : "max-w-md"} bg-surface border border-line rounded-2xl shadow-card p-6 space-y-5`}>
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Bienvenue {me.firstName || me.name}</h1>
-          <p className="text-sm text-ink-2 mt-1">Deux étapes avant de commencer. Vos horaires, notes, corrections et votre profil ne sont visibles que par vous ; les supports de cours, cartes, quiz et documents sont partagés avec la classe.</p>
+          <p className="text-sm text-ink-2 mt-1">Trois étapes avant de commencer. Vos horaires, notes, corrections et votre profil ne sont visibles que par vous ; les supports de cours, cartes, quiz et documents sont partagés avec la classe.</p>
         </div>
-        <Step n={1} title="Choisir votre mot de passe" state={me.setup === "password" ? "now" : "done"}>
+        <Step n={1} title="Lire et accepter les conditions d'utilisation" state={me.setup === "terms" ? "now" : "done"}>
+          <TermsForm onDone={done} />
+        </Step>
+        <Step n={2} title="Choisir votre mot de passe" state={me.setup === "password" ? "now" : me.setup === "terms" ? "later" : "done"}>
           <p className="text-sm text-ink-2 mb-3">Le mot de passe reçu de l'administrateur ne sert qu'une fois.</p>
           <PasswordForm first onDone={done} />
         </Step>
-        <Step n={2} title="Connecter votre compte edu-ID" state={me.setup === "campus" ? "now" : me.setup === "password" ? "later" : "done"}>
+        <Step n={3} title="Connecter votre compte edu-ID" state={me.setup === "campus" ? "now" : me.setup ? "later" : "done"}>
           <p className="text-sm text-ink-2 mb-3">
             Le serveur lit vos horaires et vos notes sur GAPS, vos cours sur Cyberlearn. Vos identifiants sont vérifiés tout de suite, puis scellés avec votre mot de passe HEIG-Kit : ni les autres comptes ni une copie de la base ne permettent de les lire, et le serveur ne les ouvre que pendant que vous l'utilisez.
           </p>
@@ -233,6 +306,14 @@ export function Account() {
       <Card title="Mot de passe">
         {saved === "password" && <p className="text-sm text-ok mb-3">Mot de passe changé. Vos autres appareils et applications devront se reconnecter.</p>}
         <PasswordForm onDone={(account) => (setMe(account), setSaved("password"))} />
+      </Card>
+      <Card title="Conditions d'utilisation">
+        <details>
+          <summary className="text-sm text-ink-2 cursor-pointer">Acceptées {me.terms.acceptedAt ? relative(me.terms.acceptedAt) : ""} : les relire</summary>
+          <div className="mt-3">
+            <TermsText />
+          </div>
+        </details>
       </Card>
     </div>
   );

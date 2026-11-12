@@ -192,8 +192,9 @@ export interface Account {
   firstName: string;
   lastName: string;
   role: "admin" | "student";
-  /** What must be done before anything else: replace the first password, then connect edu-ID. */
-  setup: "password" | "campus" | null;
+  /** What must be done before anything else: accept the conditions, replace the first password, then connect edu-ID. */
+  setup: "terms" | "password" | "campus" | null;
+  terms: { version: string; accepted: boolean; acceptedAt?: string };
   campus: { state: "missing" | "ok" | "expired"; verifiedAt?: string; stored: boolean; unlocked: boolean };
 }
 
@@ -204,7 +205,7 @@ export interface AdminUser {
   name: string;
   role: "admin" | "student";
   disabled: boolean;
-  setup: "password" | "campus" | null;
+  setup: "terms" | "password" | "campus" | null;
   campus: "missing" | "ok" | "expired";
   createdAt: string;
   lastLoginAt?: string;
