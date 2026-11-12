@@ -41,7 +41,8 @@ export function Card({ className, children, title, actions, padded = true, id }:
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={padded ? "p-4" : ""}>{children}</div>
+      {/* Without padding the card lays its parts out itself: in a column card, a footer stays at the bottom. */}
+      <div className={padded ? "p-4" : "flex-1 min-h-0 flex flex-col"}>{children}</div>
     </section>
   );
 }
