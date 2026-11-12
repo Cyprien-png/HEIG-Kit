@@ -47,10 +47,15 @@ propre serveur.
   a appelé quelle fonction et quand, jamais le contenu.
 
 **La limite, dite honnêtement.** Ces protections valent pour le rôle d'administrateur dans l'application. La personne
-qui héberge la machine a, elle, un accès technique au système : vos données personnelles y sont enregistrées en clair
-dans la base, et un serveur dont le code aurait été modifié pourrait observer ce qui y transite, y compris vos
-identifiants au moment où vous les saisissez. C'est la raison de l'engagement du point 1, et c'est une confiance que
-vous accordez à cette personne en utilisant ce serveur.
+qui héberge la machine a, elle, un accès technique au système. Vos mots de passe et vos identifiants n'y sont pas
+lisibles. En revanche vos notes, absences, horaires, corrections, profil d'apprentissage et progression y sont
+enregistrés sans chiffrement : c'est nécessaire pour que le serveur puisse les synchroniser et les afficher.
+
+**Ces données ne sont partagées avec personne** : ni avec les autres comptes, ni avec les administrateurs, ni avec un
+tiers. L'hébergeur peut y accéder par simple contrainte technique, parce qu'il a la main sur la machine, et non parce
+que l'application les lui montre. De même, un serveur dont le code aurait été modifié pourrait observer ce qui y
+transite, y compris vos identifiants au moment où vous les saisissez. C'est la raison de l'engagement du point 1, et
+c'est une confiance que vous accordez à cette personne en utilisant ce serveur.
 
 ## 4. Contenus partagés et injection de prompt
 
