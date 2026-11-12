@@ -89,6 +89,8 @@ export function registerAuthRoutes(router: Router, app: App): void {
       const email = stringField(body, "email", { optional: true, max: 200 })?.trim();
       const password = stringField(body, "password", { optional: true, max: 1000 });
       if ((email === undefined) !== (password === undefined)) throw new HttpError(400, "email and password go together");
+      // The person acts on their connection themselves: automatic renewals may be tried again afterwards.
+      allowRenewal(user.id);
       let result;
       try {
         result = await app.connector.connect(user, {

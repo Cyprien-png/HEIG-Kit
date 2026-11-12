@@ -1,5 +1,6 @@
 /** Sessions of the accounts on the remote server: from a token to its account, the browser's cookie, what an account is told about itself. */
 import type { IncomingMessage } from "node:http";
+import { ConnectError } from "../accounts/connect.js";
 import { type User, getUser, identityOf, readCampusCredentials, setupStep } from "../accounts/users.js";
 import { runAs } from "../identity.js";
 import { parseCookies } from "./api/util.js";
@@ -121,7 +122,11 @@ export function renewCampus(app: App, user: User): void {
         syncAccount(app, user);
       } else nextRenewal.set(user.id, Date.now() + CODE_WAIT_MINUTES * 60_000);
     },
-    () => undefined,
+    (error: unknown) => {
+      // edu-ID refused the stored credentials (the person changed their password there): trying them again and again
+      // would get their edu-ID account locked. Nothing more until they reconnect themselves (page « Mon compte »).
+      if (error instanceof ConnectError && (error.problem === "rejected" || error.problem === "credentials")) nextRenewal.set(user.id, Number.POSITIVE_INFINITY);
+    },
   );
 }
 

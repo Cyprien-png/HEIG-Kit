@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { BadCredentialsError } from "../src/auth/eduid.js";
 import { Auth } from "../src/server/auth.js";
 import { type App, createApp } from "../src/server/app.js";
 import { loadServerConfig } from "../src/server/config.js";
@@ -26,6 +27,7 @@ let origin: string;
 let app: App;
 /** Logins the server made on (a fake) edu-ID. */
 let campusLogins = 0;
+let campusRefuses = false;
 
 before(async () => {
   if (!db) return;
@@ -39,7 +41,13 @@ before(async () => {
   probe.close();
   origin = `http://127.0.0.1:${port}`;
   auth = new Auth(config);
-  app = createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, { auth, campusLogin: async () => void campusLogins++ });
+  app = createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, {
+    auth,
+    campusLogin: async () => {
+      campusLogins++;
+      if (campusRefuses) throw new BadCredentialsError();
+    },
+  });
   server = createRemoteServer(app, async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 });
@@ -213,6 +221,19 @@ test("tokens carry the key of the sealed edu-ID credentials, wrapped for the ser
   for (let i = 0; i < 50 && (await getUser(db!, zoe.user.id))!.campusState !== "ok"; i++) await new Promise((r) => setTimeout(r, 20));
   assert.equal((await getUser(db!, zoe.user.id))!.campusState, "ok");
   assert.ok(campusLogins > before);
+
+  // She changed her password on edu-ID: the stored one is refused once, and never tried again on its own (edu-ID
+  // locks an account after repeated wrong passwords).
+  campusRefuses = true;
+  await markCampus(db!, zoe.user.id, "expired");
+  const tried = campusLogins;
+  await me(second.access_token);
+  for (let i = 0; i < 50 && campusLogins === tried; i++) await new Promise((r) => setTimeout(r, 20));
+  await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; i < 5; i++) await me(second.access_token);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(campusLogins, tried + 1);
+  campusRefuses = false;
 
   // A token without the key (issued before the account had one at hand) still works, and opens nothing.
   app.vault.forget(zoe.user.id);
