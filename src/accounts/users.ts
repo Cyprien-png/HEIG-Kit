@@ -196,6 +196,13 @@ export async function updateUser(db: Db, id: number, patch: UserPatch): Promise<
  * A new random password, to replace at the next login. Every token of the account stops working, and its sealed edu-ID
  * credentials are dropped: nobody can open them without the old password. The account enters them again.
  */
+/** Ends every session of the account: its access tokens, cookies and refresh tokens stop working at once. */
+export async function revokeTokens(db: Db, id: number): Promise<void> {
+  await db.system.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [id]);
+  await db.system.query("DELETE FROM oauth_refresh_tokens WHERE user_id = $1", [id]);
+  await db.system.query("DELETE FROM oauth_codes WHERE user_id = $1", [id]);
+}
+
 export async function resetPassword(db: Db, id: number, kdf?: Kdf): Promise<{ user: User; password: string }> {
   const password = generatePassword();
   const { hash } = await hashPassword(password, kdf);

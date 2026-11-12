@@ -1,5 +1,5 @@
 import { ConnectError, type ConnectProblem } from "../../accounts/connect.js";
-import { authenticate, changePassword, getUser } from "../../accounts/users.js";
+import { authenticate, changePassword, getUser, revokeTokens } from "../../accounts/users.js";
 import type { App } from "../app.js";
 import { allowRenewal, clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
 import type { Principal, Router } from "./router.js";
@@ -31,6 +31,9 @@ export function registerAuthRoutes(router: Router, app: App): void {
   router.post(
     "/api/auth/logout",
     async ({ res, principal }) => {
+      // Logging out ends everything the account had open: this browser, the others, the agents and the CLI. They log
+      // in again; a token copied somewhere dies with the rest.
+      await revokeTokens(app.db, accountOf(principal).id);
       app.vault.forget(accountOf(principal).id);
       json(res, 200, { ok: true }, { "Set-Cookie": clearedSessionCookie(app) });
     },
