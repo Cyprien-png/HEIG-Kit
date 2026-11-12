@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { type Kdf, GENERATED_PASSWORD_LENGTH, generatePassword, hashPassword, passwordProblem, seal, unseal, verifyPassword } from "../src/accounts/password.js";
 import { REPOSITORY_URL, TERMS_MARKDOWN, TERMS_VERSION } from "../src/accounts/terms.js";
-import { acceptTerms, authenticate, changePassword, createUser, deleteUser, findUser, listUsers, nameFromEmail, readCampusCredentials, resetPassword, saveCampusCredentials, setupStep, updateUser } from "../src/accounts/users.js";
+import { acceptTerms, setAccess, authenticate, changePassword, createUser, deleteUser, findUser, listUsers, nameFromEmail, readCampusCredentials, resetPassword, saveCampusCredentials, setupStep, updateUser } from "../src/accounts/users.js";
 import { listCalendars } from "../src/app/calendar.js";
 import { listCorrections } from "../src/app/corrections.js";
 import { runAs } from "../src/identity.js";
@@ -109,7 +109,11 @@ test("accounts: the first one takes over the installation, then creation, login,
   await assert.rejects(changePassword(db, login!.user, second.password, login!.vaultKey, FAST), /différent/);
   await acceptTerms(db, second.user.id, TERMS_VERSION);
   const changed = await changePassword(db, login!.user, "mon nouveau secret", login!.vaultKey, FAST);
-  assert.equal(setupStep(changed.user), "campus");
+  // Then the person chooses: with edu-ID (connected next) or without (nothing more is asked).
+  assert.equal(setupStep(changed.user), "access");
+  await assert.rejects(setAccess(db, second.user.id, "tout"), /access must be/);
+  assert.equal(setupStep(await setAccess(db, second.user.id, "local")), undefined);
+  assert.equal(setupStep(await setAccess(db, second.user.id, "campus")), "campus");
   assert.equal(changed.user.tokenVersion, login!.user.tokenVersion + 1);
   assert.equal(await authenticate(db, "noe.second@heig-vd.ch", second.password), undefined);
 

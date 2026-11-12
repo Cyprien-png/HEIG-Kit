@@ -1,7 +1,7 @@
 /** Accounts for the server tests: created like the administrator does, then taken through their setup. */
 import type { Kdf } from "../../src/accounts/password.js";
 import { TERMS_VERSION } from "../../src/accounts/terms.js";
-import { type User, acceptTerms, authenticate, changePassword, createUser, getUser, markCampus } from "../../src/accounts/users.js";
+import { type User, acceptTerms, authenticate, changePassword, createUser, getUser, markCampus, setAccess } from "../../src/accounts/users.js";
 import type { Db } from "../../src/rag/db.js";
 
 /** Light settings: the tests check the logic, not the cost. */
@@ -26,6 +26,7 @@ export async function readyAccount(db: Db, email: string, role?: string): Promis
   const password = `mot de passe choisi no ${created.user.id}`;
   await acceptTerms(db, created.user.id, TERMS_VERSION);
   await changePassword(db, login.user, password, login.vaultKey, FAST);
+  await setAccess(db, created.user.id, "campus");
   await markCampus(db, created.user.id, "ok");
   return { user: (await getUser(db, created.user.id))!, email: created.email, password };
 }

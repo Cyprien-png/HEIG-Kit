@@ -178,11 +178,35 @@ test("a new account: its first password, then edu-ID with the two-step code, bef
   assert.equal((await call("POST", "/api/auth/password", { password: ada.password })).status, 400, "the same password again");
   const changed = await call("POST", "/api/auth/password", { password: "le choix de ada 2026" });
   assert.equal(changed.status, 200);
-  assert.equal(((await changed.json()) as { setup: string }).setup, "campus");
+  assert.equal(((await changed.json()) as { setup: string }).setup, "access");
   const old = cookie;
   cookie = changed.headers.get("set-cookie")!.split(";")[0];
   assert.equal((await fetch(`${origin}/api/auth/me`, { headers: { Cookie: old } })).status, 401, "the sessions opened with the first password are closed");
   assert.equal((await fetch(`${origin}/api/auth/login`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ email: ada.email, password: ada.password }) })).status, 401);
+
+  // Then the kind of access, chosen by the person in the browser: without edu-ID the account is ready at once, and
+  // everything that comes from GAPS and Cyberlearn, calendar included, is closed to it.
+  assert.equal((await call("GET", "/api/corrections")).status, 403);
+  assert.equal((await call("POST", "/api/auth/campus", { email: "ada@edu", password: "x" })).status, 403, "edu-ID comes after the choice");
+  assert.equal((await call("POST", "/api/auth/access", { access: "tout" })).status, 400);
+  const local = await call("POST", "/api/auth/access", { access: "local" });
+  assert.deepEqual([local.status, ((await local.json()) as { setup: null; access: string }).access], [200, "local"]);
+  assert.equal((await call("GET", "/api/corrections")).status, 200);
+  assert.equal((await call("GET", "/api/decks")).status, 200);
+  for (const path of ["/api/calendar", "/api/calendars", "/api/campus/grades", "/api/campus/schedule", "/api/me/sync"]) {
+    const closed = await call("GET", path);
+    assert.equal(closed.status, 403, path);
+    assert.equal(((await closed.json()) as { access: string }).access, "local", path);
+  }
+  assert.equal((await call("POST", "/api/calendar/events", { title: "TE", start: "2026-12-01" })).status, 403);
+  assert.equal((await call("POST", "/api/auth/campus", { email: "ada@edu", password: "x" })).status, 403, "no edu-ID login for an account without edu-ID");
+  // Its agents get the same refusal from the tools, and cannot change the choice.
+  const asAgent = { ...JSON_HEADERS, ...(await bearer(ada)) };
+  assert.equal((await fetch(`${origin}/api/campus/grades`, { headers: asAgent })).status, 403);
+  assert.equal((await fetch(`${origin}/api/auth/access`, { method: "POST", headers: asAgent, body: JSON.stringify({ access: "campus" }) })).status, 403);
+  // She changes her mind: edu-ID is then asked before anything else.
+  const withCampus = await call("POST", "/api/auth/access", { access: "campus" });
+  assert.equal(((await withCampus.json()) as { setup: string }).setup, "campus");
 
   // Then edu-ID, until GAPS accepts a login.
   const blocked = await call("GET", "/api/calendar");
@@ -240,6 +264,14 @@ test("a new account: its first password, then edu-ID with the two-step code, bef
   const again = await call("POST", "/api/auth/password", { password: "encore un autre choix", current: "le choix de ada 2026" });
   assert.equal(again.status, 200);
   assert.deepEqual(await readCampusCredentials(db!, ada.user.id, app.vault.key(ada.user.id)!), { email: "ada.nouvelle@heig-vd.ch", password: "secret edu-ID" }, "sealed again with the new password");
+
+  // Going without edu-ID afterwards erases what the server kept of it; the account stays usable for the rest.
+  cookie = again.headers.get("set-cookie")!.split(";")[0];
+  assert.equal((await call("POST", "/api/auth/access", { access: "local" })).status, 200);
+  const after = (await getUser(db!, ada.user.id))!;
+  assert.deepEqual([after.access, after.hasCampusCredentials, after.campusState, after.campusVerifiedAt], ["local", false, "missing", undefined]);
+  assert.equal((await call("GET", "/api/campus/grades")).status, 403);
+  assert.equal((await call("GET", "/api/decks")).status, 200);
 });
 
 test("what is personal is closed: another account's token gets a plain refusal", { skip: NO_DB }, async () => {
