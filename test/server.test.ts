@@ -176,7 +176,7 @@ test("the HTTP API: login, MCP for the account of the token only, signed downloa
   assert.equal((await mcp((await auth.issueToken({ id: 9999, tokenVersion: 0 })).token)).status, 401);
   const notReady = await mcp((await auth.issueToken(pending.user)).token);
   assert.equal(notReady.status, 403);
-  assert.equal(((await notReady.json()) as { setup: string }).setup, "password");
+  assert.equal(((await notReady.json()) as { setup: string }).setup, "terms");
   assert.equal((await mcp((await auth.issueToken({ id: ready.user.id, tokenVersion: ready.user.tokenVersion + 1 })).token)).status, 401);
   const gone = await readyAccount(db!, "max.gone@heig-vd.ch");
   const goneToken = (await auth.issueToken(gone.user)).token;

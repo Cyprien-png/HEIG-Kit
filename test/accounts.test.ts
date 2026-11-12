@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { type Kdf, GENERATED_PASSWORD_LENGTH, generatePassword, hashPassword, passwordProblem, seal, unseal, verifyPassword } from "../src/accounts/password.js";
-import { authenticate, changePassword, createUser, deleteUser, findUser, listUsers, nameFromEmail, readCampusCredentials, resetPassword, saveCampusCredentials, setupStep, updateUser } from "../src/accounts/users.js";
+import { REPOSITORY_URL, TERMS_MARKDOWN, TERMS_VERSION } from "../src/accounts/terms.js";
+import { acceptTerms, authenticate, changePassword, createUser, deleteUser, findUser, listUsers, nameFromEmail, readCampusCredentials, resetPassword, saveCampusCredentials, setupStep, updateUser } from "../src/accounts/users.js";
 import { listCalendars } from "../src/app/calendar.js";
 import { listCorrections } from "../src/app/corrections.js";
 import { runAs } from "../src/identity.js";
@@ -79,7 +80,15 @@ test("accounts: the first one takes over the installation, then creation, login,
   assert.equal(first.user.email, "lea.owner@heig-vd.ch");
   assert.equal(first.user.name, "Lea Owner");
   assert.equal(first.password.length, 18);
-  assert.equal(setupStep(first.user), "password");
+  // The conditions of use come first: the version shown, nothing else.
+  assert.equal(setupStep(first.user), "terms");
+  await assert.rejects(acceptTerms(db, first.user.id, "1999-01-01"), /relisez/);
+  const agreed = await acceptTerms(db, first.user.id, TERMS_VERSION);
+  assert.ok(agreed.termsAcceptedAt);
+  assert.equal(setupStep(agreed), "password");
+  // A new version of the text asks again.
+  assert.equal(setupStep({ ...agreed, termsVersion: "1999-01-01" }), "terms");
+  for (const needle of [REPOSITORY_URL, "Argon2id", "RFC 9106", "HKDF-SHA-256", "AES-256-GCM", "injection de prompt", "aucunement responsables", "open source"]) assert.ok(TERMS_MARKDOWN.includes(needle), needle);
 
   const second = await createUser(db, { email: "noe.second@heig-vd.ch", lastName: "Seconde" }, FAST);
   assert.equal(second.tookOver, false);
@@ -98,6 +107,7 @@ test("accounts: the first one takes over the installation, then creation, login,
   // The first password must be replaced, by a different and acceptable one.
   await assert.rejects(changePassword(db, login!.user, "court", login!.vaultKey, FAST), /12/);
   await assert.rejects(changePassword(db, login!.user, second.password, login!.vaultKey, FAST), /différent/);
+  await acceptTerms(db, second.user.id, TERMS_VERSION);
   const changed = await changePassword(db, login!.user, "mon nouveau secret", login!.vaultKey, FAST);
   assert.equal(setupStep(changed.user), "campus");
   assert.equal(changed.user.tokenVersion, login!.user.tokenVersion + 1);

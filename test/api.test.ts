@@ -145,9 +145,27 @@ test("a new account: its first password, then edu-ID with the two-step code, bef
   const ada = await newAccount(db!, "ada.nouvelle@heig-vd.ch");
   const login = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ email: ada.email, password: ada.password }) });
   assert.equal(login.status, 200);
-  assert.equal(((await login.json()) as { setup: string }).setup, "password");
+  assert.equal(((await login.json()) as { setup: string }).setup, "terms");
   let cookie = login.headers.get("set-cookie")!.split(";")[0];
   const call = (method: string, path: string, body?: unknown) => fetch(`${origin}${path}`, { method, headers: { ...JSON_HEADERS, Cookie: cookie }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+  // First the conditions of use: read, then accepted by the person, in the browser, for the version shown.
+  assert.equal((await call("GET", "/api/calendar")).status, 403);
+  assert.equal((await call("POST", "/api/auth/password", { password: "le choix de ada 2026" })).status, 403, "the conditions come before the password");
+  const terms = (await (await call("GET", "/api/auth/terms")).json()) as { version: string; repository: string; markdown: string };
+  assert.match(terms.markdown, /Argon2id/);
+  assert.equal(terms.repository, "https://github.com/Cyprien-png/HEIG-Kit");
+  assert.equal((await call("POST", "/api/auth/terms", { version: terms.version })).status, 400, "the box is not ticked");
+  assert.equal((await call("POST", "/api/auth/terms", { accept: "true", version: terms.version })).status, 400);
+  assert.equal((await call("POST", "/api/auth/terms", { accept: true, version: "1999-01-01" })).status, 409);
+  const byAgent = await fetch(`${origin}/api/auth/terms`, { method: "POST", headers: { ...JSON_HEADERS, ...(await bearer(ada)) }, body: JSON.stringify({ accept: true, version: terms.version }) });
+  assert.equal(byAgent.status, 403, "an agent never accepts for the person");
+  const agreed = await call("POST", "/api/auth/terms", { accept: true, version: terms.version });
+  assert.equal(agreed.status, 200);
+  const account = (await agreed.json()) as { setup: string; terms: { accepted: boolean; acceptedAt?: string } };
+  assert.equal(account.setup, "password");
+  assert.equal(account.terms.accepted, true);
+  assert.ok(account.terms.acceptedAt);
 
   // Nothing works before the first password is replaced, and the answer says what to do.
   for (const path of ["/api/calendar", "/api/corrections", "/api/library", "/api/profile"]) {
