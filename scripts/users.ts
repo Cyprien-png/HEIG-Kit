@@ -82,7 +82,7 @@ try {
     case "reset": {
       if (!ref) throw new Error(USAGE);
       const { user, password } = await resetPassword(db, (await findUser(db, ref)).id);
-      console.log("New password. The tokens of this account are revoked and its edu-ID connection erased: it stays closed until edu-ID is connected again.");
+      console.log("New password. The tokens of this account are revoked and its edu-ID connection erased: with edu-ID, it stays closed until edu-ID is connected again.");
       firstPassword(user, password);
       break;
     }
