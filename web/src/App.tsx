@@ -1,6 +1,6 @@
 import { type ReactNode, Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { Shell } from "./components/Shell";
+import { NeedsCampus, Shell } from "./components/Shell";
 import { Loading } from "./components/ui";
 import { SessionProvider, pendingAuthorization, useSession } from "./lib/auth";
 import { Account, Setup } from "./pages/Account";
@@ -70,7 +70,7 @@ export function App() {
                   <Suspense fallback={<Loading />}>
                     <Routes>
                       <Route index element={<Dashboard />} />
-                      <Route path="calendar" element={<Calendar />} />
+                      <Route path="calendar" element={<NeedsCampus><Calendar /></NeedsCampus>} />
                       <Route path="revision" element={<Revision />} />
                       <Route path="etudes" element={<Etudes />} />
                       <Route path="courses" element={<Courses />} />
@@ -93,8 +93,8 @@ export function App() {
                       <Route path="corrections" element={<Corrections />} />
                       <Route path="corrections/:id" element={<CorrectionDetail />} />
                       <Route path="profile" element={<Profile />} />
-                      <Route path="grades" element={<Grades />} />
-                      <Route path="studies" element={<Studies />} />
+                      <Route path="grades" element={<NeedsCampus><Grades /></NeedsCampus>} />
+                      <Route path="studies" element={<NeedsCampus><Studies /></NeedsCampus>} />
                       <Route path="account" element={<Account />} />
                       <Route path="status" element={<AdminOnly><Status /></AdminOnly>} />
                       <Route path="journal" element={<AdminOnly><Journal /></AdminOnly>} />

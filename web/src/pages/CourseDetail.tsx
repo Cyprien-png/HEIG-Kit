@@ -4,6 +4,7 @@ import { CourseChip } from "../components/CourseChip";
 import { type FilterSpec, FilterBar, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useApi } from "../lib/api";
+import { useHasCampus } from "../lib/auth";
 import { prettyCourseName } from "../lib/courses";
 import { addDays, day, today } from "../lib/format";
 import type { CalendarEvent, Correction, Deck, KbCourse, KbDocument, ProfileSummary } from "../lib/types";
@@ -28,7 +29,8 @@ export function CourseDetail() {
   const { code = "" } = useParams();
   const docs = useApi<{ documents: KbDocument[] }>(`/api/kb/courses/${encodeURIComponent(code)}/documents`, [code]);
   const courses = useApi<{ courses: KbCourse[] }>("/api/kb/courses");
-  const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${today()}&to=${addDays(today(), 60)}&course=${encodeURIComponent(code)}&kinds=deadline,exam,event`, [code]);
+  const campus = useHasCampus();
+  const events = useApi<{ events: CalendarEvent[] }>(!campus ? null : `/api/calendar?from=${today()}&to=${addDays(today(), 60)}&course=${encodeURIComponent(code)}&kinds=deadline,exam,event`, [code]);
   const decks = useApi<{ decks: Deck[] }>(`/api/decks?course=${encodeURIComponent(code)}`, [code]);
   const corrections = useApi<{ corrections: Correction[] }>(`/api/corrections?course=${encodeURIComponent(code)}`, [code]);
   const profile = useApi<ProfileSummary>(`/api/profile?course=${encodeURIComponent(code)}`, [code]);
@@ -74,7 +76,7 @@ export function CourseDetail() {
 
         <div className="space-y-4 min-w-0">
           <Card title="Échéances" padded={false}>
-            {events.loading ? <Loading /> : (events.data?.events.length ?? 0) === 0 ? <Empty title="Rien de prévu" hint="Pas de rendu ni d'examen dans les 60 jours." /> : (
+            {!campus ? <Empty title="Fermé" hint="Les échéances viennent de Cyberlearn : ce compte fonctionne sans edu-ID." /> : events.loading ? <Loading /> : (events.data?.events.length ?? 0) === 0 ? <Empty title="Rien de prévu" hint="Pas de rendu ni d'examen dans les 60 jours." /> : (
               <ul className="divide-y divide-line">
                 {events.data!.events.map((e) => (
                   <li key={e.key} className="px-4 py-2 text-sm flex items-center gap-2">

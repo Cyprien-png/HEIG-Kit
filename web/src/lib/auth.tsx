@@ -47,6 +47,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 export const useSession = () => useContext(Ctx);
 
+/** The account works with edu-ID: what comes from GAPS and Cyberlearn, calendar included, is open to it. */
+export const useHasCampus = (): boolean => useContext(Ctx).me?.access !== "local";
+
 /** Where to go once logged in and set up: back to an authorization asked by an application (Claude, the CLI), if any. */
 export function pendingAuthorization(search: string): string | undefined {
   const next = new URLSearchParams(search).get("next");

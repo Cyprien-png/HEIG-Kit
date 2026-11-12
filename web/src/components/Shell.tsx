@@ -17,6 +17,7 @@ import {
   RectangleStackIcon,
   SignalIcon,
   Squares2X2Icon,
+  LockClosedIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { type ComponentType, type ReactNode, useState } from "react";
@@ -31,12 +32,14 @@ export interface NavItem {
   /** Routes that light this item up besides its own. */
   under?: string[];
   hint?: string;
+  /** Comes from GAPS or Cyberlearn: closed, with a padlock, to an account without edu-ID. */
+  campus?: boolean;
 }
 
 /** The four places of the app, in the order of the bottom bar. */
 export const TABS: NavItem[] = [
   { to: "/", label: "Accueil", icon: HomeIcon },
-  { to: "/calendar", label: "Calendrier", icon: CalendarDaysIcon },
+  { to: "/calendar", label: "Calendrier", icon: CalendarDaysIcon, campus: true },
   { to: "/revision", label: "Révision", icon: BookOpenIcon, under: ["/cards", "/study", "/quiz", "/exams", "/past-exams", "/courses", "/documents", "/library", "/copies", "/corrections", "/profile"] },
   { to: "/etudes", label: "Études", icon: AcademicCapIcon, under: ["/studies", "/grades"] },
 ];
@@ -54,8 +57,8 @@ export const REVISION: NavItem[] = [
   { to: "/profile", label: "Profil", icon: UserCircleIcon, hint: "Points forts, points faibles" },
 ];
 export const ETUDES: NavItem[] = [
-  { to: "/studies", label: "Plan d'études", icon: AcademicCapIcon, hint: "Modules, unités, absences" },
-  { to: "/grades", label: "Notes", icon: ChartBarIcon, hint: "Contrôle continu par module, bulletin" },
+  { to: "/studies", label: "Plan d'études", icon: AcademicCapIcon, hint: "Modules, unités, absences", campus: true },
+  { to: "/grades", label: "Notes", icon: ChartBarIcon, hint: "Contrôle continu par module, bulletin", campus: true },
 ];
 
 /** Routes shown without the phone's header and bottom bar: a card fills the screen and has its own way out. */
@@ -72,12 +75,14 @@ export function Shell({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState(false);
   const location = useLocation();
   const immersive = IMMERSIVE.test(location.pathname);
-  const reconnect = me?.campus.state === "expired" && location.pathname !== "/account";
+  const reconnect = me?.access === "campus" && me.campus.state === "expired" && location.pathname !== "/account";
+  const locked = (item: NavItem) => Boolean(item.campus) && me?.access === "local";
 
   const sideLink = (item: NavItem) => (
     <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm font-medium transition-colors", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
-      <item.icon className="h-5 w-5 shrink-0" />
-      {item.label}
+      <item.icon className={cx("h-5 w-5 shrink-0", locked(item) && "opacity-50")} />
+      <span className={cx("flex-1 truncate", locked(item) && "opacity-50")}>{item.label}</span>
+      {locked(item) && <LockClosedIcon className="h-4 w-4 shrink-0 text-ink-3" aria-label="Fermé : compte sans edu-ID" />}
     </NavLink>
   );
 
@@ -141,7 +146,10 @@ export function Shell({ children }: { children: ReactNode }) {
                 const active = isUnder(location.pathname, item);
                 return (
                   <NavLink key={item.to} to={item.to} className={cx("flex flex-col items-center justify-center gap-0.5 h-14 text-[11px] font-medium", active ? "text-accent" : "text-ink-3")}>
-                    <item.icon className="h-6 w-6" />
+                    <span className="relative">
+                      <item.icon className={cx("h-6 w-6", locked(item) && "opacity-40")} />
+                      {locked(item) && <LockClosedIcon className="absolute -right-2 -top-1 h-3.5 w-3.5 text-ink-2" aria-label="Fermé : compte sans edu-ID" />}
+                    </span>
                     {item.label}
                   </NavLink>
                 );
@@ -178,6 +186,29 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </Drawer>
+    </div>
+  );
+}
+
+/** Shown in place of a page that comes from GAPS or Cyberlearn, to an account that chose to go without edu-ID. */
+export function NeedsCampus({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  if (me?.access !== "local") return <>{children}</>;
+  return (
+    <div className="min-h-[60vh] grid place-items-center">
+      <div className="max-w-md text-center">
+        <span className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-surface-2 text-ink-2">
+          <LockClosedIcon className="h-7 w-7" />
+        </span>
+        <h1 className="text-lg font-semibold tracking-tight">Page fermée : compte sans edu-ID</h1>
+        <p className="mt-2 text-sm text-ink-2">
+          Le calendrier, l'horaire, les notes, les absences, le plan d'études et les échéances viennent de GAPS et de Cyberlearn. Vous avez choisi de ne pas confier votre compte edu-ID à ce serveur : il ne peut donc pas les lire.
+        </p>
+        <p className="mt-2 text-sm text-ink-2">Les cours, les cartes, les quiz, la bibliothèque, les corrections et le profil restent ouverts.</p>
+        <NavLink to="/account" className="mt-5 inline-flex h-9 items-center rounded-lg border border-line-strong px-3.5 text-sm font-medium hover:bg-surface-2">
+          Changer de type d'accès
+        </NavLink>
+      </div>
     </div>
   );
 }

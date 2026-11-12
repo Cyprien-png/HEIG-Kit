@@ -1,12 +1,14 @@
-import { ChevronRightIcon } from "@heroicons/react/24/outline";
+import { ChevronRightIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
 import { ETUDES, type NavItem, REVISION } from "../components/Shell";
 import { PageHeader } from "../components/ui";
 import { useApi } from "../lib/api";
+import { useHasCampus } from "../lib/auth";
 import type { Correction, Deck, MockExam, StudyStats } from "../lib/types";
 
 /** A list of places to go, one row each, with a count when something waits there. */
 function Hub({ title, items, counts = {} }: { title: string; items: NavItem[]; counts?: Record<string, number | undefined> }) {
+  const campus = useHasCampus();
   return (
     <div className="max-w-2xl">
       <PageHeader title={title} />
@@ -22,7 +24,7 @@ function Hub({ title, items, counts = {} }: { title: string; items: NavItem[]; c
                 {item.hint && <span className="block text-xs text-ink-3 truncate">{item.hint}</span>}
               </span>
               {counts[item.to] ? <span className="shrink-0 rounded-full bg-accent-soft text-accent text-xs font-semibold tabular-nums px-2 py-0.5">{counts[item.to]}</span> : null}
-              <ChevronRightIcon className="h-4 w-4 text-ink-3 shrink-0" />
+              {item.campus && !campus ? <LockClosedIcon className="h-4 w-4 text-ink-3 shrink-0" aria-label="Fermé : compte sans edu-ID" /> : <ChevronRightIcon className="h-4 w-4 text-ink-3 shrink-0" />}
             </Link>
           </li>
         ))}

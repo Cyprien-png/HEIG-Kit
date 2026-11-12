@@ -12,6 +12,7 @@ const STATE: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neut
   ready: { label: "Prêt", tone: "ok" },
   terms: { label: "Conditions à accepter", tone: "warn" },
   password: { label: "Mot de passe à choisir", tone: "warn" },
+  access: { label: "Type d'accès à choisir", tone: "warn" },
   campus: { label: "edu-ID à connecter", tone: "warn" },
   expired: { label: "edu-ID à reconnecter", tone: "warn" },
   disabled: { label: "Désactivé", tone: "bad" },

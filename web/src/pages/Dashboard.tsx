@@ -1,5 +1,5 @@
-import { useSession } from "../lib/auth";
-import { ArrowRightIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { useHasCampus, useSession } from "../lib/auth";
+import { LockClosedIcon, ArrowRightIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { CourseChip } from "../components/CourseChip";
@@ -57,7 +57,8 @@ export function gradeAxes(courses: string[], profile: ProfileSummary | undefined
 
 export function Dashboard() {
   const from = today();
-  const events = useApi<{ events: CalendarEvent[] }>(`/api/calendar?from=${from}&to=${addDays(from, 8)}&visible=true`, [], { refreshMs: 120_000 });
+  const campus = useHasCampus();
+  const events = useApi<{ events: CalendarEvent[] }>(campus ? `/api/calendar?from=${from}&to=${addDays(from, 8)}&visible=true` : null, [], { refreshMs: 120_000 });
   const decks = useApi<{ decks: Deck[]; stats: StudyStats }>("/api/decks");
   const corrections = useApi<{ corrections: Correction[] }>("/api/corrections");
   const { me } = useSession();
@@ -65,7 +66,7 @@ export function Dashboard() {
   // The state of the server is its administrators' business; everyone else sees their own edu-ID connection in the shell.
   const status = useApi<StatusReport>(admin ? "/api/status" : null, [], { refreshMs: 60_000 });
   const profile = useApi<ProfileSummary>("/api/profile");
-  const plan = useApi<Snapshot<PlanUnit[]>>("/api/campus/plan");
+  const plan = useApi<Snapshot<PlanUnit[]>>(campus ? "/api/campus/plan" : null);
 
   const all = events.data?.events ?? [];
   const todayEvents = all.filter((e) => isoDay(e.startsAt) === from);
@@ -97,12 +98,16 @@ export function Dashboard() {
 
       <div className="grid grid-cols-4 gap-2 md:gap-3">
         <Stat compact label="À réviser" value={decks.data?.stats.due ?? "–"} tone={decks.data && decks.data.stats.due > 0 ? "accent" : "neutral"} to="/study" />
-        <Stat compact label="Rendus" value={deadlines.length} tone={deadlines.length > 0 ? "warn" : "neutral"} to="/calendar" />
+        {campus ? (
+          <Stat compact label="Rendus" value={deadlines.length} tone={deadlines.length > 0 ? "warn" : "neutral"} to="/calendar" />
+        ) : (
+          <Stat compact label="Rendus" value={<LockClosedIcon className="mx-auto h-5 w-5 text-ink-3" aria-label="Fermé : compte sans edu-ID" />} to="/calendar" />
+        )}
         <Stat compact label="Corrections" value={open.length} to="/corrections" />
         {admin ? (
           <Stat compact label="Serveur" value={status.loading ? "…" : problems === 0 ? "OK" : problems} tone={problems === 0 ? "ok" : "bad"} to="/status" />
         ) : (
-          <Stat compact label="edu-ID" value={me?.campus.state === "ok" ? "OK" : "!"} tone={me?.campus.state === "ok" ? "ok" : "warn"} to="/account" />
+          <Stat compact label="edu-ID" value={!campus ? "Sans" : me?.campus.state === "ok" ? "OK" : "!"} tone={!campus ? "neutral" : me?.campus.state === "ok" ? "ok" : "warn"} to="/account" />
         )}
       </div>
 
@@ -121,13 +126,19 @@ export function Dashboard() {
           )}
         </Card>
 
-        <Card title="Aujourd'hui" className="lg:col-span-3" actions={<Link to="/calendar" className="text-xs text-accent inline-flex items-center gap-1">Calendrier <ArrowRightIcon className="h-3 w-3" /></Link>} padded={false}>
-          {events.loading ? <Loading /> : events.error ? <div className="p-4"><ErrorBox error={events.error} retry={events.reload} /></div> : todayEvents.length === 0 ? <Empty title="Rien aujourd'hui" hint="Pas de cours ni de rendu." /> : (
-            <ul className="divide-y divide-line px-4">
-              {todayEvents.map((e) => <EventRow key={e.key} e={e} />)}
-            </ul>
-          )}
-        </Card>
+        {campus ? (
+          <Card title="Aujourd'hui" className="lg:col-span-3" actions={<Link to="/calendar" className="text-xs text-accent inline-flex items-center gap-1">Calendrier <ArrowRightIcon className="h-3 w-3" /></Link>} padded={false}>
+            {events.loading ? <Loading /> : events.error ? <div className="p-4"><ErrorBox error={events.error} retry={events.reload} /></div> : todayEvents.length === 0 ? <Empty title="Rien aujourd'hui" hint="Pas de cours ni de rendu." /> : (
+              <ul className="divide-y divide-line px-4">
+                {todayEvents.map((e) => <EventRow key={e.key} e={e} />)}
+              </ul>
+            )}
+          </Card>
+        ) : (
+          <Card title="Aujourd'hui" className="lg:col-span-3">
+            <Empty title="Calendrier fermé" hint="Ce compte fonctionne sans edu-ID : pas d'horaire ni d'échéances ici." action={<Link to="/account"><Button size="sm">Type d'accès</Button></Link>} />
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { CourseChip } from "../components/CourseChip";
 import { type FilterSpec, FilterBar, useFilterState, useFiltered } from "../components/ListFilters";
 import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, PageHeader } from "../components/ui";
 import { api, useApi } from "../lib/api";
+import { useHasCampus } from "../lib/auth";
 import { prettyCourseName } from "../lib/courses";
 import type { CyberlearnCourse, KbCourse, SearchResult, Snapshot } from "../lib/types";
 
@@ -76,7 +77,8 @@ const SPEC: FilterSpec<KbCourse> = {
 
 export function Courses() {
   const kb = useApi<{ courses: KbCourse[] }>("/api/kb/courses");
-  const cyberlearn = useApi<Snapshot<CyberlearnCourse[]>>("/api/campus/courses");
+  const campus = useHasCampus();
+  const cyberlearn = useApi<Snapshot<CyberlearnCourse[]>>(campus ? "/api/campus/courses" : null);
   const [params] = useSearchParams();
 
   const indexed = (kb.data?.courses ?? []).filter((c) => c.course);
