@@ -59,6 +59,7 @@ export const ETUDES: NavItem[] = [
 ];
 
 /** Routes shown without the phone's header and bottom bar: a card fills the screen and has its own way out. */
+const FILLS = /^\/calendar(\/|$)/;
 const IMMERSIVE = /^\/(study|quiz\/play|copies\/[^/]+)(\/|$)/;
 
 const isUnder = (pathname: string, item: NavItem) => (item.to === "/" ? pathname === "/" : [item.to, ...(item.under ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`)));
@@ -119,7 +120,9 @@ export function Shell({ children }: { children: ReactNode }) {
           {immersive ? (
             children
           ) : (
-            <div className="h-full max-w-[1500px] mx-auto">
+            // The calendar fills the height exactly; every other page grows, and the padding of <main> then follows its
+            // last card instead of being swallowed above it.
+            <div className={cx(FILLS.test(location.pathname) ? "h-full" : "min-h-full", "max-w-[1500px] mx-auto")}>
               {reconnect && (
                 <NavLink to="/account" className="mb-4 rounded-xl border border-warn/40 bg-warn-soft text-warn px-4 py-3 text-sm flex items-center gap-2">
                   <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
