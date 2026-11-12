@@ -230,6 +230,11 @@ LaTeX between `$…$` and `$$…$$` (KaTeX), ```` ```mermaid ```` diagrams and c
 `currentColor` both show. Everything is sanitized (no scripts, styles, frames or `foreignObject`). The MCP tool
 descriptions and the skills tell the AI to redraw a student's sketches and graphs this way in corrections.
 
+## Notifications
+
+Réglages → Notifications: on or off for the device, then one switch per kind (document or video ready, correction
+done, courses updated). See [notifications.md](notifications.md), also for what an iPhone needs.
+
 ## Status
 
 `/api/status` (administrators only; `POST /api/status/ingest` starts the indexation of the administrator's courses; `POST /api/me/sync` lets anyone refresh their own GAPS and Cyberlearn data, and
