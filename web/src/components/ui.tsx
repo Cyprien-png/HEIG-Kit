@@ -137,9 +137,16 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return <textarea className={cx("w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent", className)} {...props} />;
 }
 
+const CHEVRON = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="#8a857d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5"/></svg>')}")`;
+
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cx("h-9 rounded-lg border border-line bg-surface px-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40", className)} {...props}>
+    <select
+      className={cx("h-9 appearance-none rounded-lg border border-line bg-surface bg-no-repeat pl-3 pr-9 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40", className)}
+      // Its own chevron, with room on its right: the browser's one sticks to the edge.
+      {...props}
+      style={{ backgroundImage: CHEVRON, backgroundPosition: "right 0.7rem center", backgroundSize: "0.8rem", ...props.style }}
+    >
       {children}
     </select>
   );
