@@ -20,8 +20,10 @@ import {
   LockClosedIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { type ComponentType, type ReactNode, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { onNotificationOpen } from "../lib/push";
+import { NotificationSettingsPanel } from "./Notifications";
 import { useSession, useTheme } from "../lib/auth";
 import { Drawer, Segmented, cx } from "./ui";
 
@@ -74,6 +76,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useTheme();
   const [settings, setSettings] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  // A notification tapped while the application is open shows its page here.
+  useEffect(() => onNotificationOpen((url) => navigate(url)), [navigate]);
   const immersive = IMMERSIVE.test(location.pathname);
   const reconnect = me?.access === "campus" && me.campus.state === "expired" && location.pathname !== "/account";
   const locked = (item: NavItem) => Boolean(item.campus) && me?.access === "local";
@@ -165,6 +170,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="text-xs font-medium text-ink-2 mb-1.5">Thème</div>
             <Segmented value={theme} onChange={setTheme} options={[{ value: "system", label: "Système" }, { value: "light", label: "Clair" }, { value: "dark", label: "Sombre" }]} />
           </div>
+          <NotificationSettingsPanel />
           <NavLink to="/account" onClick={() => setSettings(false)} className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2.5 h-10 text-sm font-medium", isActive ? "bg-accent-soft text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")}>
             <UserCircleIcon className="h-5 w-5" /> Mon compte
           </NavLink>

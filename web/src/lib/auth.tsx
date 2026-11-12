@@ -1,3 +1,4 @@
+import { forgetPush, refreshPush } from "./push";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, setSetupRequiredHandler, setUnauthorizedHandler } from "./api";
 import type { Account } from "./types";
@@ -38,7 +39,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMe(account);
     return account;
   };
+  // An account that turned notifications on here keeps its subscription known to the server.
+  const usable = Boolean(me && !me.setup);
+  useEffect(() => {
+    if (usable) void refreshPush().catch(() => undefined);
+  }, [usable, me?.id]);
+
   const logout = async () => {
+    await forgetPush().catch(() => undefined);
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     setMe(undefined);
   };
