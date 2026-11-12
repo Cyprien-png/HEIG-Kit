@@ -128,6 +128,9 @@ test("accounts: the first one takes over the installation, then creation, login,
   const reset = await resetPassword(db, second.user.id, FAST);
   assert.equal(reset.user.mustChangePassword, true);
   assert.equal(reset.user.hasCampusCredentials, false);
+  // Whoever holds the new password still has to pass edu-ID: the account does not open with the password alone.
+  assert.equal(reset.user.campusState, "missing");
+  assert.equal(setupStep({ ...reset.user, mustChangePassword: false }), "campus");
   assert.ok(await authenticate(db, "noe.second@heig-vd.ch", reset.password));
   assert.equal(await authenticate(db, "noe.second@heig-vd.ch", "encore un autre secret"), undefined);
 

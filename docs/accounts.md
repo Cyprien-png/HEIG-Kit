@@ -95,6 +95,8 @@ API and MCP alike; an application waiting for an authorization (Claude, the CLI)
   key is the server's and not each person's, so that syncs keep running while nobody is connected. Files written
   before are encrypted the first time they are read. Changing `HEIG_JWT_SECRET` makes them unreadable: every account
   then reconnects edu-ID once.
+- **Whoever receives a reset password does not get the account with it**: a reset erases the edu-ID session and the
+  Cyberlearn token, and the account stays closed until an edu-ID login succeeds (edu-ID password and two-step code).
 - While nobody uses an account, the server holds no way to its credentials: background syncs then stop with the edu-ID
   session and resume at the next request. Changing the password re-seals the credentials and revokes the tokens; a
   `reset` by the administrator drops them.

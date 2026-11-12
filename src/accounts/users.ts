@@ -223,12 +223,16 @@ export async function resetPassword(db: Db, id: number, kdf?: Kdf): Promise<{ us
   const password = generatePassword();
   const { hash } = await hashPassword(password, kdf);
   const { rows } = await db.system.query(
-    `UPDATE users SET password_hash = $2, must_change_password = true, password_changed_at = NULL, token_version = token_version + 1, campus_sealed = NULL
+    `UPDATE users SET password_hash = $2, must_change_password = true, password_changed_at = NULL, token_version = token_version + 1, campus_sealed = NULL,
+       campus_state = 'missing'
      WHERE id = $1 AND password_hash IS NOT NULL RETURNING ${COLUMNS}`,
     [id, hash],
   );
   if (!rows[0]) throw new Error(`No account ${id}`);
   await db.system.query("DELETE FROM oauth_refresh_tokens WHERE user_id = $1", [id]);
+  // Whoever receives the new password does not get the school account with it: the edu-ID session and the Cyberlearn
+  // token are erased, and the account stays closed until an edu-ID login succeeds (password and two-step code).
+  for (const file of ["session.json", "mfa-pending.json", "cyberlearn-token.json", "schedule.json"]) rmSync(path.join(userCacheDir(id), file), { force: true });
   return { user: toUser(rows[0]), password };
 }
 
