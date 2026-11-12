@@ -12,6 +12,7 @@ quizzes are shared; everything personal is closed: [accounts.md](accounts.md).
 | Someone calls the server | Every request needs a signed token of an account, obtained through OAuth 2.1 (authorization code with PKCE) after a login. Accounts only exist if you created them. Login attempts are limited (5 failures per client, 20 overall, per 15 minutes) |
 | An account (or its agent) goes after another one's data | The account is the one named in the token; no request can name another. Row level security in the database filters every personal table |
 | A token leaks | `npm run users -- reset <account>` (or a password change) revokes the tokens of that account; `HEIG_JWT_VERSION` revokes everyone's |
+| The server's cache folder or its backup leaks | The edu-ID sessions and Cyberlearn tokens kept there are encrypted with a key derived from `HEIG_JWT_SECRET`, which is not in that folder |
 | The database or a backup leaks, even with `.env` | Passwords are Argon2id verifiers; edu-ID credentials are sealed with a key derived from each password, which only travels in that account's tokens, encrypted for the server ([accounts.md](accounts.md)) |
 | Traffic is read | Node only listens on `127.0.0.1`; the public address must be HTTPS, or the server refuses to start |
 | Code written by the AI (a manim scene, HTML in a document) is malicious, for instance after reading a trapped course page | It runs in the `render` container: no network, no `.env`, no data, read-only system, no capabilities, memory and process limits, and a fresh container per job |

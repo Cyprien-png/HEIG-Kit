@@ -82,6 +82,13 @@ and MCP alike; an application waiting for an authorization (Claude, the CLI) is 
   Automatic logins are tried at most every 30 minutes, and not again for 12 hours once a code is asked.
 - **Logging out ends every session of the account**: this browser, the others, the agents and the CLI all have to log
   in again, so a token copied somewhere dies with the rest.
+- **What the server keeps on its disk to act for an account is encrypted**: the cookies of the edu-ID session, the
+  Cyberlearn token (which works like a password and does not expire), a login waiting for its code and the cached
+  timetable, in `.cache/users/<id>/`, with a key derived from `HEIG_JWT_SECRET` (AES-256-GCM, `src/secretfile.ts`). A
+  copy or a backup of `.cache` gives nothing without `.env`; whoever has both, or the running server, reads them. This
+  key is the server's and not each person's, so that syncs keep running while nobody is connected. Files written
+  before are encrypted the first time they are read. Changing `HEIG_JWT_SECRET` makes them unreadable: every account
+  then reconnects edu-ID once.
 - While nobody uses an account, the server holds no way to its credentials: background syncs then stop with the edu-ID
   session and resume at the next request. Changing the password re-seals the credentials and revokes the tokens; a
   `reset` by the administrator drops them.
