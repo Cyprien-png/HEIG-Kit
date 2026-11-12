@@ -10,6 +10,11 @@ exams live in the `exams` output folder (`npm --prefix <root> run -s exams -- wh
 `<branch>/[<sub-branch>/]<year>/<exam>/`, and are synced with the server (`exams -- push|pull`). The web app shows them
 under **Révision › Anciens TE**, branch by branch, then year by year.
 
+On a shared server (`HEIG_REMOTE_URL` set, or a remote MCP server) everyone reads the past exams and is corrected on
+them, but only an administrator files, transcribes, changes or deletes them (`exams -- push`, `save_past_exam_text`):
+for anyone else the server refuses, and that refusal is final. Tell the user to ask an administrator; correcting their
+own attempt stays theirs to do.
+
 Inside an exam folder: `original.pdf` (the scan, **filled by a former student**: name, answers, marks), optionally
 `original-vierge.pdf` (unfilled) and `original-corrige.pdf` (the teacher's solutions), then what the agent produces:
 `enonce.md` + `enonce.pdf` (the statement alone), `corrige.md` + `corrige.pdf`, and `pages/p01.png`… (page images).

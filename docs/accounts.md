@@ -21,6 +21,9 @@ server is not open: nobody creates an account over the network.
   refused (`409`, with the list of similar items). The call is accepted only with `checked` (the references of the
   items that were read) and `new_because` (what is needed that each of them lacks). The MCP instructions and the skills
   order agents to list what exists first; the web app shows the similar decks and asks to confirm.
+- **The past written tests and the GitHub repositories of courses are the administrators' alone**: everyone reads
+  the tests and searches the indexed repositories, only an administrator adds, changes or deletes a test file, and
+  adds, removes or refreshes a repository (they are read with the server's own git token). Everyone else gets `403`.
 - The lists (`list_library`, `list_decks`, `list_quizzes`, and the pages of the web app) have a "created by me" filter.
 
 ## How accounts are kept apart
@@ -77,6 +80,8 @@ and MCP alike; an application waiting for an authorization (Claude, the CLI) is 
   server **logs in again by itself** at the account's next request, without asking anything. Only when edu-ID wants a
   two-step code does the account show "edu-ID à reconnecter", for the code to be typed on the page **Mon compte**.
   Automatic logins are tried at most every 30 minutes, and not again for 12 hours once a code is asked.
+- **Logging out ends every session of the account**: this browser, the others, the agents and the CLI all have to log
+  in again, so a token copied somewhere dies with the rest.
 - While nobody uses an account, the server holds no way to its credentials: background syncs then stop with the edu-ID
   session and resume at the next request. Changing the password re-seals the credentials and revokes the tokens; a
   `reset` by the administrator drops them.
@@ -88,7 +93,8 @@ and MCP alike; an application waiting for an authorization (Claude, the CLI) is 
 
 `student`, or `admin`, who also sees the **status page** of the server (and starts the indexation of the courses there), the **journal** (the accounts, and for each
 one the latest requests: time, action, route or tool, answer; never their content; kept 30 days), may change or delete
-any shared item, is the only one who deletes them, and runs the housekeeping. Roles are set with `npm run users`.
+any shared item, is the only one who deletes them, manages the past written tests and the course repositories, and
+runs the housekeeping. Roles are set with `npm run users`.
 
 ## Housekeeping
 
