@@ -121,7 +121,7 @@ export function CampusForm({ me, onDone }: { me: AccountT; onDone: (me: AccountT
           </Field>
         </>
       )}
-      {step === "credentials" && !replace && <p className="text-sm text-ink-2">Vos identifiants edu-ID sont enregistrés (scellés avec votre mot de passe HEIG-Kit). Le serveur va se reconnecter avec eux.</p>}
+      {step === "credentials" && !replace && <p className="text-sm text-ink-2">Vos identifiants edu-ID sont enregistrés (scellés avec votre mot de passe HEIG-Kit). Le serveur se reconnecte avec eux de lui-même ; ce bouton le fait tout de suite.</p>}
       {step === "code" && (
         <Field label="Code à 6 chiffres" hint="edu-ID demande le code actuel de votre application d'authentification.">
           <Input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,8}" required autoFocus className="text-center text-lg tracking-[0.3em] tabular-nums" />
@@ -183,7 +183,7 @@ export function Setup({ me }: { me: AccountT }) {
         </Step>
         <Step n={2} title="Connecter votre compte edu-ID" state={me.setup === "campus" ? "now" : me.setup === "password" ? "later" : "done"}>
           <p className="text-sm text-ink-2 mb-3">
-            Le serveur lit vos horaires et vos notes sur GAPS, vos cours sur Cyberlearn. Vos identifiants sont vérifiés tout de suite, puis scellés avec votre mot de passe HEIG-Kit : personne d'autre ne peut les lire, pas même l'administrateur.
+            Le serveur lit vos horaires et vos notes sur GAPS, vos cours sur Cyberlearn. Vos identifiants sont vérifiés tout de suite, puis scellés avec votre mot de passe HEIG-Kit : ni les autres comptes ni une copie de la base ne permettent de les lire, et le serveur ne les ouvre que pendant que vous l'utilisez.
           </p>
           <CampusForm me={me} onDone={done} />
         </Step>

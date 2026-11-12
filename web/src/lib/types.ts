@@ -476,7 +476,7 @@ export interface StatusReport {
   login: { sessionSavedAt?: string; cyberlearnToken: boolean; needsCode: boolean; lastGapsOk?: string; lastCyberlearnOk?: string };
   syncs: SyncRun[];
   snapshots: Record<string, { fetchedAt: string; checkedAt: string }>;
-  ingestion: { documents: number; chunks: number; courses: number; lastIndexedAt?: string; pending?: { checkedAt: string; added: number; changed: number; removed: number; indexed: number; courses: string[]; examples: string[] } };
+  ingestion: { documents: number; chunks: number; courses: number; lastIndexedAt?: string; pending?: { checkedAt: string; added: number; changed: number; removed: number; indexed: number; courses: string[]; examples: string[] }; running: boolean; progress?: string; last?: SyncRun };
   requests: { total: number; errors: number; unauthorized: number; lastUnauthorizedAt?: string; lastMcpAt?: string };
   syncing: boolean;
 }
