@@ -173,10 +173,11 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
         const existing = index >= 0 && ops[index].t === "text" ? (ops[index] as TextOp) : undefined;
         // On a touch screen the tap arrives before the open field loses the focus: finish that one first, where it is,
         // with its own text. Otherwise its text would be saved at the place of the new one.
+        // A new text is centred on the pointer: its line straddles the place that was pressed.
         let current = ops;
         if (editing) current = finishText(editing, live.current) ?? ops;
         const reopened = existing && current.includes(existing);
-        const session = { id: ++sessions.current, index: reopened ? current.indexOf(existing) : null, op: reopened ? existing : ({ t: "text", c: style.color, s: style.textSize, x: round(p.x), y: round(p.y), v: "" } as TextOp) };
+        const session = { id: ++sessions.current, index: reopened ? current.indexOf(existing) : null, op: reopened ? existing : ({ t: "text", c: style.color, s: style.textSize, x: round(p.x), y: round(p.y - (style.textSize * cssW) / 2 / cssH), v: "" } as TextOp) };
         live.current = session.op.v;
         setEditing(session);
       }
@@ -214,6 +215,7 @@ export const AnnotLayer = memo(function AnnotLayer({ page, cssW, cssH, ops, styl
         onPointerMove={interactive ? move : undefined}
         onPointerUp={interactive ? up : undefined}
         onPointerCancel={interactive ? () => reset() : undefined}
+        data-annot-layer
         className="absolute inset-0 h-full w-full"
         style={{ pointerEvents: interactive ? "auto" : "none", touchAction: "none", cursor: style.tool === "text" ? "text" : style.tool === "move" ? "move" : interactive ? "crosshair" : "default" }}
       />
@@ -235,7 +237,7 @@ function TextEditor({ op, cssW, live, onDone }: { op: TextOp; cssW: number; live
   const ref = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(op.v);
   const size = op.s * cssW;
-  const born = useRef(performance.now());
+  const box = useRef<HTMLDivElement>(null);
   // Reported once: removing the field makes the browser send a last blur, which must not finish the text again while
   // React is taking the field out (« removeChild: not a child of this node »).
   const done = useRef(false);
@@ -251,17 +253,42 @@ function TextEditor({ op, cssW, live, onDone }: { op: TextOp; cssW: number; live
       done.current = true;
     };
   }, []);
+  const text = useRef(value);
+  text.current = value;
+  const finishRef = useRef(finish);
+  finishRef.current = finish;
+  /** Takes the focus back, now and once the browser has finished whatever moved it. */
+  const hold = () => {
+    for (const delay of [0, 60, 250]) {
+      setTimeout(() => {
+        const el = ref.current;
+        if (!done.current && el && document.activeElement !== el && document.hasFocus()) el.focus({ preventScroll: true });
+      }, delay);
+    }
+  };
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     // Without scrolling: the field is where the finger is, the page must not jump under it.
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
+    // The text is left on purpose by pressing somewhere else. On the page itself the layer finishes it (and opens the
+    // next text there); anywhere else, here. A focus lost without that is not the person's doing: it is taken back.
+    const pressed = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target || box.current?.contains(target)) return;
+      // The layer of this very page (the field's sibling), not the one of another page.
+      if (target.closest("[data-annot-layer]") && box.current?.parentElement?.contains(target)) return;
+      finishRef.current(text.current);
+    };
+    document.addEventListener("pointerdown", pressed, true);
+    return () => document.removeEventListener("pointerdown", pressed, true);
   }, []);
   return (
     // A box of its own around the field: what a browser extension (spelling, translation, passwords) adds next to a
     // text field stays inside it, and the whole box leaves at once.
     <div
+      ref={box}
       className="absolute"
       translate="no"
       // The canvas draws the text from the top of its line; the field centres it in a line 1.25 high: same place.
@@ -275,15 +302,13 @@ function TextEditor({ op, cssW, live, onDone }: { op: TextOp; cssW: number; live
           live.current = e.target.value;
           setValue(e.target.value);
         }}
-        onBlur={() => {
+        onBlur={(e) => {
           if (done.current) return;
-          // A tap is followed by simulated mouse events that steal the focus: during the first instants, take it back.
-          if (performance.now() - born.current < 700) {
-            ref.current?.focus({ preventScroll: true });
-            // Again once the browser has finished moving the focus: some ignore a focus asked while they are at it.
-            setTimeout(() => !done.current && ref.current?.focus({ preventScroll: true }), 0);
-            setTimeout(() => !done.current && document.activeElement !== ref.current && ref.current?.focus({ preventScroll: true }), 120);
-          } else finish(value);
+          // The keyboard moved to another control: the text is finished.
+          if (e.relatedTarget instanceof HTMLElement && !box.current?.contains(e.relatedTarget)) return finish(value);
+          // Anything else (a simulated click after a tap, the browser, an extension, a re-render) is not the person
+          // leaving: the field stays open and takes the focus back. Another window or tab: it comes back with it.
+          hold();
         }}
         onKeyDown={(e) => {
           e.stopPropagation();
