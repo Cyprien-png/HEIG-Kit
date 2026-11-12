@@ -199,12 +199,17 @@ test("a new account: its first password, then edu-ID with the two-step code, bef
   assert.equal(JSON.stringify(await (await call("GET", "/api/auth/me")).json()).includes("secret"), false);
   assert.ok(userCacheDir(ada.user.id).startsWith(process.env.HEIG_TEST_CACHE!));
 
-  // Later, when the key is no longer in memory, the account's own password unlocks them for a new login.
-  app.vault.forget(ada.user.id);
+  // Later, when the server has forgotten the key: a token without it needs the account's own password for a new login…
   campus = async () => undefined;
-  assert.equal(await needs(await call("POST", "/api/auth/campus", {}), 409), "account_password");
-  assert.equal(await needs(await call("POST", "/api/auth/campus", { account_password: "pas le bon" }), 409), "account_password");
-  assert.equal((await call("POST", "/api/auth/campus", { account_password: "le choix de ada 2026" })).status, 200);
+  const bare = { ...JSON_HEADERS, ...(await bearer(ada)) };
+  const bareCall = (body: unknown) => fetch(`${origin}/api/auth/campus`, { method: "POST", headers: bare, body: JSON.stringify(body) });
+  app.vault.forget(ada.user.id);
+  assert.equal(await needs(await bareCall({}), 409), "account_password");
+  assert.equal(await needs(await bareCall({ account_password: "pas le bon" }), 409), "account_password");
+  assert.equal((await bareCall({ account_password: "le choix de ada 2026" })).status, 200);
+  // …while the session of the browser carries the key (wrapped for the server alone): nothing to type again.
+  app.vault.forget(ada.user.id);
+  assert.equal((await call("POST", "/api/auth/campus", {})).status, 200);
 
   // Changing the password later asks for the current one.
   assert.equal(await needs(await call("POST", "/api/auth/password", { password: "encore un autre choix" }), 409), "current");

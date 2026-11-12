@@ -51,7 +51,7 @@ test("access tokens name one account; expiry, version, algorithm and purpose are
   const auth = new Auth(config);
   const holder = { id: 7, tokenVersion: 3 };
   const { token } = await auth.issueToken(holder);
-  assert.deepEqual(await auth.verifyHeader(`Bearer ${token}`), { userId: 7, version: 3 });
+  assert.deepEqual(await auth.verifyHeader(`Bearer ${token}`), { userId: 7, version: 3, vaultKey: undefined });
   assert.equal(await auth.verifyHeader(token), undefined);
   assert.equal(await auth.verifyHeader(undefined), undefined);
   assert.equal(await auth.verifyHeader(`Bearer ${token.slice(0, -2)}xx`), undefined);

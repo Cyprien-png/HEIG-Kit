@@ -1,8 +1,8 @@
 /**
  * What the server remembers of an account's secrets, in memory only and for a short while: the key of its sealed
- * edu-ID credentials after a login with its password, and the credentials themselves while a login on edu-ID is going
- * on (the two-step code comes in a second request) or just succeeded (the first sync). Nothing here is written to disk;
- * a restart forgets everything, and the person logs in again.
+ * edu-ID credentials, brought by a login with its password or by any request carrying one of its tokens
+ * (src/server/auth.ts, `wrapVaultKey`), and the credentials themselves while the account is active. Nothing here is
+ * written to disk; a restart forgets everything, and the next request of the account brings its key back.
  */
 import type { CampusCredentials } from "./users.js";
 

@@ -11,7 +11,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { type User, authenticate, getUser, setupStep } from "../accounts/users.js";
 import { json, readBody } from "./api/util.js";
 import type { App } from "./app.js";
-import { openSession, renewCampus, sessionOf } from "./session.js";
+import { issueFor, openSession, renewCampus, sessionOf } from "./session.js";
 
 const CODE_MINUTES = 10;
 /** Access tokens of connectors are short: the refresh token (as long as HEIG_JWT_DAYS) renews them. */
@@ -362,6 +362,10 @@ export class OAuth {
       await this.app.db.system.query("UPDATE oauth_refresh_tokens SET revoked_at = now() WHERE token_hash = $1", [sha256(presented)]);
       scope = row.scope ?? undefined;
       userId = row.user_id === null ? null : Number(row.user_id);
+      // The refresh token carries the key of the account's sealed credentials (wrapped, after the dot): it goes on to
+      // the next tokens. The database only ever holds the hash of the whole token.
+      const carried = userId === null ? undefined : this.app.auth.unwrapVaultKey(userId, presented.split(".")[1]);
+      if (userId !== null && carried) this.app.vault.unlock(userId, carried);
     } else {
       throw new OAuthError("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
     }
@@ -369,8 +373,9 @@ export class OAuth {
     // The tokens are those of the account that logged in, as long as it may use the server.
     const user = userId === null ? undefined : await getUser(this.app.db, userId);
     if (!user || !user.hasPassword || user.disabledAt || setupStep(user)) throw new OAuthError("invalid_grant", "the account of this grant cannot be used: log in again");
-    const { token, expiresAt } = await this.app.auth.issueToken(user, ACCESS_DAYS);
-    const refresh = secret();
+    const { token, expiresAt } = await issueFor(this.app, user, ACCESS_DAYS);
+    const vaultKey = this.app.vault.key(user.id);
+    const refresh = vaultKey ? `${secret()}.${this.app.auth.wrapVaultKey(user.id, vaultKey)}` : secret();
     await this.app.db.system.query("INSERT INTO oauth_refresh_tokens (token_hash, client_id, scope, expires_at, user_id) VALUES ($1, $2, $3, $4, $5)", [sha256(refresh), client.id, scope ?? null, new Date(Date.now() + this.app.config.tokenDays * 86_400_000), user.id]);
     await this.app.db.system.query("UPDATE oauth_clients SET last_used_at = now() WHERE id = $1", [client.id]);
     await this.app.db.system.query("DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'");

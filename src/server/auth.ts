@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { seal, unseal } from "../accounts/password.js";
 import { SignJWT, jwtVerify } from "jose";
 import type { ServerConfig } from "./config.js";
 
@@ -12,6 +13,8 @@ export interface TokenSubject {
   userId: number;
   /** The account's token version when the token was issued: a later version revokes it. */
   version: number;
+  /** The key of the account's sealed edu-ID credentials, when the token carries it (see `wrapVaultKey`). */
+  vaultKey?: Buffer;
 }
 
 export interface Holder {
@@ -33,6 +36,7 @@ export class Auth {
   private readonly fileKey: Uint8Array;
   private readonly captureKey: Uint8Array;
   private readonly formKey: Buffer;
+  private readonly wrapKey: Buffer;
 
   constructor(private readonly config: Pick<ServerConfig, "jwtSecret" | "tokenVersion" | "tokenDays" | "linkMinutes">) {
     const key = (purpose: string) => createHmac("sha256", config.jwtSecret).update(purpose).digest();
@@ -40,12 +44,31 @@ export class Auth {
     this.fileKey = key("file");
     this.captureKey = key("capture");
     this.formKey = key("form");
+    this.wrapKey = key("vault key wrap");
+  }
+
+  /**
+   * The key of an account's sealed edu-ID credentials, encrypted for this server alone, to travel in the account's own
+   * tokens. The server stores neither the key nor its wrapped form: opening the credentials takes the database, the
+   * server's secret and a token the person holds, all three. So a request of the person is enough for the server to
+   * log in to edu-ID again in their name, and nobody can without one.
+   */
+  wrapVaultKey(userId: number, vaultKey: Buffer): string {
+    return seal(this.wrapKey, `${userId}:${vaultKey.toString("base64")}`).toString("base64url");
+  }
+
+  /** The key a wrapped form holds, when it was made by this server for this account. */
+  unwrapVaultKey(userId: number, wrapped: unknown): Buffer | undefined {
+    if (typeof wrapped !== "string" || wrapped.length > 400 || !/^[A-Za-z0-9_-]+$/.test(wrapped)) return undefined;
+    const text = unseal(this.wrapKey, Buffer.from(wrapped, "base64url"));
+    const [owner, key] = text?.split(":") ?? [];
+    return owner === String(userId) && key ? Buffer.from(key, "base64") : undefined;
   }
 
   /** An access token of an account for `days` (default HEIG_JWT_DAYS; OAuth connectors get shorter ones and refresh them). */
-  async issueToken(holder: Holder, days = this.config.tokenDays): Promise<{ token: string; expiresAt: Date }> {
+  async issueToken(holder: Holder, days = this.config.tokenDays, vaultKey?: Buffer): Promise<{ token: string; expiresAt: Date }> {
     const expiresAt = new Date(Date.now() + Math.min(days, this.config.tokenDays) * 86_400_000);
-    const token = await new SignJWT({ ver: this.config.tokenVersion, uv: holder.tokenVersion })
+    const token = await new SignJWT({ ver: this.config.tokenVersion, uv: holder.tokenVersion, ...(vaultKey ? { vk: this.wrapVaultKey(holder.id, vaultKey) } : {}) })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(String(holder.id))
       .setIssuer(ISSUER)
@@ -68,7 +91,7 @@ export class Auth {
       const { payload } = await jwtVerify(token, this.accessKey, { issuer: ISSUER, audience: MCP_AUDIENCE, algorithms: ["HS256"] });
       const userId = accountId(payload.sub);
       if (payload.ver !== this.config.tokenVersion || userId === undefined || typeof payload.uv !== "number") return undefined;
-      return { userId, version: payload.uv };
+      return { userId, version: payload.uv, vaultKey: this.unwrapVaultKey(userId, payload.vk) };
     } catch {
       return undefined;
     }

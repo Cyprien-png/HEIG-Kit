@@ -5,11 +5,11 @@ import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Auth } from "../src/server/auth.js";
-import { createApp } from "../src/server/app.js";
+import { type App, createApp } from "../src/server/app.js";
 import { loadServerConfig } from "../src/server/config.js";
 import { createRemoteServer } from "../src/server/http.js";
 import { pkceMatches, validRedirectUri } from "../src/server/oauth.js";
-import { authenticate, changePassword } from "../src/accounts/users.js";
+import { authenticate, changePassword, getUser, markCampus, saveCampusCredentials } from "../src/accounts/users.js";
 import { FAST, type TestAccount, newAccount, readyAccount } from "./helpers/accounts.js";
 import { testDb } from "./helpers/db.js";
 
@@ -23,6 +23,9 @@ let fresh: TestAccount;
 let auth: Auth;
 let server: Server;
 let origin: string;
+let app: App;
+/** Logins the server made on (a fake) edu-ID. */
+let campusLogins = 0;
 
 before(async () => {
   if (!db) return;
@@ -36,7 +39,8 @@ before(async () => {
   probe.close();
   origin = `http://127.0.0.1:${port}`;
   auth = new Auth(config);
-  server = createRemoteServer(createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, { auth }), async () => new McpServer({ name: "t", version: "1" }));
+  app = createApp({ ...config, publicUrl: new URL(origin) }, db, undefined, { auth, campusLogin: async () => void campusLogins++ });
+  server = createRemoteServer(app, async () => new McpServer({ name: "t", version: "1" }));
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 });
 after(() => server?.close());
@@ -158,4 +162,60 @@ test("the CLI logs in with the authorization code flow on a loopback port", { sk
   });
   assert.ok(saved.refreshToken);
   assert.equal((await new RemoteClient(url, saved.token).get<{ email: string }>("/api/auth/me")).email, lea.email);
+});
+
+test("tokens carry the key of the sealed edu-ID credentials, wrapped for the server alone", { skip: !db && "no local database" }, async () => {
+  const registered = await fetch(`${origin}/oauth/register`, { method: "POST", body: JSON.stringify({ client_name: "CLI", redirect_uris: ["http://127.0.0.1:7777/cb"], token_endpoint_auth_method: "none" }) });
+  const { client_id } = (await registered.json()) as { client_id: string };
+  const verifier = randomBytes(32).toString("base64url");
+  const form = { response_type: "code", client_id, redirect_uri: "http://127.0.0.1:7777/cb", code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256" };
+  const tokenReq = (body: Record<string, string>) => fetch(`${origin}/oauth/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body) });
+  const me = async (token: string) => (await (await fetch(`${origin}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })).json()) as { campus: { state: string; unlocked: boolean } };
+  const claims = (token: string) => JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf-8")) as { vk?: string };
+
+  const zoe = await readyAccount(db!, "zoe.troisieme@heig-vd.ch");
+  // Zoé connected edu-ID: the credentials are sealed with the key of her password.
+  const secret = { email: "noe@edu-id.example", password: "le secret edu-ID de Zoé" };
+  const key = (await authenticate(db!, zoe.email, zoe.password))!.vaultKey;
+  await saveCampusCredentials(db!, zoe.user.id, key, secret);
+
+  const login = await fetch(`${origin}/oauth/authorize`, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...form, email: zoe.email, password: zoe.password }) });
+  const code = new URL(login.headers.get("location")!).searchParams.get("code")!;
+  const first = (await (await tokenReq({ grant_type: "authorization_code", code, client_id, redirect_uri: form.redirect_uri, code_verifier: verifier })).json()) as { access_token: string; refresh_token: string };
+
+  // The key is in the tokens, unreadable without the server's secret, and nowhere in the database.
+  const wrapped = claims(first.access_token).vk!;
+  assert.ok(wrapped && !wrapped.includes(key.toString("base64url")) && !Buffer.from(wrapped, "base64url").includes(key));
+  assert.deepEqual(auth.unwrapVaultKey(zoe.user.id, wrapped), key);
+  assert.equal(auth.unwrapVaultKey(lea.user.id, wrapped), undefined, "a key wrapped for one account opens nothing for another");
+  assert.equal(new Auth(loadServerConfig({ ...ENV, HEIG_JWT_SECRET: "fedcba9876543210".repeat(3) })).unwrapVaultKey(zoe.user.id, wrapped), undefined, "another server's secret");
+  const stored = JSON.stringify((await db!.system.query("SELECT * FROM oauth_refresh_tokens")).rows);
+  assert.ok(!stored.includes(first.refresh_token) && !stored.includes(wrapped));
+
+  // The server forgot everything (a restart): a request with the token is enough to open the credentials again.
+  app.vault.forget(zoe.user.id);
+  assert.equal(app.vault.credentials(zoe.user.id), undefined);
+  assert.equal((await me(first.access_token)).campus.unlocked, true);
+  assert.deepEqual(app.vault.credentials(zoe.user.id), secret);
+  assert.equal(app.vault.credentials(lea.user.id), undefined);
+
+  // A refresh hands the key on to the next tokens.
+  app.vault.forget(zoe.user.id);
+  const second = (await (await tokenReq({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id })).json()) as { access_token: string; refresh_token: string };
+  assert.deepEqual(auth.unwrapVaultKey(zoe.user.id, claims(second.access_token).vk), key);
+  assert.match(second.refresh_token, /\./);
+
+  // The edu-ID session ended while she was away: her next request renews it, without asking her anything.
+  await markCampus(db!, zoe.user.id, "expired");
+  app.vault.forget(zoe.user.id);
+  const before = campusLogins;
+  await me(second.access_token);
+  for (let i = 0; i < 50 && (await getUser(db!, zoe.user.id))!.campusState !== "ok"; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal((await getUser(db!, zoe.user.id))!.campusState, "ok");
+  assert.ok(campusLogins > before);
+
+  // A token without the key (issued before the account had one at hand) still works, and opens nothing.
+  app.vault.forget(zoe.user.id);
+  const bare = (await auth.issueToken((await getUser(db!, zoe.user.id))!)).token;
+  assert.equal((await me(bare)).campus.unlocked, false);
 });

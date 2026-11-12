@@ -11,7 +11,7 @@ import { AccessDenied, type Identity, runAs } from "../identity.js";
 import type { App } from "./app.js";
 import { resolveGenerated } from "./files.js";
 import { OAuth, challengeHeader } from "./oauth.js";
-import { SESSION_COOKIE, accountOf, describeAccount, renewCampus, sessionCookie, sessionOf } from "./session.js";
+import { SESSION_COOKIE, accountOf, describeAccount, issueFor, renewCampus, sessionCookie, sessionOf } from "./session.js";
 
 const MAX_MCP_BYTES = 32 * 1024 ** 2;
 
@@ -43,7 +43,7 @@ async function login(req: IncomingMessage, res: ServerResponse, app: App, client
   const { user, vaultKey } = found;
   app.vault.unlock(user.id, vaultKey);
   renewCampus(app, user);
-  const { token, expiresAt } = await app.auth.issueToken(user);
+  const { token, expiresAt } = await issueFor(app, user);
   json(res, 200, { ...describeAccount(app, user), expires_at: expiresAt.toISOString() }, { "Set-Cookie": sessionCookie(app, token, expiresAt) });
   return user.id;
 }

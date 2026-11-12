@@ -1,7 +1,7 @@
 import { ConnectError, type ConnectProblem } from "../../accounts/connect.js";
 import { authenticate, changePassword, getUser } from "../../accounts/users.js";
 import type { App } from "../app.js";
-import { clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
+import { allowRenewal, clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
 import type { Principal, Router } from "./router.js";
 import { HttpError, json, readJson, rethrowRefusal, stringField } from "./util.js";
 
@@ -106,6 +106,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
         throw new HttpError(409, result.invalid ? "edu-ID a refusé ce code : saisissez le code actuel de votre application." : "edu-ID demande le code à 6 chiffres de votre application d'authentification.", {}, { needs: "code" });
       }
       const connected = (await getUser(app.db, user.id))!;
+      allowRenewal(user.id);
       syncAccount(app, connected);
       return describeAccount(app, connected);
     },
