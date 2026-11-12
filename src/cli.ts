@@ -1,9 +1,8 @@
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { MfaRequiredError } from "./auth/eduid.js";
+import { runCompose } from "./compose.js";
 import { renderDeadlines } from "./deadlines.js";
-import { ROOT } from "./paths.js";
 import { migrate, openDb } from "./rag/db.js";
 import { ensureEmbeddingModel } from "./rag/embed.js";
 import { isDoclingAvailable } from "./rag/extract.js";
@@ -245,7 +244,7 @@ async function runIngest(
       }
       console.log(`\n${summaries.join("\n")}`);
     } finally {
-      if (startedDocling) compose("stop", "docling");
+      if (startedDocling) runCompose("stop", "docling");
       lock.release();
     }
   } finally {
@@ -263,7 +262,7 @@ async function startServices(): Promise<boolean> {
 }
 
 async function startDocling(): Promise<void> {
-  compose("--profile", "ingest", "up", "-d", "docling");
+  runCompose("--profile", "ingest", "up", "-d", "docling");
   for (let i = 0; i < 60 && !(await isDoclingAvailable()); i++) await new Promise((r) => setTimeout(r, 5000));
   if (!(await isDoclingAvailable())) throw new Error("The document extraction service did not start (docker compose -f rag/compose.yml logs docling)");
 }
@@ -271,10 +270,6 @@ async function startDocling(): Promise<void> {
 /** Comma-separated list from .env, e.g. RAG_EXCLUDE_COURSES=PHY,49168. */
 function listSetting(name: string): string[] {
   return (process.env[name] ?? "").split(",").map((v) => v.trim()).filter(Boolean);
-}
-
-function compose(...args: string[]): void {
-  execFileSync("docker", ["compose", "-f", path.join(ROOT, "rag", "compose.yml"), ...args], { stdio: "inherit" });
 }
 
 function summary(name: string, s: IngestStats): string {

@@ -25,7 +25,8 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Embedding model (bge-m3, multilingual), pulled automatically on first use.
+  # Embedding model (bge-m3, multilingual), pulled automatically on first use. On the processor here; rag/compose.gpu.yml
+  # gives it the NVIDIA GPU when the machine has one (src/compose.ts).
   embedder:
     image: ollama/ollama:latest
     ports:

@@ -26,6 +26,16 @@ npm run rag:start      # database, embedding model and MCP server (Docker); crea
 npm run rag:stop       # stops every service; indexed data is kept
 ```
 
+### NVIDIA GPU
+
+The embedding model runs on the processor everywhere. When the computer has an NVIDIA GPU that Docker can use
+(`nvidia-smi` finds it, and Docker has the `nvidia` runtime: NVIDIA Container Toolkit on Linux, Docker Desktop with WSL2
+on Windows), the setup and `npm run rag:start` add `rag/compose.gpu.yml`, which gives the GPU to the embedder and makes
+indexing and searches faster. `HEIG_GPU` in `.env` chooses: `auto` (default), `nvidia` (always the GPU) or `cpu` (never).
+
+Start the services with these commands: a `docker compose -f rag/compose.yml up` typed by hand leaves out
+`rag/compose.gpu.yml` and recreates the embedder on the processor.
+
 ## 2. Index your documents
 
 ```sh

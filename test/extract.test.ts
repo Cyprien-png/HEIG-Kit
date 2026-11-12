@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type DoclingDocument, PAGE_BREAK, enrichMarkdown, formulaText, restorePages } from "../src/rag/extract.js";
+import { type DoclingDocument, PAGE_BREAK, enrichMarkdown, formulaText, joinAccents, restorePages } from "../src/rag/extract.js";
 
 const PNG = Buffer.from("89504e470d0a1a0a", "hex");
 
@@ -60,6 +60,63 @@ test("pages without text are put back, so that page numbers match the document",
     markdown.split(PAGE_BREAK).map((page) => page.trim()),
     ["Couverture\n\n<!-- image -->", "", "", "Chapitre 1", ""],
   );
+});
+
+test("detached accents of LaTeX PDFs are joined to the letter that follows them", () => {
+  // Acute, grave and circumflex accents as found in the ANA1 exercise sheets.
+  assert.equal(joinAccents("Analyse : S´erie 1. D´eterminer la limite"), "Analyse : Série 1. Déterminer la limite");
+  assert.equal(joinAccents("param`etre, parall`ele, tr`es, o`u"), "paramètre, parallèle, très, où");
+  assert.equal(joinAccents("polynˆomes, cˆot´es, fenˆetre"), "polynômes, côtés, fenêtre");
+  // The grave accent and the circumflex may be separated from their letter by a space.
+  assert.equal(joinAccents("la limite ` a gauche, ` a l'aide de, ˆ o"), "la limite à gauche, à l'aide de, ô");
+  // Capitals, the dieresis and the cedilla, and the dotless i that LaTeX puts under an accent.
+  assert.equal(joinAccents("`A gauche, ´Etude, na¨ıve, maˆıtre, ¸ca"), "À gauche, Étude, naïve, maître, ça");
+  // Several on one line and in one word, at the start and the end of words.
+  assert.equal(joinAccents("´el´ev´e d´ej`a, tr`es t´el´ephon´e"), "élévé déjà, très téléphoné");
+  // Next to inline code, which is left as it is.
+  assert.equal(joinAccents("la variable `x` est d´ej`a d´efinie"), "la variable `x` est déjà définie");
+});
+
+test("text that is not a detached French accent is left as it is", () => {
+  const unchanged = [
+    // Already well extracted, as the lecture notes of ANA1 and the documents of MAD.
+    "Série déjà correcte, à gauche, côté, naïve, ça, Étude, À",
+    // Not a letter of French: the only two detached accents of MAD.
+    "l'application réciproque de´T, est notée",
+    // Primes written as acute accents, followed by a bracket, a digit, an operator, a space or another prime.
+    "f´(x) = 2x, f´´(x) = 2, y´ = 3, u´ et v´, f´ 2",
+    // An acute accent with a space before its letter only happens for primes.
+    "u´ est la dérivée",
+    // Accents on letters that make no French letter.
+    "´b ´y `z ˆk ¨x",
+    // Inline code without spaces, and the text that follows it.
+    "la variable `abc` et `a`, puis `e` ou `f(x)`",
+    // Formulas, as inserted by enrichMarkdown.
+    "[formule : lim x→3± x + 1 x - 3] [formule : f ′ (x) = 2 x]",
+    // Symbols around letters.
+    "x ˆ 2, aˆ2, a`b, ´´",
+  ];
+  for (const text of unchanged) assert.equal(joinAccents(text), text, text);
+});
+
+test("fenced code blocks are left as they are, the text around them is not", () => {
+  const code = "```js\nconst a = `e` + ´e;\n// `a la ligne\n```";
+  assert.equal(joinAccents(`D´ebut\n\n${code}\n\nFin \`a la ligne`), `Début\n\n${code}\n\nFin à la ligne`);
+  assert.equal(joinAccents(`${code}\n${code}`), `${code}\n${code}`);
+});
+
+test("formulas inserted by enrichMarkdown are not touched, the text around them is", () => {
+  const document: DoclingDocument = {
+    body: { children: [{ $ref: "#/texts/0" }, { $ref: "#/texts/1" }] },
+    texts: [
+      { label: "text", text: "S´erie" },
+      // Raw text of a formula with characters that would otherwise look like detached accents.
+      { label: "formula", text: "", orig: "f´ a + `e" },
+    ],
+    pictures: [],
+  };
+  const { markdown } = enrichMarkdown("S´erie 1, ` a r´esoudre\n\n<!-- formula-not-decoded -->", document);
+  assert.equal(markdown, "Série 1, à résoudre\n\n[formule : f´ a + `e]");
 });
 
 test("page breaks are kept when they disagree with the document's pages", () => {
