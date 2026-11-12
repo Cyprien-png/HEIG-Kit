@@ -1,6 +1,7 @@
 import { ConnectError, type ConnectProblem } from "../../accounts/connect.js";
 import { REPOSITORY_URL, TERMS_MARKDOWN, TERMS_VERSION } from "../../accounts/terms.js";
-import { acceptTerms, authenticate, changePassword, getUser, revokeTokens, setupStep } from "../../accounts/users.js";
+import { NO_CAMPUS_MESSAGE } from "../../accounts/access.js";
+import { acceptTerms, authenticate, changePassword, getUser, revokeTokens, setAccess, setupStep } from "../../accounts/users.js";
 import type { App } from "../app.js";
 import { allowRenewal, clearedSessionCookie, describeAccount, openSession, syncAccount } from "../session.js";
 import type { Principal, Router } from "./router.js";
@@ -66,6 +67,33 @@ export function registerAuthRoutes(router: Router, app: App): void {
   );
 
   /**
+   * The person chooses, or changes, how the account works: with edu-ID or without (src/accounts/access.ts). Their own
+   * decision, taken in the web application where its consequences are explained: never the token of an agent.
+   */
+  router.post(
+    "/api/auth/access",
+    async ({ req, principal }) => {
+      const user = accountOf(principal);
+      if (principal.kind !== "cookie") throw new HttpError(403, "The kind of access is chosen by the person themselves, in the web application (page « Mon compte »). Do not retry: tell the user to open it.");
+      const before = setupStep(user);
+      if (before === "terms" || before === "password") throw new HttpError(403, "account setup required", {}, { setup: before });
+      const access = stringField(await readJson(req, 1024), "access", { max: 20 })!;
+      let changed;
+      try {
+        changed = await setAccess(app.db, user.id, access);
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : String(error));
+      }
+      if (changed.access === "local") {
+        app.vault.dropCredentials(user.id);
+        allowRenewal(user.id);
+      }
+      return describeAccount(app, changed);
+    },
+    SETUP,
+  );
+
+  /**
    * Replaces the password. Right after the login that asked for it, the session is enough; otherwise the current
    * password is asked again (409 with `needs: "current"`). Every other session and token of the account stops working.
    */
@@ -115,6 +143,7 @@ export function registerAuthRoutes(router: Router, app: App): void {
       const user = accountOf(principal);
       const before = setupStep(user);
       if (before && before !== "campus") throw new HttpError(403, "account setup required", {}, { setup: before });
+      if (user.access !== "campus") throw new HttpError(403, NO_CAMPUS_MESSAGE, {}, { access: "local" });
       const body = await readJson(req, 4 * 1024);
       const email = stringField(body, "email", { optional: true, max: 200 })?.trim();
       const password = stringField(body, "password", { optional: true, max: 1000 });

@@ -8,6 +8,7 @@ import path from "node:path";
 import type { Identity, Role } from "../identity.js";
 import { CACHE_DIR, DATA_DIR } from "../paths.js";
 import type { Db } from "../rag/db.js";
+import { type Access, ACCESSES } from "./access.js";
 import { TERMS_VERSION } from "./terms.js";
 import { type Kdf, generatePassword, hashPassword, passwordProblem, seal, unseal, verifyPassword } from "./password.js";
 
@@ -37,6 +38,8 @@ export interface User {
   /** The version of the conditions of use the account accepted, and when (src/accounts/terms.ts). */
   termsVersion?: string;
   termsAcceptedAt?: Date;
+  /** With or without edu-ID (src/accounts/access.ts); undefined until the person chose. */
+  access?: Access;
 }
 
 export interface CampusCredentials {
@@ -44,7 +47,7 @@ export interface CampusCredentials {
   password: string;
 }
 
-const COLUMNS = "id, email, first_name, last_name, role, password_hash IS NOT NULL AS has_password, must_change_password, token_version, campus_state, campus_verified_at, campus_sealed IS NOT NULL AS has_campus, disabled_at, created_at, last_login_at, terms_version, terms_accepted_at";
+const COLUMNS = "id, email, first_name, last_name, role, password_hash IS NOT NULL AS has_password, must_change_password, token_version, campus_state, campus_verified_at, campus_sealed IS NOT NULL AS has_campus, disabled_at, created_at, last_login_at, terms_version, terms_accepted_at, access";
 
 function toUser(r: Record<string, unknown>): User {
   const firstName = r.first_name as string;
@@ -67,17 +70,24 @@ function toUser(r: Record<string, unknown>): User {
     lastLoginAt: (r.last_login_at as Date | null) ?? undefined,
     termsVersion: (r.terms_version as string | null) ?? undefined,
     termsAcceptedAt: (r.terms_accepted_at as Date | null) ?? undefined,
+    access: (r.access as Access | null) ?? undefined,
   };
 }
 
-export const identityOf = (user: User): Identity => ({ id: user.id, role: user.role, email: user.email, name: user.name });
+/** What the server keeps on its disk of an account's edu-ID connection (src/campus.ts). */
+const CAMPUS_FILES = ["session.json", "mfa-pending.json", "cyberlearn-token.json", "schedule.json"];
+
+export const identityOf = (user: User): Identity => ({ id: user.id, role: user.role, access: user.access, email: user.email, name: user.name });
 
 /** What an account still has to do before it can use the server, in order. */
-export type SetupStep = "terms" | "password" | "campus";
+export type SetupStep = "terms" | "password" | "access" | "campus";
 export function setupStep(user: User): SetupStep | undefined {
   // The conditions of use first, and again whenever their text changed.
   if (user.termsVersion !== TERMS_VERSION) return "terms";
   if (user.mustChangePassword) return "password";
+  // With or without edu-ID: the person's own choice, made knowingly.
+  if (!user.access) return "access";
+  if (user.access === "local") return undefined;
   // Never validated on GAPS: the credentials are asked until a login succeeds.
   if (!user.campusVerifiedAt || user.campusState === "missing") return "campus";
   return undefined;
@@ -212,6 +222,23 @@ export async function acceptTerms(db: Db, id: number, version: string): Promise<
   return toUser(rows[0]);
 }
 
+/**
+ * The person chose how the account works. Going without edu-ID erases what the server kept of it: the sealed
+ * credentials, the session and the Cyberlearn token, and the copies of GAPS and Cyberlearn (grades, absences,
+ * timetable, study plan, course pages). Choosing edu-ID asks for the connection next (`setupStep`).
+ */
+export async function setAccess(db: Db, id: number, access: string): Promise<User> {
+  if (!ACCESSES.includes(access as Access)) throw new Error(`access must be one of ${ACCESSES.join(", ")}`);
+  const clear = access === "local" ? ", campus_sealed = NULL, campus_state = 'missing', campus_verified_at = NULL" : "";
+  const { rows } = await db.system.query(`UPDATE users SET access = $2${clear} WHERE id = $1 RETURNING ${COLUMNS}`, [id, access]);
+  if (!rows[0]) throw new Error(`No account ${id}`);
+  if (access === "local") {
+    await db.system.query("DELETE FROM snapshots WHERE user_id = $1", [id]);
+    for (const file of CAMPUS_FILES) rmSync(path.join(userCacheDir(id), file), { force: true });
+  }
+  return toUser(rows[0]);
+}
+
 /** Ends every session of the account: its access tokens, cookies and refresh tokens stop working at once. */
 export async function revokeTokens(db: Db, id: number): Promise<void> {
   await db.system.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [id]);
@@ -232,7 +259,7 @@ export async function resetPassword(db: Db, id: number, kdf?: Kdf): Promise<{ us
   await db.system.query("DELETE FROM oauth_refresh_tokens WHERE user_id = $1", [id]);
   // Whoever receives the new password does not get the school account with it: the edu-ID session and the Cyberlearn
   // token are erased, and the account stays closed until an edu-ID login succeeds (password and two-step code).
-  for (const file of ["session.json", "mfa-pending.json", "cyberlearn-token.json", "schedule.json"]) rmSync(path.join(userCacheDir(id), file), { force: true });
+  for (const file of CAMPUS_FILES) rmSync(path.join(userCacheDir(id), file), { force: true });
   return { user: toUser(rows[0]), password };
 }
 

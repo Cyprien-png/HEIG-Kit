@@ -14,6 +14,8 @@ export type Role = "admin" | "student";
 export interface Identity {
   id: number;
   role: Role;
+  /** The access the account chose (src/accounts/access.ts); left out on a single-user installation. */
+  access?: "campus" | "local";
   /** For messages and logs. */
   email?: string;
   name?: string;

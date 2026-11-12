@@ -1,3 +1,4 @@
+import { CAMPUS_TOOLS, NO_CAMPUS_MESSAGE } from "../accounts/access.js";
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 import { type IncomingMessage, createServer } from "node:http";
@@ -15,7 +16,10 @@ export type ToolResult = { content: { type: "text"; text: string }[]; isError?: 
 export function bindTools(server: McpServer, identity: Identity): McpServer {
   const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
   (server as { registerTool: unknown }).registerTool = (name: unknown, config: unknown, handler: (...args: unknown[]) => unknown) =>
-    register(name, config, (...args: unknown[]) => runAs(identity, () => handler(...args)));
+    register(name, config, (...args: unknown[]) =>
+      // An account without edu-ID keeps these tools in its list, and gets a plain refusal from each of them.
+      identity.access === "local" && CAMPUS_TOOLS.has(String(name)) ? { content: [{ type: "text", text: NO_CAMPUS_MESSAGE }], isError: true } : runAs(identity, () => handler(...args)),
+    );
   return server;
 }
 

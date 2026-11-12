@@ -6,6 +6,7 @@ import { createApi } from "./api/index.js";
 import { type Principal, type Router, runRoute } from "./api/router.js";
 import { serveWeb } from "./api/static.js";
 import { CONTENT_TYPES, HttpError, TooLarge, clientOf, json, readBody, readJson, sendFile } from "./api/util.js";
+import { CAMPUS_API, NO_CAMPUS_MESSAGE } from "../accounts/access.js";
 import { type SetupStep, type User, authenticate, identityOf, setupStep } from "../accounts/users.js";
 import { AccessDenied, type Identity, runAs } from "../identity.js";
 import type { App } from "./app.js";
@@ -22,7 +23,9 @@ export const setupMessage = (publicUrl: URL, step: SetupStep) =>
       ? "its owner must read and accept the conditions of use themselves (an agent must never accept them for them)"
       : step === "password"
         ? "its first password must be replaced"
-        : "it must connect its edu-ID account"
+        : step === "access"
+          ? "its owner must choose themselves whether it works with or without edu-ID (an agent must never choose for them)"
+          : "it must connect its edu-ID account"
   }. Open ${publicUrl.origin} in a browser, log in and finish the setup; nothing else works until then.`;
 
 /**
@@ -151,6 +154,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL, app: App
     if (step && !route.options.setup) {
       json(res, 403, { error: setupMessage(app.config.publicUrl, step), setup: step });
       return { note: `setup: ${step}`, userId };
+    }
+    // What comes from GAPS and Cyberlearn is closed to an account that chose to go without edu-ID.
+    if (principal.user.access === "local" && CAMPUS_API.test(url.pathname)) {
+      json(res, 403, { error: NO_CAMPUS_MESSAGE, access: "local" });
+      return { note: "no edu-ID access", userId };
     }
   }
   await runAs(identityFor(principal), () => runRoute(route, { req, res, url, params, principal, client }));

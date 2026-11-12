@@ -93,6 +93,9 @@ const REMOTE_INSTRUCTIONS = `${INSTRUCTIONS.replace("reuse what exists (open_gen
   and tell them to ask an administrator for a deletion. \`mine: true\` on the list tools shows only theirs.
 - The past written tests (save_past_exam_text) and the GitHub repositories of courses (add_course_repo,
   remove_course_repo, update_course_repos) are managed by the administrators only; everyone reads them.
+- An account may have chosen to work without edu-ID: the tools of GAPS, Cyberlearn and the calendar then refuse. That
+  refusal is final; only the user changes it, on the page « Mon compte » of the web application. Carry on with what
+  remains (course material, cards, quizzes, documents, corrections, profile).
 - A refusal saying the account is not ready, or that its edu-ID session ended, is fixed by the user in the web
   application of the server (its password, its edu-ID connection), never by you: tell them, and never ask for a password.`;
 

@@ -29,6 +29,11 @@ propre serveur.
   données ne permet pas de les retrouver.
 - La session edu-ID et le jeton Cyberlearn que le serveur garde pour lire vos horaires, vos notes et vos cours sont
   chiffrés sur son disque (AES-256-GCM) avec une clé propre au serveur, qui n'est pas rangée avec eux.
+- **Relier votre compte edu-ID est votre choix**, fait à la première connexion et modifiable ensuite sur « Mon
+  compte ». Sans edu-ID, le serveur ne reçoit ni mot de passe, ni session, ni jeton, et le calendrier, l'horaire, les
+  notes, les absences, le plan d'études et les échéances vous sont fermés. Avec edu-ID, l'hébergeur ne peut pas lire
+  votre mot de passe edu-ID dans ce qui est enregistré, mais il peut techniquement déchiffrer la session et le jeton
+  Cyberlearn, et donc consulter GAPS et Cyberlearn en votre nom.
 - Les connexions des applications et des agents suivent le standard **OAuth 2.1** avec PKCE
   ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636)) : aucun agent ne voit votre mot de passe.
 

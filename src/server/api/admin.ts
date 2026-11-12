@@ -13,6 +13,7 @@ const accountRow = (user: User) => ({
   role: user.role,
   disabled: Boolean(user.disabledAt),
   setup: setupStep(user) ?? null,
+  access: user.access ?? null,
   campus: user.campusState,
   createdAt: user.createdAt.toISOString(),
   lastLoginAt: user.lastLoginAt?.toISOString(),

@@ -71,6 +71,8 @@ export interface AccountView {
   role: User["role"];
   /** What the account must do before anything else: accept the conditions, replace its first password, connect edu-ID. */
   setup: SetupStep | null;
+  /** With edu-ID (`campus`) or without (`local`); null until the person chose. */
+  access: "campus" | "local" | null;
   /** The conditions of use in force, and whether this account accepted them. */
   terms: { version: string; accepted: boolean; acceptedAt?: string };
   campus: {
@@ -92,6 +94,7 @@ export function describeAccount(app: App, user: User): AccountView {
     lastName: user.lastName,
     role: user.role,
     setup: setupStep(user) ?? null,
+    access: user.access ?? null,
     terms: { version: TERMS_VERSION, accepted: user.termsVersion === TERMS_VERSION, acceptedAt: user.termsAcceptedAt?.toISOString() },
     campus: { state: user.campusState, verifiedAt: user.campusVerifiedAt?.toISOString(), stored: user.hasCampusCredentials, unlocked: app.vault.key(user.id) !== undefined },
   };

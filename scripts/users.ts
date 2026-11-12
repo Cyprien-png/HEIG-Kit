@@ -37,6 +37,8 @@ function state(user: User): string {
   const step = setupStep(user);
   if (step === "terms") return "conditions of use not accepted yet";
   if (step === "password") return "first password not replaced yet";
+  if (step === "access") return "access not chosen yet";
+  if (user.access === "local") return "ready, without edu-ID";
   if (step === "campus") return "edu-ID not connected yet";
   return user.campusState === "expired" ? "edu-ID session ended" : "ready";
 }
@@ -46,7 +48,7 @@ const line = (user: User) => `${String(user.id).padStart(3)}  ${user.role.padEnd
 function firstPassword(user: User, password: string): void {
   console.log(`\n  Account : ${user.email}\n  Password: ${password}\n  ${address()}\n`);
   console.log("Shown once: give it to the person through a private channel. At their first login they must read and accept the");
-  console.log("conditions of use, replace this password, then connect their edu-ID account (with their two-step code if edu-ID asks for one).");
+  console.log("conditions of use, replace this password, then choose whether the account works with their edu-ID account or without it.");
 }
 
 const db = openDb();

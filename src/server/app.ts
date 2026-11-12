@@ -5,6 +5,7 @@ import { type CourseRepos, LocalRepos, describeGithubRun } from "../app/repos.js
 import { RequestLog } from "../app/requests.js";
 import { type SyncAccounts, Syncer } from "../app/sync.js";
 import { CampusLocked, setCampusProvider } from "../campus.js";
+import { requireCampusAccess } from "../accounts/access.js";
 import { requireExplicitIdentity } from "../identity.js";
 import { setSecretFileKey } from "../secretfile.js";
 import type { Db } from "../rag/db.js";
@@ -45,17 +46,22 @@ export function createApp(config: ServerConfig, db: Db, queue?: JobQueue, option
   setSecretFileKey(auth.secretFileKey);
   const vault = new Vault();
   setInterval(() => vault.sweep(), 60_000).unref();
-  setCampusProvider((identity) => ({
-    dir: userCacheDir(identity.id),
+  setCampusProvider((identity) => {
+    // An account without edu-ID has no way to GAPS or Cyberlearn, whatever asks for it.
+    requireCampusAccess(identity);
+    return campusOf(identity.id);
+  });
+  const campusOf = (id: number) => ({
+    dir: userCacheDir(id),
     credentials: () => {
-      const held = vault.credentials(identity.id);
+      const held = vault.credentials(id);
       if (!held) throw new CampusLocked();
       return held;
     },
-  }));
+  });
   const accounts: SyncAccounts = {
     // Accounts that never connected, or whose session is known to have ended, wait for their owner.
-    list: async () => (await listUsers(db)).filter((u) => !u.disabledAt && !setupStep(u) && u.campusState === "ok").map(identityOf),
+    list: async () => (await listUsers(db)).filter((u) => !u.disabledAt && !setupStep(u) && u.access === "campus" && u.campusState === "ok").map(identityOf),
     report: (identity, state) => markCampus(db, identity.id, state),
   };
   const syncer = new Syncer(db, config.syncMinutes, undefined, accounts);
