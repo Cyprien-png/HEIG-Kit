@@ -66,16 +66,27 @@ and MCP alike; an application waiting for an authorization (Claude, the CLI) is 
 - Passwords: Argon2id (64 MiB, 3 passes); the database holds a verifier only. Login attempts are limited (5 failures per client,
   20 overall, per 15 minutes).
 - edu-ID credentials are **sealed with a key derived from the account's password** (AES-256-GCM) and that key is never
-  stored: the database, a backup, or the administrator cannot read them. The API only writes them; no route returns
-  them. The key stays in the server's memory for 30 minutes after the person typed their password.
-- Consequence: the server keeps the edu-ID *session* (cookies, a few weeks) of each account in `.cache/users/<id>/`
-  to fetch GAPS and Cyberlearn. When it ends, the account shows "edu-ID à reconnecter": the person types their
-  HEIG-Kit password on the page **Mon compte** (and the two-step code if asked). Changing the password re-seals the
-  credentials; a `reset` by the administrator drops them.
+  stored by the server. The API only writes them; no route returns them.
+- **The key travels in the account's own tokens**, encrypted for the server alone (a key derived from
+  `HEIG_JWT_SECRET`): the session cookie, the access tokens and the refresh tokens of OAuth carry it; the database
+  keeps only the hash of a refresh token. Opening someone's credentials therefore takes three things together: the
+  database, the server's secret, and a token that person holds. A copy of the database, or of the database and `.env`,
+  opens nothing; a token alone neither.
+- So any request of the account (the web app, an agent, the CLI) lets the server read its credentials for a moment
+  (kept in memory 15 minutes): when the edu-ID *session* (cookies in `.cache/users/<id>/`, a few weeks) has ended, the
+  server **logs in again by itself** at the account's next request, without asking anything. Only when edu-ID wants a
+  two-step code does the account show "edu-ID à reconnecter", for the code to be typed on the page **Mon compte**.
+  Automatic logins are tried at most every 30 minutes, and not again for 12 hours once a code is asked.
+- While nobody uses an account, the server holds no way to its credentials: background syncs then stop with the edu-ID
+  session and resume at the next request. Changing the password re-seals the credentials and revokes the tokens; a
+  `reset` by the administrator drops them.
+- Whoever controls the running server (its administrator, on the machine) can observe the tokens that reach it, hence
+  the credentials of the accounts that use it meanwhile: the sealing protects against leaks of the stored data and
+  against the other accounts, not against the machine's owner.
 
 ## Roles
 
-`student`, or `admin`, who also sees the **status page** of the server, the **journal** (the accounts, and for each
+`student`, or `admin`, who also sees the **status page** of the server (and starts the indexation of the courses there), the **journal** (the accounts, and for each
 one the latest requests: time, action, route or tool, answer; never their content; kept 30 days), may change or delete
 any shared item, is the only one who deletes them, and runs the housekeeping. Roles are set with `npm run users`.
 
@@ -88,8 +99,12 @@ abandoned captures, expired tokens, files of interrupted uploads.
 
 ## Limits to know
 
-- The course material is indexed by `npm run ingest` on the machine with the edu-ID account of `.env`: the shared
-  knowledge base covers the courses of **that** account (plus `RAG_EXTRA_COURSES`).
+- No edu-ID credentials live in `.env`. The course material is indexed by the server itself, as an administrator:
+  **Indexer mes cours** on the status page (MCP `run_ingestion`, `npm run remote -- ingest`) reads Cyberlearn with
+  the edu-ID connection of the administrator who asks, and the server does it again on its own when it sees Cyberlearn
+  change, with the saved session of its first administrator. The shared knowledge base thus covers the courses of the
+  **administrators'** timetables (plus `RAG_EXTRA_COURSES`); an administrator of another class adds theirs by
+  indexing too.
 - Deleting a shared deck or quiz removes the progress of everyone who studied it, which is why only administrators
   delete.
 - Syncs with GAPS and Cyberlearn run one account at a time.

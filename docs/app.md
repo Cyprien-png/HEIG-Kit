@@ -232,7 +232,7 @@ descriptions and the skills tell the AI to redraw a student's sketches and graph
 
 ## Status
 
-`/api/status` (administrators only; `POST /api/me/sync` lets anyone refresh their own GAPS and Cyberlearn data, and
+`/api/status` (administrators only; `POST /api/status/ingest` starts the indexation of the administrator's courses; `POST /api/me/sync` lets anyone refresh their own GAPS and Cyberlearn data, and
 `/api/admin/users`, `/api/admin/activity?user=` feed the journal) reports what the server can check without Docker access: database, embedding service, extraction
 service, render worker (last job), edu-ID session and Cyberlearn token, last syncs (`sync_runs`: GAPS, Cyberlearn, the
 Cyberlearn check, and the GitHub repositories the server indexes itself), ingestion (last run,
