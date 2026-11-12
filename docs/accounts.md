@@ -66,11 +66,36 @@ former single-user server.
    token of an agent or of the CLI is refused. Changing the text means changing `TERMS_VERSION`, and every account is
    asked again at its next request. The page « Mon compte » shows the text at any time.
 2. They then **must choose a new password** (12 characters at least).
-3. The server then **asks for their edu-ID credentials**, tries them on GAPS at once, and asks for the two-step code
+3. They **choose the kind of access** of the account (below), with what each one gives and what it means for their
+   security laid out side by side.
+4. With edu-ID only: the server then **asks for their edu-ID credentials**, tries them on GAPS at once, and asks for the two-step code
    if edu-ID wants one. Nothing is stored before GAPS accepted the login.
 
-Until all three are done the server refuses everything else for this account (`403` with `setup`), on the web app, the
+Until all of it is done the server refuses everything else for this account (`403` with `setup`), on the web app, the
 API and MCP alike; an application waiting for an authorization (Claude, the CLI) is sent through the same steps.
+
+## With or without edu-ID
+
+Each account has a kind of access, chosen by its owner and unrelated to its role (`users.access`,
+`src/accounts/access.ts`):
+
+| | With edu-ID (`campus`) | Without (`local`) |
+|---|---|---|
+| Asked from the person | edu-ID address, password, two-step code | nothing |
+| Kept by the server | sealed credentials, edu-ID session, Cyberlearn token, copies of GAPS and Cyberlearn | nothing of edu-ID |
+| Course material, cards, quizzes, library, past and mock exams, copies, corrections, profile | yes | yes |
+| Timetable, grades, absences, study plan, deadlines, Cyberlearn pages, calendar | yes | closed |
+
+What is closed is closed everywhere: the pages carry a padlock in the web application, the API answers `403` with
+`access: "local"` (`/api/campus/*`, `/api/calendar*`, `/api/me/sync`), the MCP tools of GAPS, Cyberlearn and the
+calendar answer with a refusal that tells the agent not to retry, and the account has no way to an edu-ID login at
+all. The person changes their mind on « Mon compte », never an agent (`POST /api/auth/access` takes a browser session
+only). Going without edu-ID erases the sealed credentials, the session, the Cyberlearn token and the copies of GAPS
+and Cyberlearn; calendar events stay in the database, unreachable, and come back if edu-ID is chosen again.
+
+What the person is told before choosing: with edu-ID their password cannot be read from what the server stores, even
+by whoever hosts it, but the session and the Cyberlearn token can be decrypted by the host, who could then read GAPS
+and Cyberlearn in their name; and a server whose code was changed could see the password when it is typed.
 
 ## Passwords and edu-ID credentials
 
