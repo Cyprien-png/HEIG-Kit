@@ -1,7 +1,7 @@
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { CourseChip } from "./CourseChip";
-import { Badge, Input, Segmented, cx } from "./ui";
+import { Badge, Input, Segmented, Select, cx } from "./ui";
 
 /** How a list is ordered: in groups (by course unless the page says otherwise), newest or oldest first, or by name. */
 export type SortKey = "group" | "recent" | "oldest" | "name";
@@ -22,6 +22,11 @@ export interface FilterSpec<T> {
   group?: { label: string; key: (t: T) => string; order?: string[]; heading?: (key: string, items: T[]) => ReactNode };
   /** Hide the course chips (a list of courses, for instance). */
   courseChips?: boolean;
+  /** Names of the two drop-downs of categories: those of `kinds` (« Type ») and the others (« Catégorie »). */
+  kindsLabel?: string;
+  kindsAll?: string;
+  topicsLabel?: string;
+  topicsAll?: string;
 }
 
 export interface FilterState {
@@ -129,10 +134,20 @@ export function FilterBar<T>({ spec, state, set, filtered, placeholder = "Cherch
   sorts.push({ value: "name", label: "A–Z" });
   const sort = sorts.some((s) => s.value === state.sort) ? state.sort : sorts[0].value;
   const showCourses = spec.courseChips !== false && filtered.courses.length > 1;
-  const toggle = (tag: string) => set({ tags: state.tags.includes(tag) ? state.tags.filter((t) => t !== tag) : [...state.tags, tag] });
   // A selected filter stays visible even when nothing carries it any more, so it can be removed.
   const categories = [...filtered.categories, ...state.tags.filter((t) => !filtered.categories.includes(t))];
   const courses = state.course && !filtered.courses.includes(state.course) ? [...filtered.courses, state.course] : filtered.courses;
+  // One drop-down per family of categories: whose it is, its type (the page's `kinds`), its topic (everything else).
+  const kinds = (spec.kinds ?? []).filter((k) => k !== MINE);
+  const families = [
+    { label: spec.kindsLabel ?? "Type", all: spec.kindsAll ?? "Tous les types", options: categories.filter((c) => kinds.includes(c)) },
+    { label: spec.topicsLabel ?? "Catégorie", all: spec.topicsAll ?? "Toutes les catégories", options: categories.filter((c) => c !== MINE && !kinds.includes(c)) },
+  ].filter((f) => f.options.length > 0);
+  const hasMine = categories.includes(MINE);
+  /** Replaces what is selected among `options` by `tag` (or by nothing). */
+  const choose = (options: string[], tag: string) => set({ tags: [...state.tags.filter((t) => !options.includes(t)), ...(tag ? [tag] : [])] });
+  const chosen = (options: string[]) => state.tags.find((t) => options.includes(t)) ?? "";
+  const select = "h-8 max-w-[14rem] text-xs";
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -140,30 +155,42 @@ export function FilterBar<T>({ spec, state, set, filtered, placeholder = "Cherch
           <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
           <Input type="search" value={state.q} onChange={(e) => set({ q: e.target.value })} placeholder={placeholder} className="pl-9" />
         </div>
-        {extra}
         {sorts.length > 1 && <Segmented size="sm" value={sort} onChange={(v) => set({ sort: v })} options={sorts} />}
       </div>
-      {(showCourses || categories.length > 0) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {showCourses &&
-            courses.map((c) => (
-              <button key={c} onClick={() => set({ course: state.course === c ? undefined : c })} className={cx("rounded-md ring-offset-1 ring-offset-canvas transition", state.course === c ? "ring-2 ring-accent" : "opacity-80 hover:opacity-100")} aria-pressed={state.course === c}>
-                {c === NO_COURSE ? <Badge>sans cours</Badge> : <CourseChip code={c} link={false} />}
-              </button>
-            ))}
-          {showCourses && categories.length > 0 && <span className="w-px h-4 bg-line mx-1" />}
-          {categories.map((t) => (
-            <button key={t} onClick={() => toggle(t)} aria-pressed={state.tags.includes(t)} className="transition hover:opacity-100">
-              <Badge tone={state.tags.includes(t) ? "accent" : "neutral"} className={cx("normal-case tracking-normal text-xs", spec.kinds && !spec.kinds.includes(t) && !state.tags.includes(t) && "bg-transparent border border-line")}>
-                {t}
-              </Badge>
-            </button>
+      {(hasMine || families.length > 0 || extra) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {hasMine && (
+            <Select aria-label="Auteur" className={cx(select, state.tags.includes(MINE) && "ring-1 ring-accent font-medium")} value={chosen([MINE])} onChange={(e) => choose([MINE], e.target.value)}>
+              <option value="">Tous les auteurs</option>
+              <option value={MINE}>Créés par moi</option>
+            </Select>
+          )}
+          {extra}
+          {families.map((f) => (
+            <Select key={f.label} aria-label={f.label} className={cx(select, chosen(f.options) && "ring-1 ring-accent font-medium")} value={chosen(f.options)} onChange={(e) => choose(f.options, e.target.value)}>
+              <option value="">{f.all}</option>
+              {f.options.map((o) => (
+                <option key={o} value={o}>
+                  {o.charAt(0).toUpperCase() + o.slice(1)}
+                </option>
+              ))}
+            </Select>
           ))}
           {(state.course || state.tags.length > 0 || state.q) && (
             <button onClick={() => set({ course: undefined, tags: [], q: "" })} className="text-xs text-ink-3 hover:text-ink ml-1">
               Effacer
             </button>
           )}
+        </div>
+      )}
+      {showCourses && (
+        <div className="flex flex-wrap items-center gap-2">
+          {courses.map((c) => (
+            // inline-flex: the button takes the exact shape of the chip, and so does its ring.
+            <button key={c} onClick={() => set({ course: state.course === c ? undefined : c })} className={cx("inline-flex rounded-md transition", state.course === c ? "ring-2 ring-accent ring-offset-2 ring-offset-canvas" : "opacity-80 hover:opacity-100")} aria-pressed={state.course === c}>
+              {c === NO_COURSE ? <Badge>sans cours</Badge> : <CourseChip code={c} link={false} />}
+            </button>
+          ))}
         </div>
       )}
     </div>
