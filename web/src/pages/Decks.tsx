@@ -17,8 +17,7 @@ const SPEC: FilterSpec<Deck> = {
   date: (d) => d.updatedAt,
   categories: (d) => [d.mine && MINE, d.due > 0 && "à réviser", d.fresh > 0 && "nouvelles cartes", d.cards > 0 && d.due === 0 && d.fresh === 0 && "à jour", d.cards === 0 && "vide"],
   kinds: [MINE, "à réviser", "nouvelles cartes", "à jour", "vide"],
-  kindsLabel: "État",
-  kindsAll: "Tous les états",
+  families: [{ label: "État", all: "Tous les états", options: ["à réviser", "nouvelles cartes", "à jour", "vide"] }],
 };
 
 export function Decks() {

@@ -29,6 +29,12 @@ const SPEC: FilterSpec<MockExam> = {
   date: (e) => e.createdAt,
   categories: (e) => [STATUS[e.status].label, e.last?.score && (e.last.score.grade >= 4 ? "réussi" : "insuffisant"), ...(e.statement?.tags ?? []).filter((t) => !["te blanc", "corrigé", "exercices"].includes(t))],
   kinds: [...Object.values(STATUS).map((s) => s.label), "réussi", "insuffisant"],
+  families: [
+    { label: "État", all: "Tous les états", options: Object.values(STATUS).map((s) => s.label) },
+    { label: "Résultat", all: "Tous les résultats", options: ["réussi", "insuffisant"] },
+  ],
+  topicsLabel: "Sujet",
+  topicsAll: "Tous les sujets",
   group: {
     label: "Par cours",
     key: (e) => e.course ?? NO_COURSE,

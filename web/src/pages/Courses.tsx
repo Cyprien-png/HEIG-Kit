@@ -71,6 +71,7 @@ const SPEC: FilterSpec<KbCourse> = {
   text: (c) => [c.course, c.name, ...(c.teachers ?? [])],
   categories: (c) => c.docTypes.map((t) => DOC_TYPE_LABEL[t] ?? t),
   kinds: Object.values(DOC_TYPE_LABEL),
+  families: [{ label: "Supports", all: "Tous les supports", options: Object.values(DOC_TYPE_LABEL) }],
 };
 
 export function Courses() {

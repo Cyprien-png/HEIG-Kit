@@ -25,7 +25,11 @@ const SPEC: FilterSpec<QuizSummary> = {
   course: (q) => q.course,
   date: (q) => q.last?.finishedAt ?? q.createdAt,
   categories: (q) => [q.mine && MINE, KIND_LABEL[q.kind], resultOf(q)],
-  kinds: ["créés par moi", ...Object.values(KIND_LABEL), ...Object.values(RESULT_LABEL)],
+  kinds: [MINE, ...Object.values(KIND_LABEL), ...Object.values(RESULT_LABEL)],
+  families: [
+    { label: "Type", all: "Tous les types", options: Object.values(KIND_LABEL) },
+    { label: "Résultat", all: "Tous les résultats", options: Object.values(RESULT_LABEL) },
+  ],
 };
 
 export function Quizzes() {

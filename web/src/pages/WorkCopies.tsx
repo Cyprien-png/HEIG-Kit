@@ -21,6 +21,10 @@ const SPEC: FilterSpec<Workcopy> = {
   date: (c) => c.updatedAt,
   categories: (c) => [c.submittedAt ? "envoyée" : "en cours", c.correctionId && "corrigée", c.exam?.startsWith("exam:") ? "ancien TE" : c.exam ? "test blanc" : undefined, c.annotatedPages === 0 && "vierge"],
   kinds: ["en cours", "envoyée", "corrigée", "test blanc", "ancien TE", "vierge"],
+  families: [
+    { label: "État", all: "Tous les états", options: ["en cours", "envoyée", "corrigée", "vierge"] },
+    { label: "Origine", all: "Toutes les origines", options: ["test blanc", "ancien TE"] },
+  ],
 };
 
 /** The copies of PDFs the student fills in on the web app. */

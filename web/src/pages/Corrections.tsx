@@ -61,6 +61,13 @@ const SPEC: FilterSpec<Correction> = {
   date: (c) => c.correctedAt ?? c.sentAt ?? c.updatedAt,
   categories: (c) => [STATE_LABEL[c.state], origin(c), !c.affectsProfile && "hors profil", c.topic],
   kinds: [...Object.values(STATE_LABEL), "test blanc", "ancien TE", "exercices", "hors profil"],
+  families: [
+    { label: "État", all: "Tous les états", options: Object.values(STATE_LABEL) },
+    { label: "Origine", all: "Toutes les origines", options: ["exercices", "test blanc", "ancien TE"] },
+    { label: "Profil", all: "Dans le profil ou non", options: ["hors profil"] },
+  ],
+  topicsLabel: "Sujet",
+  topicsAll: "Tous les sujets",
 };
 
 export function Corrections() {

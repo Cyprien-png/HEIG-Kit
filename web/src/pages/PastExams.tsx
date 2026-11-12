@@ -35,6 +35,14 @@ const SPEC: FilterSpec<PastExam> = {
   date: (e) => `${e.year} ${e.meta.importedAt}`,
   categories: (e) => [STATUS[e.status].label, e.has.solutions || e.has.teacherSolutions ? "corrigé disponible" : undefined, !e.has.statement && "énoncé à retranscrire", e.meta.number === "EXA" ? "examen" : e.meta.number, e.year, e.meta.teacher],
   kinds: [...Object.values(STATUS).map((s) => s.label), "corrigé disponible", "énoncé à retranscrire"],
+  families: [
+    { label: "État", all: "Tous les états", options: Object.values(STATUS).map((s) => s.label) },
+    { label: "Contenu", all: "Avec ou sans corrigé", options: ["corrigé disponible", "énoncé à retranscrire"] },
+    { label: "Test", all: "Tous les tests", options: (c) => c === "examen" || /^TE\d+[A-Z]?$/.test(c) },
+    { label: "Année", all: "Toutes les années", options: (c) => /^\d{4}-\d{4}$/.test(c) },
+  ],
+  topicsLabel: "Enseignant",
+  topicsAll: "Tous les enseignants",
   group: {
     label: "Dossiers",
     key: folderOf,

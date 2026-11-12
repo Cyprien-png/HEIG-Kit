@@ -19,6 +19,8 @@ const SPEC: FilterSpec<KbDocument> = {
   date: (d) => d.uploadedAt,
   categories: (d) => [typeLabel(d.docType), d.chapter],
   kinds: TYPE_ORDER.map(typeLabel),
+  topicsLabel: "Chapitre",
+  topicsAll: "Tous les chapitres",
   group: { label: "Par type", key: (d) => typeLabel(d.docType), order: TYPE_ORDER.map(typeLabel) },
 };
 

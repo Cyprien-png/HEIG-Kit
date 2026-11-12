@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfOverlay } from "../components/PdfOverlay";
 import { Markdown } from "../components/Markdown";
 import { type FilterSpec, FilterBar, FilteredGroups, MINE, NothingOfMine, useFilterState, useFiltered } from "../components/ListFilters";
-import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Modal, PageHeader, Select, cx } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, IconButton, Loading, Modal, PageHeader, Segmented, cx } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { bytes, dateTime } from "../lib/format";
 import type { LibraryFile, LibraryItem } from "../lib/types";
@@ -26,6 +26,7 @@ const SPEC: FilterSpec<LibraryItem> = {
   date: (i) => i.modifiedAt,
   categories: (i) => [i.mine && MINE, ...i.tags],
   kinds: [MINE, ...TYPE_TAGS],
+  families: [{ label: "Type", all: "Tous les types", options: TYPE_TAGS }],
   topicsLabel: "Sujet",
   topicsAll: "Tous les sujets",
 };
@@ -45,13 +46,7 @@ export function Library() {
   return (
     <div className="space-y-4">
       <PageHeader title="Bibliothèque" />
-      <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer par mots-clés…" extra={
-          <Select aria-label="Format" className={cx("h-8 text-xs", filter !== "all" && "ring-1 ring-accent font-medium")} value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
-            <option value="all">Tous les formats</option>
-            <option value="document">Documents</option>
-            <option value="video">Vidéos</option>
-          </Select>
-        } />
+      <FilterBar spec={SPEC} state={state} set={set} filtered={filtered} placeholder="Filtrer par mots-clés…" extra={<Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: "all", label: "Tout" }, { value: "document", label: "Documents" }, { value: "video", label: "Vidéos" }]} />} />
       {items.error && <ErrorBox error={items.error} retry={items.reload} />}
       {items.loading && !items.data ? <Loading /> : filtered.list.length === 0 && state.tags.length === 1 && state.tags[0] === MINE && !state.q.trim() && !state.course && all.length > 0 ? (
         <NothingOfMine show={() => set({ tags: [] })} />

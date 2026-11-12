@@ -22,11 +22,21 @@ export interface FilterSpec<T> {
   group?: { label: string; key: (t: T) => string; order?: string[]; heading?: (key: string, items: T[]) => ReactNode };
   /** Hide the course chips (a list of courses, for instance). */
   courseChips?: boolean;
-  /** Names of the two drop-downs of categories: those of `kinds` (« Type ») and the others (« Catégorie »). */
-  kindsLabel?: string;
-  kindsAll?: string;
+  /**
+   * The drop-downs of the filter bar, one per family of categories that do not mix (a type, a state, a result…).
+   * Left out: one drop-down « Type » made of `kinds`. Categories of no family go to a last drop-down, the topics.
+   */
+  families?: Family[];
   topicsLabel?: string;
   topicsAll?: string;
+}
+
+export interface Family {
+  label: string;
+  /** The option that removes the filter: « Tous les types ». */
+  all: string;
+  /** Its categories, in the order shown; or what tells them from the others when they are not known in advance (years). */
+  options: readonly string[] | ((category: string) => boolean);
 }
 
 export interface FilterState {
@@ -98,7 +108,9 @@ export function useFiltered<T>(items: T[], spec: FilterSpec<T>, state: FilterSta
     const courses = spec.course ? [...new Set(items.map((t) => courseOf(spec, t)))].sort(courseOrder) : [];
     const kinds = spec.kinds ?? [];
     const rank = (c: string) => (kinds.includes(c) ? kinds.indexOf(c) : kinds.length);
-    const categories = [...new Set(items.flatMap((t) => categoriesOf(spec, t)))].sort((a, b) => rank(a) - rank(b) || byName(a, b));
+    // Offered: what the items of the selected course carry, so that a drop-down never proposes a topic of another course.
+    const offered = state.course ? items.filter((t) => courseOf(spec, t) === state.course) : items;
+    const categories = [...new Set(offered.flatMap((t) => categoriesOf(spec, t)))].sort((a, b) => rank(a) - rank(b) || byName(a, b));
     const words = spec.serverSearch ? [] : fold(state.q).split(/\s+/).filter(Boolean);
     const list = items.filter((t) => {
       if (state.course && courseOf(spec, t) !== state.course) return false;
@@ -137,11 +149,13 @@ export function FilterBar<T>({ spec, state, set, filtered, placeholder = "Cherch
   // A selected filter stays visible even when nothing carries it any more, so it can be removed.
   const categories = [...filtered.categories, ...state.tags.filter((t) => !filtered.categories.includes(t))];
   const courses = state.course && !filtered.courses.includes(state.course) ? [...filtered.courses, state.course] : filtered.courses;
-  // One drop-down per family of categories: whose it is, its type (the page's `kinds`), its topic (everything else).
-  const kinds = (spec.kinds ?? []).filter((k) => k !== MINE);
+  // One drop-down per family of categories (never a type next to a result in the same list), then the topics.
+  const declared: Family[] = spec.families ?? [{ label: "Type", all: "Tous les types", options: (spec.kinds ?? []).filter((k) => k !== MINE) }];
+  const belongs = (f: Family, c: string) => c !== MINE && (typeof f.options === "function" ? f.options(c) : f.options.includes(c));
+  const order = (f: Family) => (a: string, b: string) => (typeof f.options === "function" ? byName(b, a) : f.options.indexOf(a) - f.options.indexOf(b));
   const families = [
-    { label: spec.kindsLabel ?? "Type", all: spec.kindsAll ?? "Tous les types", options: categories.filter((c) => kinds.includes(c)) },
-    { label: spec.topicsLabel ?? "Catégorie", all: spec.topicsAll ?? "Toutes les catégories", options: categories.filter((c) => c !== MINE && !kinds.includes(c)) },
+    ...declared.map((f) => ({ label: f.label, all: f.all, options: categories.filter((c) => belongs(f, c)).sort(order(f)) })),
+    { label: spec.topicsLabel ?? "Catégorie", all: spec.topicsAll ?? "Toutes les catégories", options: categories.filter((c) => c !== MINE && !declared.some((f) => belongs(f, c))) },
   ].filter((f) => f.options.length > 0);
   const hasMine = categories.includes(MINE);
   /** Replaces what is selected among `options` by `tag` (or by nothing). */
