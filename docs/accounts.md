@@ -56,13 +56,19 @@ former single-user server.
 
 ## First login
 
-1. The person logs in with the address and the password they received, and **must choose a new password** (12
-   characters at least).
-2. The server then **asks for their edu-ID credentials**, tries them on GAPS at once, and asks for the two-step code
+1. The person logs in with the address and the password they received, and **must read and accept the conditions of
+   use** (box « J'ai lu et j'accepte les conditions d'utilisation »). The text is `src/accounts/terms.ts`: the server
+   only runs the code published on GitHub, everything is open source, how passwords and credentials are protected
+   (Argon2id, HKDF-SHA-256, AES-256-GCM), why an administrator cannot enter an account and where that stops (whoever
+   hosts the machine), shared content and prompt injection, no liability. Only the person accepts, in a browser: the
+   token of an agent or of the CLI is refused. Changing the text means changing `TERMS_VERSION`, and every account is
+   asked again at its next request. The page « Mon compte » shows the text at any time.
+2. They then **must choose a new password** (12 characters at least).
+3. The server then **asks for their edu-ID credentials**, tries them on GAPS at once, and asks for the two-step code
    if edu-ID wants one. Nothing is stored before GAPS accepted the login.
 
-Until both are done the server refuses everything else for this account (`403` with `setup`), on the web app, the API
-and MCP alike; an application waiting for an authorization (Claude, the CLI) is sent through the same two steps.
+Until all three are done the server refuses everything else for this account (`403` with `setup`), on the web app, the
+API and MCP alike; an application waiting for an authorization (Claude, the CLI) is sent through the same steps.
 
 ## Passwords and edu-ID credentials
 
