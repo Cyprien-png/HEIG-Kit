@@ -1,6 +1,6 @@
 ---
 name: hqvideo
-description: Creates High quality explanatory videos drawn in React, HTML and SVG and rendered with Remotion (1080p), with a natural local French voice or silent with subtitles. Use when the user asks for a High quality video ("vidéo High quality", "vidéo HQ", "une belle vidéo", "plus jolie que manim"), or when they answered "High quality" to the question every video request starts with (normal or High quality, with or without audio).
+description: Creates High quality explanatory videos drawn in React, HTML and SVG and rendered with Remotion (1080p), with a natural local French voice or silent with subtitles. Use when the user asks for a High quality video ("vidéo High quality", "vidéo HQ", "une belle vidéo", "plus jolie que manim"), when they answered "High quality" to the question every video request starts with (normal or High quality, with or without audio), and for every video of a network lab ("vidéo du labo 5 de RXI", "même style que le labo 4", "vidéo labo réseau"), which follows the network lab standard (topology, packets, terminals, zoom-ins).
 effort: medium
 ---
 
@@ -124,9 +124,29 @@ Rules that make a video render correctly:
   also `dataPin`, `selPin`, `outPin`, `outLabel`, `muxH(g)`.
 - **`<Fly f start from to label dur? />`**: a chip flying along an arc between two positions (a value copied from a
   table to an input).
+- **Networks** (in `<Svg>` unless said): `<Device x y kind label sub? size? opacity? active? color? subColor? />` with
+  `kind` laptop, pc, server, router, switch, cloud or browser; `<Link from to p? active? f? label? dashed? />` (a cable,
+  `p` draws it, `active` runs traffic along it); `<Packet f start from to via? label color? dur? size? labelBelow? />`
+  (an envelope travelling, through the points of `via`); `<Broadcast f start at color? radius? waves? />` (rings);
+  `<FileIcon x y name />`; `NET` (the colors of DHCP, ICMP, TCP, HTTP, ARP); `packetAt(f, start, from, to, dur?, arc?)`.
+  `<SeqDiagram f x y w gap actors={[{ label, sub?, kind? }]} msgs={[{ at, from, to, label, sub?, broadcast?, color? }]}
+  hi? />`: an arrow diagram, one lifeline per actor. HTML, inside `<AbsoluteFill>`: `<Terminal f x y w title prompt
+  lines={[{ at, text, out?, prompt?, color? }]} rows? fontSize? />` (commands typed from their `at`, outputs printed),
+  `<FieldCard x y w title fields={[[name, value]]} reveal? f? />`, `<ZoomBadge path={[…]} />`. Zooms: `<Camera focus
+  scale opacity?>` wraps the content (HTML and SVG), `zoomScale(f, { inAt?, outAt?, max?, dur? })` gives its scale,
+  `<Lens x y w h label p />` frames the spot about to be zoomed into.
 - Anything else is plain SVG inside `<Svg>` or HTML with inline styles inside `<AbsoluteFill>` (cards, lists,
-  formulas): see `<root>/modules/hqvideo/examples/mux.tsx`, the complete video of a SYL exercise, when you need a model
-  for a kind of scene; do not read the kit's sources.
+  formulas): see `<root>/modules/hqvideo/examples/mux.tsx`, the complete video of a SYL exercise, and
+  `<root>/modules/hqvideo/examples/network-lab.tsx`, the complete video of a network lab, when you need a model for a
+  kind of scene; do not read the kit's sources.
+
+## Network labs
+
+A video of a network lab (RXI) follows a fixed standard that the user asked for: the whole lab objective by
+objective, fast on the manipulations but saying what each setting is for, the devices always visible with packets
+travelling between them, the commands typed in terminals, zoom-ins on the mechanisms (DHCP, ping, a port…) that go
+back out to the overview, and the hands-on end of the lab in full. Read `network-labs.md` (next to this file) and the
+example `network-lab.tsx` before writing one.
 
 ## Steps
 
@@ -140,8 +160,9 @@ Rules that make a video render correctly:
    lines are cached: rendering again after a visual fix only synthesizes the lines whose text changed.
 4. Read the `Frames:` image of the final video (with audio, the lines have their real duration); fix and render again
    if needed.
-5. Tag the video in the library: `npm --prefix <root> run -s library -- tag videos/<name>.mp4 --course <CODE> --tags
-   "vidéo,explication,<topic>"` (or the `tag_library_item` MCP tool).
+5. Send it to the library and tag it: `npm --prefix <root> run -s library -- push`, then `npm --prefix <root> run -s
+   library -- tag video:<name> --course <CODE> --tags "vidéo,explication,<topic>"` (or the `tag_library_item` MCP
+   tool). The item exists on the server only after the push.
 
 Other options: `--quality medium` (720p, faster), `--no-subtitles`, `--jobs N` (browser tabs drawing in parallel).
 

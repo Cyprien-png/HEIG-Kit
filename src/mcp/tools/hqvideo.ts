@@ -25,7 +25,14 @@ export const HQ_VIDEO_API =
   "`<TruthTable t={{ x, y, rowH, vars: [\"C\",\"B\",\"A\"] }} name values appear? rows? hi? emphasis? groups? />` with `cellPos(t, row, key)` " +
   "and `groupPos(t, level, size, index)`; `<Mux g={{ x, y, w, n, gap }} frame={f} sel={[\"A\",\"B\"]} appear? selBits? selected? flow? out? " +
   "outValue? title? />` with `dataLabel(g, i)`, `dataPin`, `selPin`, `outPin`, `muxH(g)`; `<Fly f start from to label />` (a chip flying " +
-  "between two positions). Plain HTML with inline styles works too (cards, lists, formulas). Start the file with a one-line " +
+  "between two positions). Networks: `<Device x y kind label sub? size? active? color? />` (kind laptop, pc, server, router, switch, cloud, " +
+  "browser), `<Link from to p? active? f? label? dashed? />`, `<Packet f start from to via? label color? dur? labelBelow? />` (an envelope " +
+  "travelling), `<Broadcast f start at color? />`, `<FileIcon x y name />`, `NET` (colors per protocol), `<SeqDiagram f x y w gap actors msgs " +
+  "hi? />` (arrow diagram); HTML: `<Terminal f x y w title prompt lines={[{ at, text, out? }]} rows? />`, `<FieldCard x y w title fields />`, " +
+  "`<ZoomBadge path />`; zooms: `<Camera focus scale opacity?>`, `zoomScale(f, { inAt?, outAt?, max? })`, `<Lens x y w h label p />`. " +
+  "A video of a network lab follows the network lab standard (the whole lab, devices always visible, packets, terminals, zoom-ins on the " +
+  "mechanisms that go back out to the overview): see skills/hqvideo/network-labs.md. " +
+  "Plain HTML with inline styles works too (cards, lists, formulas). Start the file with a one-line " +
   "`/** … */` comment saying what the video shows.";
 
 export const hqVideoInput = {

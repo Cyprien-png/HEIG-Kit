@@ -1,0 +1,123 @@
+[
+  { "scene": "intro", "lines": [
+    { "id": "i1", "text": "Labo quatre de réseaux : on met en place un premier réseau local, de A à Z." },
+    { "id": "i2", "text": "Deux ordinateurs, un switch, puis un routeur Cisco qui distribuera les adresses avec DHCP." },
+    { "id": "i3", "text": "On ira vite sur les manipulations, mais on verra à quoi sert chaque chose qu'on configure." },
+    { "id": "i4", "text": "Et on finira avec Netcat : un chat, un transfert de fichier et un mini serveur Web." }
+  ] },
+  { "scene": "lan", "lines": [
+    { "id": "l1", "text": "Objectif un : dans EVE-NG, on crée deux laptops Debian, PC un et PC deux.", "tts": "Objectif un : dans Ève N G, on crée deux laptops Debian, PC un et PC deux." },
+    { "id": "l2", "text": "On ajoute un objet réseau de type bridge, nommé Cheseaux SR un : c'est un simple switch Ethernet." },
+    { "id": "l3", "text": "Le switch relie les machines d'un même réseau local : il fait passer les trames d'un port à l'autre." },
+    { "id": "l4", "text": "Mais pour se parler en IP, chaque PC a besoin d'une adresse." },
+    { "id": "l5", "text": "Sur PC un, sudo ip address add, dix point un point un point deux slash vingt-quatre, sur l'interface ens trois." },
+    { "id": "l6", "text": "Sur PC deux, la même commande avec l'adresse dix point un point un point trois." },
+    { "id": "l7", "text": "Le slash vingt-quatre dit que les vingt-quatre premiers bits désignent le réseau : les deux PC sont dans le réseau dix point un point un point zéro." },
+    { "id": "l8", "text": "Même réseau, donc ils se parlent directement à travers le switch, sans routeur." },
+    { "id": "l9", "text": "On le vérifie avec un ping. Zoomons sur ce qui se passe entre les deux PC." }
+  ] },
+  { "scene": "ping", "lines": [
+    { "id": "p1", "text": "Zoom sur le ping. La commande ping dix point un point un point trois envoie un message ICMP appelé echo request." },
+    { "id": "p2", "text": "PC deux répond aussitôt par un echo reply : la machine est joignable." },
+    { "id": "p3", "text": "Ping recommence chaque seconde et affiche le temps d'aller-retour. On l'arrête avec contrôle C." },
+    { "id": "p4", "text": "Avant le tout premier ping, PC un a dû trouver l'adresse MAC de PC deux par un broadcast : c'est ARP, qu'on verra plus tard." },
+    { "id": "p5", "text": "Si le ping échoue, on vérifie l'adresse avec ip a show ens trois, et on peut l'effacer avec ip address del." }
+  ] },
+  { "scene": "router", "lines": [
+    { "id": "r1", "text": "Objectif deux : on ajoute un routeur Cisco, nommé Cheseaux, relié au switch par son interface e zéro slash zéro." },
+    { "id": "r2", "text": "À quoi sert-il ? Ici, il sera le serveur DHCP du réseau, et plus tard la porte vers les autres réseaux." },
+    { "id": "r3", "text": "Au premier démarrage, on répond no au dialogue de configuration initiale." },
+    { "id": "r4", "text": "Ensuite tout se fait en ligne de commande. Zoomons sur les modes du routeur." }
+  ] },
+  { "scene": "cisco", "lines": [
+    { "id": "c1", "text": "Zoom sur le terminal Cisco. Le routeur démarre en mode utilisateur, avec le chevron : on n'y fait presque rien." },
+    { "id": "c2", "text": "Enable passe en mode privilégié, avec le dièse : on peut tout consulter." },
+    { "id": "c3", "text": "Configure terminal entre en configuration globale, et hostname Cheseaux donne son nom au routeur." },
+    { "id": "c4", "text": "Interface ethernet zéro slash zéro descend dans la configuration de cette interface." },
+    { "id": "c5", "text": "Ip address dix point un point un point un, avec le masque deux cent cinquante-cinq, trois fois, puis zéro : c'est le même slash vingt-quatre, écrit à la Cisco." },
+    { "id": "c6", "text": "No shutdown allume l'interface : sur un Cisco, elles sont éteintes par défaut. C'est l'oubli classique." },
+    { "id": "c7", "text": "Deux exit pour remonter, puis show run affiche la configuration active, la running config." },
+    { "id": "c8", "text": "Attention : cette configuration vit en RAM. Si le routeur s'éteint, elle est perdue. On y reviendra à l'objectif cinq." }
+  ] },
+  { "scene": "dhcpconf", "lines": [
+    { "id": "d1", "text": "Retour à la vue d'ensemble : les deux PC pingent maintenant le routeur, en dix point un point un point un." },
+    { "id": "d2", "text": "Objectif trois : dans un vrai réseau, configurer chaque adresse à la main n'est pas pratique, et on risque des conflits." },
+    { "id": "d3", "text": "C'est le rôle de DHCP : un serveur distribue les adresses à la demande, sans doublon." },
+    { "id": "d4", "text": "Sur le routeur, ip dhcp pool cheseaux SR un crée la réserve d'adresses." },
+    { "id": "d5", "text": "Network dix point un point un point zéro, masque slash vingt-quatre : c'est la plage dans laquelle il pioche." },
+    { "id": "d6", "text": "Default router dix point un point un point un : la passerelle qu'il annoncera aux clients, c'est-à-dire lui-même." },
+    { "id": "d7", "text": "Lease fixe la durée du bail : l'adresse est prêtée, pas donnée, et le client devra la renouveler." },
+    { "id": "d8", "text": "Côté PC, on efface l'adresse fixe, puis dans le fichier etc network interfaces, on écrit iface ens trois inet dhcp." },
+    { "id": "d9", "text": "On relance le réseau avec systemctl restart networking. Le PC demande alors une adresse : zoomons sur cet échange." }
+  ] },
+  { "scene": "dhcp", "lines": [
+    { "id": "z1", "text": "Zoom sur DHCP. Au départ, PC un n'a aucune adresse IP, et il ne sait pas qui est le serveur." },
+    { "id": "z2", "text": "Premier message : DHCP Discover. Il part de l'adresse zéro, vers l'adresse de broadcast, deux cent cinquante-cinq partout." },
+    { "id": "z3", "text": "Pourquoi un broadcast ? PC un ne connaît pas l'adresse du serveur, alors il s'adresse à tout le réseau local, et le switch recopie le message sur tous ses ports." },
+    { "id": "z4", "text": "PC deux le reçoit aussi, mais il n'est pas serveur DHCP : il l'ignore. Le routeur, lui, va répondre." },
+    { "id": "z5", "text": "Deuxième message : DHCP Offer. Le serveur propose une adresse libre, avec le masque, la passerelle et la durée du bail." },
+    { "id": "z6", "text": "L'offre part aussi en broadcast, car le client n'a pas encore d'adresse pour la recevoir." },
+    { "id": "z7", "text": "Troisième message : DHCP Request. Le client répond : je prends cette adresse-là." },
+    { "id": "z8", "text": "Encore en broadcast, pour que tous les serveurs DHCP du réseau sachent quelle offre il a choisie." },
+    { "id": "z9", "text": "Quatrième message : DHCP Ack. Le serveur confirme, et le bail commence." },
+    { "id": "z10", "text": "Discover, Offer, Request, Ack : retiens DORA. Un même numéro de transaction relie les quatre messages.", "tts": "Discover, Offer, Request, Ack : retiens Dora. Un même numéro de transaction relie les quatre messages." },
+    { "id": "z11", "text": "Ce sont des messages UDP : le client utilise le port soixante-huit, le serveur le port soixante-sept." },
+    { "id": "z12", "text": "Dans le labo, on les capture avec Wireshark et le filtre bootp, en relançant DHCP avec dhclient moins r, puis dhclient.", "tts": "Dans le labo, on les capture avec Wireshark et le filtre boute pé, en relançant DHCP avec D H client moins r, puis D H client." },
+    { "id": "z13", "text": "PC un configure alors son adresse. Retour à la vue d'ensemble." }
+  ] },
+  { "scene": "save", "lines": [
+    { "id": "s1", "text": "Les deux PC ont reçu leur adresse du routeur, et le ping vers dix point un point un point un fonctionne." },
+    { "id": "s2", "text": "Objectif cinq : sauvegarder la configuration du routeur, car le labo dure deux semaines." },
+    { "id": "s3", "text": "La running config est en RAM et disparaît à l'extinction ; la startup config, en NVRAM, survit au redémarrage." },
+    { "id": "s4", "text": "On suit donc la procédure d'export du manuel EVE-NG avant de fermer le labo, sinon tout est à refaire.", "tts": "On suit donc la procédure d'export du manuel Ève N G avant de fermer le labo, sinon tout est à refaire." }
+  ] },
+  { "scene": "ncintro", "lines": [
+    { "id": "n1", "text": "Objectif six : Netcat, le couteau suisse du réseau. Il ouvre une connexion entre deux machines et y fait passer ce qu'on tape." },
+    { "id": "n2", "text": "Sur PC deux, N C moins l moins p sept sept sept sept : Netcat écoute ce port, comme un serveur." },
+    { "id": "n3", "text": "Sur PC un, N C suivi de l'adresse de PC deux et du même port : il s'y connecte comme client." },
+    { "id": "n4", "text": "Mais comment la connexion trouve-t-elle Netcat dans PC deux ? Zoom sur le port." }
+  ] },
+  { "scene": "port", "lines": [
+    { "id": "q1", "text": "Zoom sur le port. L'adresse IP amène les données jusqu'à la bonne machine." },
+    { "id": "q2", "text": "Le port, un numéro de zéro à soixante-cinq mille cinq cent trente-cinq, les amène au bon programme : ici, Netcat sur le port sept sept sept sept." },
+    { "id": "q3", "text": "Les autres ports, comme le Web sur quatre-vingts, restent fermés tant qu'aucun programme ne les écoute." },
+    { "id": "q4", "text": "Netcat utilise TCP : une connexion est ouverte, et tout ce qui est envoyé arrive dans l'ordre. Retour aux consoles." }
+  ] },
+  { "scene": "chat", "lines": [
+    { "id": "h1", "text": "La connexion est établie : ce qu'on tape sur PC un s'affiche sur PC deux." },
+    { "id": "h2", "text": "Et dans l'autre sens aussi : on peut chatter entre les deux machines !" },
+    { "id": "h3", "text": "Contrôle C ferme la connexion des deux côtés." }
+  ] },
+  { "scene": "file", "lines": [
+    { "id": "f1", "text": "Deuxième usage : transférer un fichier. Sur PC deux, on écoute le port, avec à la fin chevron fichier B point t x t." },
+    { "id": "f2", "text": "Ce chevron redirige tout ce que Netcat reçoit dans le fichier B, au lieu de l'afficher." },
+    { "id": "f3", "text": "Sur PC un, on se connecte en ajoutant chevron inverse fichier A point t x t : Netcat envoie le contenu du fichier A." },
+    { "id": "f4", "text": "Le fichier traverse la connexion, et cat fichier B, sur PC deux, affiche le même texte." },
+    { "id": "f5", "text": "Ça marche avec n'importe quel fichier, même une photo ou un programme." }
+  ] },
+  { "scene": "web", "lines": [
+    { "id": "w1", "text": "Troisième usage : simuler un serveur Web. On ajoute une machine Ubuntu avec un navigateur, reliée au même switch." },
+    { "id": "w2", "text": "Sur PC deux, on lance une boucle while true, qui recommence sans fin." },
+    { "id": "w3", "text": "À chaque tour, elle fabrique une réponse HTTP : la ligne HTTP un point un, deux cents, OK, une ligne vide, puis le texte Heure à Yverdon et la date." },
+    { "id": "w4", "text": "Le tube envoie cette réponse à Netcat, qui écoute le port quatre-vingts, celui du Web. Sudo est nécessaire, car les ports sous mille vingt-quatre sont réservés." },
+    { "id": "w5", "text": "Sur Ubuntu, dans Firefox, on ouvre l'adresse de PC deux." },
+    { "id": "w6", "text": "Le navigateur envoie une requête GET. Netcat lui renvoie la réponse préparée, et la page s'affiche.", "tts": "Le navigateur envoie une requête guette. Netcat lui renvoie la réponse préparée, et la page s'affiche." },
+    { "id": "w7", "text": "Netcat s'arrête après chaque connexion, et la boucle le relance aussitôt : à chaque rechargement, l'heure est mise à jour." }
+  ] },
+  { "scene": "google", "lines": [
+    { "id": "g1", "text": "Dernier usage : jouer le navigateur. On débranche Ubuntu du switch et on le relie au nuage Management, qui mène vers Internet." },
+    { "id": "g2", "text": "On lui donne une adresse fixe dans le réseau du labo, avec la passerelle point un et les serveurs DNS de l'école." },
+    { "id": "g3", "text": "Dans un terminal, N C www point google point ch quatre-vingts ouvre une connexion vers le serveur Web de Google." },
+    { "id": "g4", "text": "On tape la requête à la main : GET slash HTTP un point un, puis deux fois Entrée.", "tts": "On tape la requête à la main : guette slash HTTP un point un, puis deux fois Entrée." },
+    { "id": "g5", "text": "La ligne vide termine la requête. Google répond HTTP un point un, deux cents, OK, suivi du code HTML de sa page." },
+    { "id": "g6", "text": "Ni le serveur ni le client ne font rien de compliqué : HTTP est un protocole en texte clair, qu'on peut taper soi-même." }
+  ] },
+  { "scene": "recap", "lines": [
+    { "id": "x1", "text": "Récapitulons le labo quatre en cinq points." },
+    { "id": "x2", "text": "Un switch relie les machines d'un même réseau ; ip address donne une adresse fixe, et ping teste la connexion." },
+    { "id": "x3", "text": "Sur le routeur Cisco : enable, configure terminal, interface, ip address, et surtout no shutdown." },
+    { "id": "x4", "text": "DHCP distribue les adresses en quatre messages, DORA, en broadcast, car le client n'a pas encore d'adresse.", "tts": "DHCP distribue les adresses en quatre messages, Dora, en broadcast, car le client n'a pas encore d'adresse." },
+    { "id": "x5", "text": "On sauvegarde la configuration du routeur, sinon elle disparaît avec la RAM." },
+    { "id": "x6", "text": "Et Netcat ouvre une connexion vers une adresse et un port : pour chatter, copier un fichier, ou parler HTTP à la main." }
+  ] }
+]
