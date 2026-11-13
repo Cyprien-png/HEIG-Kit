@@ -13,6 +13,7 @@
     "src",
     "scripts",
     "test",
-    "modules/visuals"
+    "modules/visuals",
+    "themes"
   ]
 }

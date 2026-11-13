@@ -61,6 +61,9 @@ Never print or commit the content of `.env` or `.cache/`.
   does not read the root `.env`
 - `data/`: downloaded documents, extracted text and MCP token; `vendor/`: installed programs; never commit them, nor any
   capture of a GAPS or Cyberlearn page (they contain personal data): keep experiments in `.cache/`
+- `themes/`: graphic charter of the courses (`docs/themes.md`): `index.ts` (pure functions shared by the renderers, the server
+  and the web app: one color per course, moods, colors of videos, documents and chips), `themes.json` (settings, committed
+  so that the server and this computer agree); `src/themes.ts` reads and writes it, `scripts/theme.ts` is `npm run theme`
 - `modules/documents/`: Markdown → PDF/HTML/DOCX renderer (own package.json: markdown-it, KaTeX, Mermaid, puppeteer;
   pandoc for DOCX), `npm run doc`
 - `modules/visuals/render.ts`: ManimGL wrapper (`npm run video`): dry run (`plan.py`: durations of the animations, each

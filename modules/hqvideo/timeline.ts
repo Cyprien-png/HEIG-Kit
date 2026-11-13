@@ -3,6 +3,7 @@
  * narration is a list of scenes, each a list of lines; a line lasts as long as its speech (or as long as it takes to
  * read it, in a silent video), and the animations of a scene are placed on the start of its lines.
  */
+import type { VideoColors } from "../../themes/index.js";
 
 export const FPS = 30;
 /** Silence after each line, at the start and at the end of a scene, in seconds. */
@@ -30,6 +31,8 @@ export interface NarrationScene {
 export interface VideoData {
   audio: boolean;
   subtitles: boolean;
+  /** Colors of the course the video belongs to (themes/index.ts); the neutral ones when absent. */
+  theme?: { course: string | null; mood: string; video: VideoColors };
   scenes: { scene: string; lines: { id: string; text: string; seconds: number; file?: string }[] }[];
 }
 

@@ -36,6 +36,7 @@ RUN python3 -m venv vendor/omnivoice/.venv \
   && HF_HOME=/app/vendor/omnivoice/hf vendor/omnivoice/.venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('k2-fsa/OmniVoice')"
 COPY tsconfig.json ./
 COPY src ./src
+COPY themes ./themes
 COPY modules ./modules
 RUN mkdir -p /jobs /voice-cache && chown node:node /jobs /voice-cache
 USER node

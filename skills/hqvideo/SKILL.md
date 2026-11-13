@@ -108,8 +108,10 @@ Rules that make a video render correctly:
 ## `heigkit` reference
 
 - **Timing**: `useLines()` (lines by id), `useScene()` (`dur`, `list`), `ramp(f, start, dur = 16)`, `lerp(a, b, p)`.
-- **Look**: `C` colors (`bg0`, `bg1`, `panel`, `line`, `text`, `dim`, `one` teal for 1 or true, `zero` grey, `sel`
-  amber for selection, `varA` pink, `varB` violet, `bad` red), `SANS`, `MONO`, `colorOf(label)`.
+- **Look**: `C` colors (`bg0`, `bg1`, `panel`, `line`, `text`, `dim`, `one` the accent of the course, also 1 or true,
+  `zero` grey, `sel`, `varA` and `varB` three second colors for selection and variables, `bad` red), `alpha(C.panel,
+  0.85)` for a transparent one, `SANS`, `MONO`, `colorOf(label)`. The colors are those of the course (see below): never
+  hard-code a background such as `"rgba(18,28,58,0.85)"`, and do not name a color in the narration.
 - **`<Header title tag? />`**: title of the scene, top left, tag above it (course, series, exercise).
 - **`<Svg>`**: a full-screen SVG in the video's coordinates; `filter="url(#glow)"` and `url(#soft)` are available.
 - **`<Val x y label size? opacity? scale? glow? />`**: a value chip (`0`, `1`, `A`, `/B`, `D2`), colored by its label.
@@ -139,6 +141,14 @@ Rules that make a video render correctly:
   formulas): see `<root>/modules/hqvideo/examples/mux.tsx`, the complete video of a SYL exercise, and
   `<root>/modules/hqvideo/examples/network-lab.tsx`, the complete video of a network lab, when you need a model for a
   kind of scene; do not read the kit's sources.
+
+## Course themes
+
+Every course has its colors, the same in videos, documents and the web app (`docs/themes.md`). A video takes those of
+the course its first comment starts with (`/** RXI ch. 5 : … */`), then of its file name (`rxi-…`): start both with the
+course code. `--course <CODE>` forces it, `--mood nuit|encre|neon|aube` tries another mood; the render prints `Theme:`.
+When the user asks to change the look of a course or "the mood", use `npm --prefix <root> run -s theme` (`mood <name>`,
+`set <COURSE> --color/--mood`, `preview`), then render again.
 
 ## Network labs
 

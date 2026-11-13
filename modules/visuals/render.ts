@@ -23,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { CACHE_DIR } from "../../src/paths.js";
+import { themeFor } from "../../src/themes.js";
 import { VOICE_ID, kokoroModelFile, kokoroPython, kokoroVoicesFile, manimBin, outputDir, tinytexBinDir } from "../../src/vendor.js";
 import { type Wav, buildTrack, parseWav, wavSeconds } from "../voice/track.js";
 import { keyFrameTimes, splitAnimations } from "./parts.js";
@@ -46,6 +47,8 @@ const { values, positionals } = parseArgs({
     frames: { type: "boolean", default: false },
     voice: { type: "boolean", default: false },
     jobs: { type: "string" },
+    course: { type: "string" },
+    mood: { type: "string" },
   },
 });
 
@@ -61,7 +64,7 @@ function fail(message: string): never {
 }
 
 const [file, scene] = positionals;
-if (!file) fail("Usage: npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--voice] [--jobs N] [--out <folder>]");
+if (!file) fail("Usage: npm run video -- <scene.py> [SceneName] [--quality low|medium|high] [--open] [--frames] [--check] [--voice] [--jobs N] [--out <folder>] [--course <CODE>] [--mood <name>]");
 if (values.voice && !scene) fail("--voice needs a scene name");
 if (values.voice && ![kokoroPython(), kokoroModelFile(), kokoroVoicesFile()].every((f) => existsSync(f))) fail("The voice is not installed: npm run setup -- voice");
 if (!QUALITY[values.quality]) fail(`Invalid --quality "${values.quality}", expected low, medium or high`);
@@ -74,6 +77,13 @@ const source = path.resolve(file);
 const folder = path.resolve(values.out ?? outputDir("videos"));
 mkdirSync(folder, { recursive: true });
 
+/** The theme of the course the scene file starts with ("MAD-congruence.py"), unless --course says it (themes/, docs/themes.md). */
+let theme: ReturnType<typeof themeFor>;
+try {
+  theme = themeFor(values.course, [path.basename(source), scene], values.mood);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
 const tex = tinytexBinDir();
 const env = {
   ...process.env,
@@ -84,6 +94,8 @@ const env = {
   PYTHONWARNINGS: "ignore",
   // No __pycache__ folder next to the scenes in the videos folder.
   PYTHONDONTWRITEBYTECODE: "1",
+  // Colors of the course, read by heigkit_manim.py (background and accent of a CourseScene).
+  ...(theme.course ? { HEIGKIT_THEME: JSON.stringify({ course: theme.course, background: theme.video.bg0, accent: theme.video.one, dim: theme.video.dim }) } : {}),
 };
 // ManimGL renders with OpenGL: on a Linux machine without display, through a virtual one.
 const headless = process.platform === "linux" && !process.env.DISPLAY;

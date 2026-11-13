@@ -31,6 +31,9 @@ text, and indexes them in a local search engine that keeps their course, teacher
 The AI assistant searches it to answer from your actual courses and cite them. You can add other sources, such as your
 own folders of PDFs, Word files or notes ([details](docs/knowledge.md)).
 
+Every course has its own colors, the same in videos, documents and the web app, and a mood you can change
+(`npm run theme`, [details](docs/themes.md)).
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) 20 or later and [git](https://git-scm.com);

@@ -44,7 +44,7 @@ export const Mux: React.FC<{
 				</text>
 			) : null}
 			{/* glow behind the box */}
-			<rect x={g.x} y={g.y} width={g.w} height={h} rx={22} fill="#3b6cff" opacity={0.22} filter="url(#soft)" />
+			<rect x={g.x} y={g.y} width={g.w} height={h} rx={22} fill={C.haloA} opacity={0.22} filter="url(#soft)" />
 			<rect x={g.x} y={g.y} width={g.w} height={h} rx={22} fill="url(#box)" />
 			<rect
 				x={g.x}

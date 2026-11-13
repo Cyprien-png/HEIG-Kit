@@ -21,6 +21,7 @@ import katex from "katex";
 import MarkdownIt from "markdown-it";
 import texmath from "markdown-it-texmath";
 import puppeteer, { type Browser } from "puppeteer";
+import { themeFor } from "../../src/themes.js";
 import { outputDir } from "../../src/vendor.js";
 
 const require = createRequire(import.meta.url);
@@ -29,16 +30,27 @@ const VIDEO = /\.(mp4|webm|mov|m4v)$/i;
 
 type Target = "pdf" | "html" | "docx";
 
-const STYLE = `
+/** Colors of the page: the neutral greys, or those of the course of the document (themes/index.ts). */
+interface Palette {
+  ink: string;
+  accent: string;
+  rule: string;
+  soft: string;
+}
+const NEUTRAL: Palette = { ink: "#1f2328", accent: "#d0d7de", rule: "#d0d7de", soft: "#f6f8fa" };
+let palette = NEUTRAL;
+
+const style = (c: Palette) => `
   @page { size: A4; margin: 18mm 16mm 20mm; }
   body { font: 11pt/1.55 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #1f2328; max-width: 800px; margin: 0 auto; padding: 0 12px; }
-  h1, h2, h3 { line-height: 1.25; margin: 1.4em 0 .5em; } h1 { font-size: 1.9em; border-bottom: 2px solid #d0d7de; padding-bottom: .3em; }
-  h2 { font-size: 1.45em; border-bottom: 1px solid #d0d7de; padding-bottom: .2em; } h3 { font-size: 1.2em; }
+  h1, h2, h3 { line-height: 1.25; margin: 1.4em 0 .5em; color: ${c.ink}; } h1 { font-size: 1.9em; border-bottom: 3px solid ${c.accent}; padding-bottom: .3em; }
+  h2 { font-size: 1.45em; border-bottom: 1px solid ${c.rule}; padding-bottom: .2em; } h3 { font-size: 1.2em; }
   h1, h2, h3, figure, pre, table, .katex-display { break-inside: avoid; } h2, h3 { break-after: avoid; }
   code { font: .9em ui-monospace, Menlo, Consolas, monospace; background: #f6f8fa; padding: .1em .3em; border-radius: 4px; }
   pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; } pre code { background: none; padding: 0; }
-  table { border-collapse: collapse; margin: 1em 0; } th, td { border: 1px solid #d0d7de; padding: 6px 12px; } th { background: #f6f8fa; }
-  blockquote { margin: 1em 0; padding: 0 1em; color: #59636e; border-left: 4px solid #d0d7de; }
+  table { border-collapse: collapse; margin: 1em 0; } th, td { border: 1px solid ${c.rule}; padding: 6px 12px; } th { background: ${c.soft}; color: ${c.ink}; }
+  blockquote { margin: 1em 0; padding: ${c === NEUTRAL ? "0 1em" : ".1em 1em"}; color: #59636e; border-left: 4px solid ${c.accent}; ${c === NEUTRAL ? "" : `background: ${c.soft};`} }
+  ${c === NEUTRAL ? "" : `a { color: ${c.accent}; }`}
   img, video { max-width: 100%; } figure { margin: 1.2em 0; text-align: center; } figcaption { color: #59636e; font-size: .9em; margin-top: .4em; }
   pre.mermaid { background: none; text-align: center; }
   .video-link { display: inline-block; position: relative; } .video-link::after { content: "▶"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 48px; color: #fff; text-shadow: 0 0 12px #000; }
@@ -95,7 +107,7 @@ function htmlPage(markdown: string, title: string, target: Target, baseDir: stri
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="${katexCss}"><link rel="stylesheet" href="${hljsCss}"><style>${STYLE}</style>
+<link rel="stylesheet" href="${katexCss}"><link rel="stylesheet" href="${hljsCss}"><style>${style(palette)}</style>
 </head><body>
 ${body}
 <script src="${mermaidJs}"></script>
@@ -199,7 +211,8 @@ function open(file: string): void {
   else spawnSync("xdg-open", [file], { stdio: "ignore" });
 }
 
-export async function render(input: string, targets: Target[], outDir?: string): Promise<string[]> {
+/** `course` sets the colors of the page; by default the course the file name or the title starts with ("RXI-labo2b…"). */
+export async function render(input: string, targets: Target[], outDir?: string, course?: string): Promise<string[]> {
   const source = path.resolve(input);
   const markdown = readFileSync(source, "utf-8");
   const baseDir = path.dirname(source);
@@ -207,6 +220,8 @@ export async function render(input: string, targets: Target[], outDir?: string):
   mkdirSync(folder, { recursive: true });
   const name = path.basename(source, path.extname(source));
   const title = /^#\s+(.+)$/m.exec(markdown)?.[1] ?? name;
+  const theme = themeFor(course, [name, title]);
+  palette = theme.course ? theme.doc : NEUTRAL;
 
   const outputs: string[] = [];
   for (const target of targets) {
@@ -229,6 +244,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       open: { type: "boolean", default: false },
       out: { type: "string" },
       where: { type: "boolean", default: false },
+      course: { type: "string" },
     },
   });
   if (values.where) {
@@ -237,11 +253,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     process.exit(0);
   }
   if (!positionals[0]) {
-    console.log("Usage: npm run doc -- <file.md> [--pdf] [--html] [--docx] [--open] [--out <folder>]");
+    console.log("Usage: npm run doc -- <file.md> [--pdf] [--html] [--docx] [--open] [--out <folder>] [--course <CODE>]");
     process.exit(1);
   }
   const targets = (["pdf", "html", "docx"] as const).filter((t) => values[t]);
-  render(positionals[0], targets.length > 0 ? [...targets] : ["pdf"], values.out)
+  render(positionals[0], targets.length > 0 ? [...targets] : ["pdf"], values.out, values.course)
     .then((outputs) => {
       for (const output of outputs) console.log(output);
       if (values.open) outputs.forEach(open);

@@ -4,6 +4,7 @@
  *
  *   npm run hqvideo -- <video.tsx> [--audio] [--quality low|medium|high] [--open] [--frames] [--check] [--no-subtitles]
  *                      [--narration <file.json>] [--jobs N] [--out <folder>]
+ *                      [--course RXI] [--mood nuit|encre|neon|aube]
  *   npm run hqvideo -- --where    default folder for generated videos
  *
  * A video is two files: `<name>.tsx` exports its scenes (`export const scenes = { intro: Intro, … }`, components using
@@ -11,6 +12,9 @@
  * line. A line lasts as long as its speech (--audio, OmniVoice in vendor/omnivoice) or as long as it takes to read it
  * (silent video), and the scenes place their animations on the start of the lines (`useLines()`), so the same scenes
  * work with and without sound.
+ *
+ * The colors are those of the course the video belongs to (themes/, docs/themes.md): the course its first comment or
+ * its file name starts with, or --course; --mood tries another mood than the one of the settings.
  *
  * --check renders only an image of the key frames (the end of the lines), in seconds and without the voice, to catch
  * errors and check the layout; --frames prints the same image for the rendered video.
@@ -24,6 +28,7 @@ import { parseArgs } from "node:util";
 import { bundle } from "@remotion/bundler";
 import { ensureBrowser, renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { CACHE_DIR } from "../../src/paths.js";
+import { themeFor } from "../../src/themes.js";
 import { HQ_VOICE_ID, omnivoiceHome, omnivoicePython, outputDir } from "../../src/vendor.js";
 import { parseWav, wavSeconds } from "../voice/track.js";
 import { FPS, type NarrationScene, type VideoData, buildTimeline, keyFrames, parseNarration, readingSeconds } from "./timeline.js";
@@ -45,6 +50,8 @@ const { values, positionals } = parseArgs({
     "no-subtitles": { type: "boolean", default: false },
     narration: { type: "string" },
     jobs: { type: "string" },
+    course: { type: "string" },
+    mood: { type: "string" },
   },
 });
 
@@ -59,7 +66,7 @@ function fail(message: string): never {
 }
 
 const [file] = positionals;
-if (!file) fail("Usage: npm run hqvideo -- <video.tsx> [--audio] [--quality low|medium|high] [--open] [--frames] [--check] [--no-subtitles] [--narration <file.json>] [--jobs N] [--out <folder>]");
+if (!file) fail("Usage: npm run hqvideo -- <video.tsx> [--audio] [--quality low|medium|high] [--open] [--frames] [--check] [--no-subtitles] [--narration <file.json>] [--jobs N] [--out <folder>] [--course <CODE>] [--mood <name>]");
 if (!SCALE[values.quality]) fail(`Invalid --quality "${values.quality}", expected low, medium or high`);
 /** Browser tabs drawing frames in parallel: half the processors, at most 8 (each tab takes a few hundred MB). */
 const jobs = values.jobs ? Number(values.jobs) : Math.min(8, Math.max(1, Math.floor(os.availableParallelism() / 2)));
@@ -69,6 +76,14 @@ if (!existsSync(path.join(HERE, "node_modules", "remotion"))) fail("The high qua
 const source = path.resolve(file);
 if (!existsSync(source)) fail(`${source} does not exist`);
 const name = path.basename(source).replace(/\.[jt]sx?$/, "");
+/** The theme of the course the video starts with (its first comment, "RXI ch. 5 : …", or its file name), unless --course says it. */
+const firstComment = /^\s*\/\*\*?\s*([^\n]*)/.exec(readFileSync(source, "utf8"))?.[1];
+let theme: ReturnType<typeof themeFor>;
+try {
+  theme = themeFor(values.course, [firstComment, name], values.mood);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
 const narrationFile = path.resolve(values.narration ?? path.join(path.dirname(source), `${name}.narration.json`));
 if (!existsSync(narrationFile)) fail(`The narration ${narrationFile} does not exist: a video needs its lines, [{ "scene": "intro", "lines": [{ "id": "i1", "text": "…" }] }]`);
 let narration: NarrationScene[];
@@ -147,6 +162,7 @@ try {
   const data: VideoData = {
     audio,
     subtitles: !values["no-subtitles"],
+    theme: { course: theme.course, mood: theme.mood, video: theme.video },
     scenes: narration.map((scene) => ({
       scene: scene.scene,
       lines: scene.lines.map((line) => {
@@ -193,6 +209,7 @@ try {
       await renderStill({ composition, serveUrl, output, frame, scale: 1 / 3, chromiumOptions }).catch((error) => fail(`Frame ${frame} (${(frame / FPS).toFixed(1)} s) fails:\n${errorText(error)}`));
       images.push(output);
     }
+    console.log(`Theme: ${theme.course ?? "neutral (no course recognized, see --course)"}, mood ${theme.mood}.`);
     console.log(`Video OK: ${timeline.scenes.length} scene${timeline.scenes.length > 1 ? "s" : ""}, ${seconds} s without the voice.`);
     const image = sheet(images);
     if (image) console.log(`Frames: ${image}`);
@@ -213,6 +230,7 @@ try {
     renameSync(staging, video);
     console.log(video);
     if (values.open) open(video);
+    console.log(`Theme: ${theme.course ?? "neutral (no course recognized, see --course)"}, mood ${theme.mood}.`);
     console.log(`Rendered in ${((Date.now() - started) / 1000).toFixed(1)} s (${seconds} s of video, ${audio ? "with the voice" : "silent"}).`);
     if (values.frames) {
       const dir = path.join(work, "frames");

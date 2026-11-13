@@ -30,6 +30,7 @@
     "users": "tsx scripts/users.ts",
     "housekeeping": "tsx scripts/housekeeping.ts",
     "library": "tsx scripts/library.ts",
+    "theme": "tsx scripts/theme.ts",
     "exams": "tsx scripts/exams.ts",
     "calendar": "tsx scripts/study.ts calendar",
     "cards": "tsx scripts/study.ts cards",

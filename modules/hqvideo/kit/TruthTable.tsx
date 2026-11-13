@@ -68,7 +68,7 @@ export const TruthTable: React.FC<{
       <rect x={t.x - 14} y={t.y - 10} width={width + 28} height={h + 20} rx={22} fill={C.panel} fillOpacity={0.75} stroke={C.line} strokeWidth={1.5} />
       {banded
         ? Array.from({ length: Math.ceil(values.length / banded.size) }, (_, i) => {
-            const color = i % 2 ? "#6aa8ff" : "#3fe0c5";
+            const color = i % 2 ? C.edge : C.one;
             return (
               <rect
                 key={i}

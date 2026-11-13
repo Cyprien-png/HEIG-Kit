@@ -26,13 +26,19 @@ import os
 from manimlib import *
 
 __all__ = [
-    "FIGURE", "CourseScene", "colored", "FrDecimal", "title_card", "Panel", "live_value", "follow", "steps", "recap",
+    "FIGURE", "ACCENT", "BACKGROUND", "CourseScene", "colored", "FrDecimal", "title_card", "Panel", "live_value", "follow", "steps", "recap",
     "source_line", "value_table", "sign_line", "approach", "hole", "vertical_asymptote", "UnitCircle", "unroll",
     "labeled_dot", "group_box", "hasse", "incomparable", "Matrix01",
 ]
 
 # Center of the figure in the usual layout: figure on the left half, text panel on the right half.
 FIGURE = np.array([-3.3, -0.4, 0])
+
+# Colors of the course the video belongs to (themes/, set by `npm run video`): the background of a CourseScene and the
+# accent of its title. Without a course: black, and the grey subtitle videos always had.
+_THEME: dict = json.loads(os.environ["HEIGKIT_THEME"]) if os.environ.get("HEIGKIT_THEME") else {}
+BACKGROUND: str = _THEME.get("background", "#000000")
+ACCENT: str = _THEME.get("accent", GREY_A)
 
 # Spoken lines of the scene, read by plan.py: [{"text": ..., "time": seconds in the video}].
 VOICE_LINES: list[dict] = []
@@ -68,7 +74,7 @@ def title_card(text: str, sub: str | None = None, font_size: int = 40) -> VGroup
     title = Text(text, font_size=font_size).to_edge(UP, buff=0.3)
     group = VGroup(title)
     if sub:
-        group.add(colored(sub, 26, GREY_A).next_to(title, DOWN, buff=0.2))
+        group.add(colored(sub, 26, ACCENT).next_to(title, DOWN, buff=0.2))
     return group
 
 
@@ -111,6 +117,9 @@ class CourseScene(Scene):
     Template of a course video: a title at the top, the figure on the left (around FIGURE), a text panel on the right
     (`self.say`), and an end card. In construct: `self.title(...)`, then the steps, then `self.finish(...)`.
     """
+
+    # The background of the course (BACKGROUND), behind every scene of the video.
+    default_camera_config = dict(background_color=BACKGROUND)
 
     # Time in the video, and when the current spoken line ends.
     video_time = 0.0
@@ -284,7 +293,7 @@ def approach(scene: Scene, axes: Axes, f, x_from: float, x_to: float, color=YELL
 
 def hole(axes: Axes, x: float, y: float, color=BLUE) -> Circle:
     """Empty circle on a graph where the function is not defined (a "hole")."""
-    return Circle(radius=0.07).set_stroke(color, 3).set_fill(BLACK, 1).move_to(axes.c2p(x, y))
+    return Circle(radius=0.07).set_stroke(color, 3).set_fill(BACKGROUND, 1).move_to(axes.c2p(x, y))
 
 
 def vertical_asymptote(axes: Axes, x: float, label: str | None = None) -> VGroup:

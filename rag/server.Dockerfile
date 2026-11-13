@@ -6,6 +6,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
+# The themes of the courses, shared with the renderers: web/src/lib/courses.ts imports ../../../themes.
+COPY themes /themes
 RUN npm run build
 
 FROM node:22-bookworm-slim
@@ -16,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
+COPY themes ./themes
 # The administration commands run on the server itself: npm run users, npm run housekeeping (docs/accounts.md).
 COPY scripts/users.ts scripts/housekeeping.ts ./scripts/
 COPY rag/migrations ./rag/migrations

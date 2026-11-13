@@ -1,22 +1,17 @@
 /** Look of the high quality videos: colors, fonts, easing, value chips, background, header and subtitles. */
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
+import data from "@heigkit/data";
+import { NEUTRAL_VIDEO, type VideoColors, alpha } from "../../../themes/index";
 import { useScene } from "./context";
 
-export const C = {
-	bg0: '#070b18',
-	bg1: '#0e1630',
-	panel: '#121c3a',
-	line: '#2a3a66',
-	text: '#eaf0ff',
-	dim: '#8493b8',
-	one: '#3fe0c5',
-	zero: '#6f7fa6',
-	sel: '#ffc857',
-	varA: '#ff7ac6',
-	varB: '#9d8cff',
-	bad: '#ff6b6b',
-};
+export { alpha };
+
+/**
+ * The colors of the video: those of its course and mood (themes/index.ts), given by the renderer with the timing; the
+ * neutral ones when the video belongs to no course. `C.one` is the accent of the course.
+ */
+export const C: VideoColors = {...NEUTRAL_VIDEO, ...data.theme?.video};
 export const SANS = 'system-ui, -apple-system, "Helvetica Neue", sans-serif';
 export const MONO = '"SF Mono", Menlo, monospace';
 
@@ -67,12 +62,12 @@ export const Defs: React.FC = () => (
 			<feGaussianBlur stdDeviation="18" />
 		</filter>
 		<linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
-			<stop offset="0" stopColor="#1a2750" />
-			<stop offset="1" stopColor="#101937" />
+			<stop offset="0" stopColor={C.boxTop} />
+			<stop offset="1" stopColor={C.boxBottom} />
 		</linearGradient>
 		<linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
-			<stop offset="0" stopColor="#6aa8ff" />
-			<stop offset="1" stopColor="#3fe0c5" />
+			<stop offset="0" stopColor={C.edge} />
+			<stop offset="1" stopColor={C.one} />
 		</linearGradient>
 	</defs>
 );
@@ -85,15 +80,15 @@ export const Background: React.FC = () => {
 			<svg width={1920} height={1080}>
 				<defs>
 					<pattern id="grid" width={60} height={60} patternUnits="userSpaceOnUse">
-						<path d="M60 0H0V60" fill="none" stroke="#ffffff" strokeOpacity={0.035} strokeWidth={1} />
+						<path d="M60 0H0V60" fill="none" stroke="#ffffff" strokeOpacity={C.grid} strokeWidth={1} />
 					</pattern>
 					<radialGradient id="blobA">
-						<stop offset="0" stopColor="#3b5bff" stopOpacity={0.2} />
-						<stop offset="1" stopColor="#3b5bff" stopOpacity={0} />
+						<stop offset="0" stopColor={C.haloA} stopOpacity={Math.min(0.6, 0.2 * C.halo)} />
+						<stop offset="1" stopColor={C.haloA} stopOpacity={0} />
 					</radialGradient>
 					<radialGradient id="blobB">
-						<stop offset="0" stopColor="#3fe0c5" stopOpacity={0.13} />
-						<stop offset="1" stopColor="#3fe0c5" stopOpacity={0} />
+						<stop offset="0" stopColor={C.haloB} stopOpacity={Math.min(0.5, 0.13 * C.halo)} />
+						<stop offset="1" stopColor={C.haloB} stopOpacity={0} />
 					</radialGradient>
 				</defs>
 				<circle cx={380 + drift} cy={860} r={620} fill="url(#blobA)" />
@@ -148,7 +143,7 @@ export const Subtitles: React.FC = () => {
 					maxWidth: 1400,
 					padding: '12px 28px',
 					borderRadius: 16,
-					background: 'rgba(7,11,24,0.72)',
+					background: alpha(C.bg0, 0.72),
 					border: '1px solid rgba(255,255,255,0.08)',
 					color: C.text,
 					fontFamily: SANS,

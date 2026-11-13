@@ -1,7 +1,7 @@
 /** RXI labo 4 : mise en place d'un réseau LAN (IP fixes, ping, routeur Cisco, DHCP et DORA, sauvegarde, Netcat : chat, fichier, serveur Web, client HTTP), avec zooms. */
 import React from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
-import { Broadcast, C, Camera, Device, type DeviceKind, FieldCard, FileIcon, Header, Lens, lerp, Link, MONO, NET, Packet, packetAt, type Pt, ramp, SANS, SeqDiagram, Svg, Terminal, type TermLine, useLines, useScene, ZoomBadge, zoomScale } from "heigkit";
+import { alpha, Broadcast, C, Camera, Device, type DeviceKind, FieldCard, FileIcon, Header, Lens, lerp, Link, MONO, NET, Packet, packetAt, type Pt, ramp, SANS, SeqDiagram, Svg, Terminal, type TermLine, useLines, useScene, ZoomBadge, zoomScale } from "heigkit";
 
 const TAG = "RXI · Labo 4 · Réseau LAN";
 const ZOOM = 2.8;
@@ -58,7 +58,7 @@ const Card: React.FC<{ x: number; y: number; w: number; p: number; color?: strin
       transform: `translateY(${lerp(16, 0, p)}px)`,
       padding: "16px 24px",
       borderRadius: 18,
-      background: "rgba(18,28,58,0.92)",
+      background: alpha(C.panel, 0.92),
       border: `1.5px solid ${color}`,
       fontFamily: SANS,
       color: C.text,
@@ -108,7 +108,7 @@ const Intro: React.FC = () => {
           const p = ramp(f, i3.s + i * 7, 16);
           const nc = i === 5 && f >= i4.s;
           return (
-            <div key={o} style={{ opacity: p, transform: `translateY(${lerp(14, 0, p)}px)`, display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderRadius: 16, background: "rgba(18,28,58,0.88)", border: `1.5px solid ${nc ? C.varA : C.line}` }}>
+            <div key={o} style={{ opacity: p, transform: `translateY(${lerp(14, 0, p)}px)`, display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderRadius: 16, background: alpha(C.panel, 0.88), border: `1.5px solid ${nc ? C.varA : C.line}` }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: nc ? C.varA : C.one, color: C.bg0, fontWeight: 800, fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
               <div style={{ color: C.text, fontSize: 24, fontWeight: 600 }}>{o}</div>
             </div>
@@ -210,7 +210,7 @@ const Ping: React.FC = () => {
             <Broadcast f={f} start={p4.s + 8} at={ZP.pc1} color={NET.arp} radius={420} waves={3} />
           </Net>
         </Svg>
-        <div style={{ position: "absolute", left: 300, top: 170, opacity: ramp(f, p4.s + 10, 16) * (1 - ramp(f, p5.s, 12)), fontFamily: MONO, fontSize: 26, color: NET.arp, padding: "8px 18px", borderRadius: 14, border: `1.5px solid ${NET.arp}`, background: "rgba(7,11,24,0.85)" }}>
+        <div style={{ position: "absolute", left: 300, top: 170, opacity: ramp(f, p4.s + 10, 16) * (1 - ramp(f, p5.s, 12)), fontFamily: MONO, fontSize: 26, color: NET.arp, padding: "8px 18px", borderRadius: 14, border: `1.5px solid ${NET.arp}`, background: alpha(C.bg0, 0.85) }}>
           ARP (broadcast) : « qui a 10.1.1.3 ? »
         </div>
         <Terminal f={f} x={300} y={590} w={1320} title="PC1 — console" prompt="labo@pc1:~$" lines={term} rows={4} fontSize={22} />
@@ -252,7 +252,7 @@ const Router: React.FC = () => {
           {roles.map((r, i) => {
             const p = ramp(f, r2.s + 20 + i * 24, 16);
             return (
-              <div key={r.t} style={{ opacity: p, transform: `translateX(${lerp(-30, 0, p)}px)`, padding: "14px 22px", borderRadius: 16, background: "rgba(18,28,58,0.9)", border: `1.5px solid ${r.c}`, width: 520 }}>
+              <div key={r.t} style={{ opacity: p, transform: `translateX(${lerp(-30, 0, p)}px)`, padding: "14px 22px", borderRadius: 16, background: alpha(C.panel, 0.9), border: `1.5px solid ${r.c}`, width: 520 }}>
                 <div style={{ color: r.c, fontSize: 28, fontWeight: 800 }}>{r.t}</div>
                 <div style={{ color: C.dim, fontSize: 22 }}>{r.d}</div>
               </div>
@@ -331,7 +331,7 @@ const Cisco: React.FC = () => {
                 transform: `translateX(${lerp(-30, 0, p)}px) scale(${on ? 1.03 : 1})`,
                 padding: "16px 22px",
                 borderRadius: 18,
-                background: "rgba(18,28,58,0.92)",
+                background: alpha(C.panel, 0.92),
                 border: `${on ? 3 : 1.5}px solid ${on ? m.c : C.line}`,
                 fontFamily: SANS,
               }}
@@ -555,7 +555,7 @@ const Dhcp: React.FC = () => {
           {["Discover", "Offer", "Request", "Ack"].map((w, i) => {
             const p = ramp(f, z10.s + i * 8, 14);
             return (
-              <div key={w} style={{ flex: 1, opacity: p, padding: "12px 0", borderRadius: 16, textAlign: "center", background: "rgba(18,28,58,0.92)", border: `1.5px solid ${i === 3 ? C.one : C.sel}` }}>
+              <div key={w} style={{ flex: 1, opacity: p, padding: "12px 0", borderRadius: 16, textAlign: "center", background: alpha(C.panel, 0.92), border: `1.5px solid ${i === 3 ? C.one : C.sel}` }}>
                 <div style={{ fontSize: 64, fontWeight: 900, color: i === 3 ? C.one : C.sel }}>{w[0]}</div>
                 <div style={{ fontSize: 20, color: C.dim }}>{w}</div>
               </div>
@@ -608,7 +608,7 @@ const Save: React.FC = () => {
           {mem.map((m, i) => {
             const p = ramp(f, s3.s + i * 30, 16);
             return (
-              <div key={m.t} style={{ opacity: p, transform: `translateX(${lerp(-30, 0, p)}px)`, display: "flex", alignItems: "center", gap: 18, width: 660, padding: "14px 22px", borderRadius: 16, background: "rgba(18,28,58,0.92)", border: `1.5px solid ${m.c}` }}>
+              <div key={m.t} style={{ opacity: p, transform: `translateX(${lerp(-30, 0, p)}px)`, display: "flex", alignItems: "center", gap: 18, width: 660, padding: "14px 22px", borderRadius: 16, background: alpha(C.panel, 0.92), border: `1.5px solid ${m.c}` }}>
                 <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, color: m.c, width: 120 }}>{m.t}</div>
                 <div>
                   <div style={{ fontFamily: MONO, fontSize: 24, color: C.text }}>{m.n}</div>
@@ -897,12 +897,12 @@ const Web: React.FC = () => {
           { t: "fabrique la réponse HTTP", c: C.sel, at: w3.s },
           { t: "l'envoie au client, port 80 (sudo : port < 1024)", c: C.varA, at: w4.s },
         ].map((b) => (
-          <div key={b.t} style={{ opacity: ramp(f, b.at + 6, 14), padding: "8px 16px", borderRadius: 12, border: `1.5px solid ${b.c}`, color: b.c, background: "rgba(18,28,58,0.9)" }}>
+          <div key={b.t} style={{ opacity: ramp(f, b.at + 6, 14), padding: "8px 16px", borderRadius: 12, border: `1.5px solid ${b.c}`, color: b.c, background: alpha(C.panel, 0.9) }}>
             {b.t}
           </div>
         ))}
       </div>
-      <div style={{ position: "absolute", left: 1250, top: 350, width: 580, opacity: ramp(f, w3.s + 30, 16), padding: "14px 20px", borderRadius: 14, background: "rgba(18,28,58,0.92)", border: `1.5px solid ${C.sel}`, fontFamily: MONO, fontSize: 20, lineHeight: 1.45, color: C.text }}>
+      <div style={{ position: "absolute", left: 1250, top: 350, width: 580, opacity: ramp(f, w3.s + 30, 16), padding: "14px 20px", borderRadius: 14, background: alpha(C.panel, 0.92), border: `1.5px solid ${C.sel}`, fontFamily: MONO, fontSize: 20, lineHeight: 1.45, color: C.text }}>
         <div style={{ color: C.sel }}>HTTP/1.1 200 OK</div>
         <div style={{ color: C.dim }}>(ligne vide)</div>
         <div>Heure à Yverdon</div>
@@ -1001,7 +1001,7 @@ const Recap: React.FC = () => {
         {items.map((it, i) => {
           const p = ramp(f, it.at, 18);
           return (
-            <div key={it.t} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, display: "flex", alignItems: "center", gap: 24, width: 1500, padding: "16px 26px", borderRadius: 20, background: "rgba(18,28,58,0.88)", border: `1px solid ${C.line}` }}>
+            <div key={it.t} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, display: "flex", alignItems: "center", gap: 24, width: 1500, padding: "16px 26px", borderRadius: 20, background: alpha(C.panel, 0.88), border: `1px solid ${C.line}` }}>
               <div style={{ width: 58, height: 58, borderRadius: 16, background: it.c, color: C.bg0, fontSize: 32, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
               <div>
                 <div style={{ color: C.text, fontSize: 32, fontWeight: 700 }}>{it.t}</div>

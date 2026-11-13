@@ -44,6 +44,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), pdfjsAssets()],
   server: {
     port: 5180,
+    // The themes of the courses live next to web/ (themes/, shared with the renderers).
+    fs: { allow: [".."] },
     proxy: {
       "/api": { target: process.env.HEIG_DEV_API ?? "http://127.0.0.1:8766", changeOrigin: true },
       "/files": { target: process.env.HEIG_DEV_API ?? "http://127.0.0.1:8766", changeOrigin: true },

@@ -1,7 +1,7 @@
 /** Pieces of the network videos (RXI labs): devices, links, packets, broadcasts, terminals, arrow diagrams and the zoom camera. */
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
-import { C, MONO, SANS, lerp, ramp } from "./ui";
+import { C, MONO, SANS, alpha, lerp, ramp } from "./ui";
 
 export type Pt = { x: number; y: number };
 export type DeviceKind = "laptop" | "pc" | "server" | "router" | "switch" | "cloud" | "browser";
@@ -287,7 +287,7 @@ export const Terminal: React.FC<{
         opacity,
         borderRadius: 16,
         overflow: "hidden",
-        background: "rgba(5,8,18,0.94)",
+        background: alpha(C.bg0, 0.94),
         border: `1.5px solid ${C.line}`,
         boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
         fontFamily: MONO,
@@ -398,7 +398,7 @@ export const FieldCard: React.FC<{ x: number; y: number; w: number; title: strin
   reveal,
   f = 0,
 }) => (
-  <div style={{ position: "absolute", left: x, top: y, width: w, opacity, padding: "16px 22px", borderRadius: 18, background: "rgba(18,28,58,0.92)", border: `1.5px solid ${color}`, fontFamily: SANS }}>
+  <div style={{ position: "absolute", left: x, top: y, width: w, opacity, padding: "16px 22px", borderRadius: 18, background: alpha(C.panel, 0.92), border: `1.5px solid ${color}`, fontFamily: SANS }}>
     <div style={{ color, fontSize: 22, fontWeight: 800, letterSpacing: 1, marginBottom: 8 }}>{title}</div>
     {fields.map(([k, v], i) => (
       <div key={i} style={{ display: "flex", gap: 16, fontSize: 22, lineHeight: 1.55, opacity: reveal ? ramp(f, reveal[i] ?? 0, 14) : 1 }}>
@@ -448,7 +448,7 @@ export const Lens: React.FC<{ x: number; y: number; w: number; h: number; label:
 
 /** The breadcrumb of a zoom scene, top right: "Vue d'ensemble › DHCP", with a magnifying glass. */
 export const ZoomBadge: React.FC<{ path: string[]; opacity?: number; color?: string }> = ({ path, opacity = 1, color = C.sel }) => (
-  <div style={{ position: "absolute", right: 90, top: 62, opacity, display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderRadius: 30, background: "rgba(18,28,58,0.9)", border: `1.5px solid ${color}`, fontFamily: SANS, fontSize: 22 }}>
+  <div style={{ position: "absolute", right: 90, top: 62, opacity, display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderRadius: 30, background: alpha(C.panel, 0.9), border: `1.5px solid ${color}`, fontFamily: SANS, fontSize: 22 }}>
     <svg width={26} height={26} viewBox="-13 -13 26 26">
       <circle cx={-2} cy={-2} r={7.5} fill="none" stroke={color} strokeWidth={2.5} />
       <path d="M4 4 L10 10" stroke={color} strokeWidth={3} strokeLinecap="round" />

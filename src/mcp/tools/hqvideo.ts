@@ -19,8 +19,8 @@ export const HQ_VIDEO_API =
   "duration, `.e` end). Everything is a pure function of `f`: no CSS animation, no state, no timer. `ramp(f, a1.s, 16)` goes 0→1 over 16 " +
   "frames from the start of line a1 (use it for opacity, `lerp(from, to, p)` for positions). The canvas is 1920×1080; leave the bottom " +
   "130 px to the subtitles. The dark background, subtitles and fades between scenes are added for you. " +
-  "heigkit: colors `C` (bg0, panel, line, text, dim, one = teal for 1/true, zero = grey, sel = amber, varA = pink, varB = violet, bad = red), " +
-  "fonts `SANS` and `MONO`; `<Header title tag />` (top left); `<Svg>` (full-screen SVG, filter=\"url(#glow)\" available); " +
+  "heigkit: colors `C` (bg0, panel, line, text, dim, one = the accent of the course, also 1/true, zero = grey, sel = amber, varA = pink, varB = violet, bad = red), " +
+  "`alpha(C.panel, 0.85)` for a transparent one (never hard-code a background: the colors are those of the course the file name or the first comment starts with, see get_course_themes), fonts `SANS` and `MONO`; `<Header title tag />` (top left); `<Svg>` (full-screen SVG, filter=\"url(#glow)\" available); " +
   "`<Val x y label size? opacity? glow? />` (a value chip: 0, 1, A, /B); " +
   "`<TruthTable t={{ x, y, rowH, vars: [\"C\",\"B\",\"A\"] }} name values appear? rows? hi? emphasis? groups? />` with `cellPos(t, row, key)` " +
   "and `groupPos(t, level, size, index)`; `<Mux g={{ x, y, w, n, gap }} frame={f} sel={[\"A\",\"B\"]} appear? selBits? selected? flow? out? " +

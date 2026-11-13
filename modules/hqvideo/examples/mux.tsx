@@ -1,7 +1,7 @@
 /** SYL, série 6, exercice 4 : réaliser Fa, Fb et Fc avec un multiplexeur 8→1, 4→1 puis 2→1. */
 import React from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
-import { C, Fly, Header, MONO, Mux, type MuxGeo, SANS, Svg, type TableGeo, TruthTable, Val, cellPos, dataLabel, groupPos, lerp, ramp, useLines } from "heigkit";
+import { alpha, C, cellPos, dataLabel, Fly, groupPos, Header, lerp, MONO, Mux, type MuxGeo, ramp, SANS, Svg, type TableGeo, TruthTable, useLines, Val } from "heigkit";
 
 const TAG = "SYL · Série 6 · Exercice 4";
 const FUNCS = [
@@ -38,7 +38,7 @@ const Intro: React.FC = () => {
         {FUNCS.map((fn, i) => {
           const p = ramp(f, i2.s + i * 12, 20);
           return (
-            <div key={fn.name} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, padding: "16px 30px", borderRadius: 18, background: "rgba(18,28,58,0.8)", border: `1px solid ${C.line}`, width: "fit-content" }}>
+            <div key={fn.name} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, padding: "16px 30px", borderRadius: 18, background: alpha(C.panel, 0.8), border: `1px solid ${C.line}`, width: "fit-content" }}>
               <Formula {...fn} />
             </div>
           );
@@ -371,7 +371,7 @@ const Recap: React.FC = () => {
         {steps.map((s) => {
           const p = ramp(f, s.at, 18);
           return (
-            <div key={s.n} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, display: "flex", alignItems: "center", gap: 28, width: 980, padding: "22px 30px", borderRadius: 22, background: "rgba(18,28,58,0.85)", border: `1px solid ${C.line}` }}>
+            <div key={s.n} style={{ opacity: p, transform: `translateX(${lerp(-40, 0, p)}px)`, display: "flex", alignItems: "center", gap: 28, width: 980, padding: "22px 30px", borderRadius: 22, background: alpha(C.panel, 0.85), border: `1px solid ${C.line}` }}>
               <div style={{ width: 72, height: 72, borderRadius: 20, background: C.one, color: C.bg0, fontSize: 42, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{s.n}</div>
               <div>
                 <div style={{ color: C.text, fontSize: 38, fontWeight: 700 }}>{s.t}</div>

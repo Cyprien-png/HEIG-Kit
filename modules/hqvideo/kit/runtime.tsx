@@ -3,7 +3,7 @@ import React from "react";
 import { AbsoluteFill, Audio, Composition, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { FPS, type VideoData, buildTimeline } from "../timeline";
 import { SceneContext } from "./context";
-import { Background, Subtitles } from "./ui";
+import { Background, C, Subtitles } from "./ui";
 
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
@@ -27,7 +27,7 @@ export function makeRoot(data: VideoData, scenes: Record<string, React.FC> | und
   }
 
   const Video: React.FC = () => (
-    <AbsoluteFill style={{ background: "#070b18" }}>
+    <AbsoluteFill style={{ background: C.bg0 }}>
       {timeline.scenes.map((scene) => {
         const Scene = scenes[scene.name];
         return (

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { renderDeadlines } from "../../deadlines.js";
 import { gapsInfo, loadCourses, loadDeadlines, readCache, scheduleView } from "../../services.js";
 import { scheduleCourses } from "../../table.js";
+import { describeThemes, themeFor } from "../../themes.js";
 import { respond } from "../common.js";
 
 const mfaCode = z
@@ -36,6 +37,22 @@ export function registerCampusTools(server: McpServer): void {
       respond(() =>
         scheduleView({ from: a.from, to: a.to, table: a.week_table, who: a.who, type: a.type, refresh: a.refresh, color: "emoji", mfaCode: a.mfa_code }),
       ),
+  );
+
+  server.registerTool(
+    "get_course_themes",
+    {
+      title: "Course themes",
+      description:
+        "The graphic charter of the courses: one color per course (the one of the calendar) from which the colors of the High quality " +
+        "videos, the manim videos, the documents and the web app are derived, and the mood of the dark backgrounds. Without `course`: the " +
+        "courses, their colors and the moods. With `course`: its colors (video: bg0, panel, one = accent…; doc; chip). A render picks the " +
+        "theme by itself from the course its file name or first comment starts with. Changing a color or the mood is done on the machine: " +
+        "`npm run theme` (docs/themes.md).",
+      inputSchema: { course: z.string().optional().describe("Course code, e.g. RXI"), mood: z.string().optional().describe("Another mood than the one of the settings") },
+      annotations: readOnly,
+    },
+    async (a) => respond(async () => (a.course ? JSON.stringify(themeFor(a.course, [], a.mood), null, 2) : describeThemes())),
   );
 
   server.registerTool(
